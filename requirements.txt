@@ -1,0 +1,4 @@
+requests
+gym
+tqdm
+numba
