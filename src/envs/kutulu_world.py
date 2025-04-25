@@ -1,11 +1,14 @@
 import gym
 from gym import spaces
 
-from numba import int32, float32    # import the types
-from numba.experimental import jitclass
+# from numba import int32, float32    # import the types
+# from numba.experimental import jitclass
 
 import numpy as np
 import requests
+from functools import lru_cache
+
+from src.envs.distance import find_path
 
 DEFAULT_KUTULU_ACTIONS = [
     'UP',
@@ -136,6 +139,10 @@ class KutuluWorldEnv(gym.Env):
             for player_mask in mask
         ]
 
+    @lru_cache(maxsize=10000)
+    def _find_path_cached(self, start_point, finish_point):
+        return find_path(start_point, finish_point, self.map)
+
     def reset(self, seed=0):
         super(KutuluWorldEnv, self).reset(seed=seed)
         response = requests.post(
@@ -225,3 +232,6 @@ class KutuluWorldEnv(gym.Env):
         info = self._get_info()
         
         return observation, reward, game_over, info
+
+    def active_players(self):
+        return [player for player in self.players if player['active']]
