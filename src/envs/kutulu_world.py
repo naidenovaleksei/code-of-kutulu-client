@@ -138,6 +138,15 @@ class KutuluWorldEnv(gym.Env):
             np.random.choice(np.where(np.array(player_mask))[0])
             for player_mask in mask
         ]
+    
+    def get_valid_action_names_by_coords(self, x, y, can_wait=True):
+        return [
+            k for k, v in zip(
+                DEFAULT_KUTULU_ACTIONS,
+                self._get_valid_action_mask_by_coords(x, y, can_wait)
+            )
+            if v
+        ]
 
     @lru_cache(maxsize=10000)
     def _find_path_cached(self, start_point, finish_point):

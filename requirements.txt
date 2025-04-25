@@ -3,3 +3,4 @@ gym
 tqdm
 numba
 pytest
+numpy
