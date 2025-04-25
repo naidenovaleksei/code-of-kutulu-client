@@ -2,3 +2,4 @@ requests
 gym
 tqdm
 numba
+pytest
