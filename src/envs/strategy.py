@@ -36,6 +36,17 @@ class GreedyStrategy(BaseQStrategy):
         At = np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
         return At
 
+    def getActionEpsGreedyMasked(self, state, actions, eps, mask):
+        action_space_n = len(actions)
+        assert self.check_state(state, action_space_n)
+        assert len(self.Q[state]) == action_space_n
+        a = np.ma.array(self.Q[state], mask=mask)
+        a_star = a.argmax()
+        ps = np.ones(action_space_n) * eps / action_space_n
+        ps[a_star] = 1 - eps + eps / action_space_n
+        At = np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
+        return At
+
 
 class LazyGreedyStrategy(GreedyStrategy):
     def __init__(self):
@@ -47,6 +58,15 @@ class LazyGreedyStrategy(GreedyStrategy):
             return np.random.randint(action_space_n)
         assert len(self.Q[state]) == action_space_n
         a_star = self.Q[state].argmax()
+        return a_star
+
+    def getActionGreedyMasked(self, state, actions, mask):
+        action_space_n = len(actions)
+        if state not in self.Q:
+            return np.random.randint(action_space_n)
+        assert len(self.Q[state]) == action_space_n
+        a = np.ma.array(self.Q[state], mask=mask)
+        a_star = a.argmax()
         return a_star
 
     def check_state(self, state, action_space_n):

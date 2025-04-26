@@ -45,10 +45,15 @@ class KutuluWorldEnv(gym.Env):
         #     shape=(2,), dtype=np.int32
         # )
 
+    def _get_info(self):
+        return {
+            'map': self.map,
+            'constants': self.constants,
+        }
+
     def _get_obs(self, player_id=None):
         return {
             'active_player_count': len(self.players),
-            'map': self.map,
             'entities': self._get_entites(player_id)
         }
     
@@ -61,11 +66,6 @@ class KutuluWorldEnv(gym.Env):
             ] + [
                e for e in self.entities if not (e['type'] == 'EXPLORER' and e['id'] == player_id)
             ]
-
-    def _get_info(self):
-        return {
-            'constants': self.constants,
-        }
 
     def _get_valid_action_mask_by_coords(self, x, y, can_wait=True):
         # 'UP',
@@ -116,7 +116,7 @@ class KutuluWorldEnv(gym.Env):
     def _parse_player(self, line):
         etype, eid, ex, ey, esanity, eplans, elight = line.split()
         return {
-            'id': eid,
+            'id': int(eid),
             'x': int(ex),
             'y': int(ey),
             'sanity': float(esanity),
@@ -124,6 +124,12 @@ class KutuluWorldEnv(gym.Env):
             'remainingLights': int(elight),
             'active': True,
         #     'score': 0
+        }
+
+    def get_valid_action_mask(self, can_wait=True):
+        return {
+            player['id']: self._get_valid_action_mask_by_coords(player['x'], player['y'], can_wait)
+            for player in self.players
         }
 
     def sample_valid_action(self, seed=None, can_wait=True):
@@ -152,7 +158,9 @@ class KutuluWorldEnv(gym.Env):
     def _find_path_cached(self, start_point, finish_point):
         return find_path(start_point, finish_point, self.map)
 
-    def reset(self, seed=0):
+    def reset(self, seed=None):
+        if seed is None:
+            seed = np.random.randint(999999)
         super(KutuluWorldEnv, self).reset(seed=seed)
         response = requests.post(
             f'{self.host}/create',
