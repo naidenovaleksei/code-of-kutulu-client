@@ -155,7 +155,7 @@ class KutuluWorldEnv(gym.Env):
         ]
 
     @lru_cache(maxsize=10000)
-    def _find_path_cached(self, start_point, finish_point):
+    def find_path_cached(self, start_point, finish_point):
         return find_path(start_point, finish_point, self.map)
 
     def reset(self, seed=None):

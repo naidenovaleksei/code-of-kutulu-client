@@ -12,7 +12,9 @@ REL_POSITIONS = (
     MOVE_REL_POS['RIGHT'],
     MOVE_REL_POS['DOWN'],
     MOVE_REL_POS['LEFT'],
+    MOVE_REL_POS['WAIT'],
 )
+REL_SHIFT = {pos: abs(pos[0]) + abs(pos[1]) for pos in REL_POSITIONS}
 
 
 class BaseKutuluPlayer:
@@ -26,7 +28,7 @@ class KutuluPlayer(BaseKutuluPlayer):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluPlayer, self).__init__(env)
 
-    def get_state(self, player_id):
+    def get_state(self, player_id, max_explorer_dist=999, max_wanderer_dist=999):
         _obs = self.env._get_obs(player_id)
         entities = _obs['entities']
         player_pos = (entities[0]['x'], entities[0]['y'])
@@ -36,6 +38,10 @@ class KutuluPlayer(BaseKutuluPlayer):
         wanderers_distances = self._get_distances(wanderers, player_pos)
         closest_explorer_dir, closest_explorer_dist = self._get_min_direction_and_distance(explorer_distances)
         closest_wanderer_dir, closest_wanderer_dist = self._get_min_direction_and_distance(wanderers_distances)
+        if closest_explorer_dist is not None:
+            closest_explorer_dist = min(closest_explorer_dist, max_explorer_dist)
+        if closest_wanderer_dist is not None:
+            closest_wanderer_dist = min(closest_wanderer_dist, max_wanderer_dist)
         return (
             closest_explorer_dir,
             closest_explorer_dist,
@@ -67,7 +73,9 @@ class KutuluPlayer(BaseKutuluPlayer):
                 continue
             for e in entities:
                 entity_pos = (e['x'], e['y'])
-                path = self.env._find_path_cached(pos, entity_pos)
+                if entity_pos == player_pos:
+                    return {MOVE_REL_POS['WAIT']: 0}
+                path = self.env.find_path_cached(pos, entity_pos)
                 if len(path):
                     assert path[-1] != pos
                     assert path[0] == entity_pos
@@ -77,9 +85,14 @@ class KutuluPlayer(BaseKutuluPlayer):
     def _get_min_direction_and_distance(self, distances):
         if len(distances) == 0:
             return None, None
+        # distances = {rel_pos: d for rel_pos, d in distances.items()}
         d_min = min(distances.values())
-        return tuple(
+        key = tuple(
             i
             for i, rel_pos in enumerate(REL_POSITIONS)
             if distances.get(rel_pos) == d_min
-        ), d_min
+        )
+        # if len(key) == 4:
+        #     # (0, 1, 2, 3,)
+        #     return (4,), 0
+        return key, d_min + REL_SHIFT[REL_POSITIONS[key[0]]]
