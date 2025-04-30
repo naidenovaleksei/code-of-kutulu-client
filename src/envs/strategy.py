@@ -1,5 +1,5 @@
 import numpy as np
-# from game import get_empty_spaces
+from src.game.template import getActionGreedyMasked
 
 
 class BaseQStrategy:
@@ -58,12 +58,7 @@ class LazyGreedyStrategy(GreedyStrategy):
         return a_star
 
     def getActionGreedyMasked(self, state, action_space_n, mask):
-        if state not in self.Q:
-            return np.random.randint(action_space_n)
-        assert len(self.Q[state]) == action_space_n
-        a = np.ma.array(self.Q[state], mask=mask)
-        a_star = a.argmax()
-        return a_star
+        return getActionGreedyMasked(state, self.Q, action_space_n, mask)
 
     def check_state(self, state, action_space_n):
         if state not in self.Q:

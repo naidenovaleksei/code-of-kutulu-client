@@ -1,20 +1,8 @@
-from src.envs.kutulu_world import KutuluWorldEnv, CELL_WALL
-
-MOVE_REL_POS = {
-    'UP': (0,-1),
-    'RIGHT': (1,0),
-    'DOWN': (0,1),
-    'LEFT': (-1,0),
-    'WAIT': (0,0)
-}
-REL_POSITIONS = (
-    MOVE_REL_POS['UP'],
-    MOVE_REL_POS['RIGHT'],
-    MOVE_REL_POS['DOWN'],
-    MOVE_REL_POS['LEFT'],
-    MOVE_REL_POS['WAIT'],
+from src.envs.kutulu_world import KutuluWorldEnv
+from src.game.template import (
+    get_state,
+    get_distances,
 )
-REL_SHIFT = {pos: abs(pos[0]) + abs(pos[1]) for pos in REL_POSITIONS}
 
 
 class BaseKutuluPlayer:
@@ -28,26 +16,14 @@ class KutuluPlayer(BaseKutuluPlayer):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluPlayer, self).__init__(env)
 
-    def get_state(self, player_id, max_explorer_dist=999, max_wanderer_dist=999):
+    def get_state(self, player_id):
         _obs = self.env._get_obs(player_id)
         entities = _obs['entities']
         player_pos = (entities[0]['x'], entities[0]['y'])
-        explorers = [unit for unit in entities[1:] if unit["type"] == "EXPLORER"]
-        wanderers = [unit for unit in entities[1:] if unit["type"] == "WANDERER" and unit["wandering"] == 1]
-        explorer_distances = self._get_distances(explorers, player_pos)
-        wanderers_distances = self._get_distances(wanderers, player_pos)
-        closest_explorer_dir, closest_explorer_dist = self._get_min_direction_and_distance(explorer_distances)
-        closest_wanderer_dir, closest_wanderer_dist = self._get_min_direction_and_distance(wanderers_distances)
-        if closest_explorer_dist is not None:
-            closest_explorer_dist = min(closest_explorer_dist, max_explorer_dist)
-        if closest_wanderer_dist is not None:
-            closest_wanderer_dist = min(closest_wanderer_dist, max_wanderer_dist)
-        return (
-            closest_explorer_dir,
-            closest_explorer_dist,
-            closest_wanderer_dir,
-            closest_wanderer_dist,
-        )
+        
+        state = get_state(player_pos, entities, self.env.map,
+                          get_distances_func=self.get_distances_cached())
+        return state
 
     def get_observations(self):
         observations = {}
@@ -63,38 +39,17 @@ class KutuluPlayer(BaseKutuluPlayer):
 
         return observations
 
+    def find_path_cached(self):
+        def find_path_cached_(pos, entity_pos, lines):
+            return self.env.find_path_cached(pos, entity_pos)
+        return find_path_cached_
+
     def _get_distances(self, entities, player_pos):
-        distances = {}
-        for rel_pos in REL_POSITIONS:
-            pos = (rel_pos[0] + player_pos[0], rel_pos[1] + player_pos[1])
-            if not 0 < pos[0] < len(self.env.map[0]) - 1:
-                continue
-            if not 0 < pos[1] < len(self.env.map) - 1:
-                continue
-            if self.env.map[pos[1]][pos[0]] == CELL_WALL:
-                continue
-            for e in entities:
-                entity_pos = (e['x'], e['y'])
-                if entity_pos == player_pos:
-                    return {MOVE_REL_POS['WAIT']: 0}
-                path = self.env.find_path_cached(pos, entity_pos)
-                if len(path):
-                    assert path[-1] != pos
-                    assert path[0] == entity_pos
-                distances[rel_pos] = min(distances.get(rel_pos, 1000), len(path))
+        distances = get_distances(entities, player_pos, self.env.map,
+                                  find_path_func=self.find_path_cached())
         return distances
 
-    def _get_min_direction_and_distance(self, distances):
-        if len(distances) == 0:
-            return None, None
-        # distances = {rel_pos: d for rel_pos, d in distances.items()}
-        d_min = min(distances.values())
-        key = tuple(
-            i
-            for i, rel_pos in enumerate(REL_POSITIONS)
-            if distances.get(rel_pos) == d_min
-        )
-        # if len(key) == 4:
-        #     # (0, 1, 2, 3,)
-        #     return (4,), 0
-        return key, d_min + REL_SHIFT[REL_POSITIONS[key[0]]]
+    def get_distances_cached(self):
+        def get_distances_cached_(entities, player_pos, lines):
+            return self._get_distances(entities, player_pos)
+        return get_distances_cached_

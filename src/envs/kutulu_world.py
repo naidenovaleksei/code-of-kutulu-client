@@ -9,16 +9,12 @@ import requests
 from functools import lru_cache
 
 from src.envs.distance import find_path
+from src.game.template import (
+    get_valid_action_mask_by_coords,
+    DEFAULT_KUTULU_ACTIONS,
+    CELL_WALL,
+)
 
-DEFAULT_KUTULU_ACTIONS = [
-    'UP',
-    'RIGHT',
-    'DOWN',
-    'LEFT',
-    'WAIT',
-]
-
-CELL_WALL = '#'
 
 class KutuluWorldEnv(gym.Env):
     def __init__(self, server_host, maze_name, league_level, players_count=4,
@@ -62,28 +58,14 @@ class KutuluWorldEnv(gym.Env):
             return self.entities
         else:
             return [
-                next(e for e in self.entities if e['type'] == 'EXPLORER' and e['id'] == player_id)
+                next(e for e in self.entities if e['kind'] == 'EXPLORER' and e['id'] == player_id)
             ] + [
-               e for e in self.entities if not (e['type'] == 'EXPLORER' and e['id'] == player_id)
+               e for e in self.entities if not (e['kind'] == 'EXPLORER' and e['id'] == player_id)
             ]
-
-    def _get_valid_action_mask_by_coords(self, x, y, can_wait=True):
-        # 'UP',
-        # 'RIGHT',
-        # 'DOWN',
-        # 'LEFT',
-        # 'WAIT',
-        return [
-            y > 0 and self.map[y - 1][x] != CELL_WALL,
-            x < self.width - 1 and self.map[y][x + 1] != CELL_WALL,
-            y < self.height - 1 and self.map[y + 1][x] != CELL_WALL,
-            x > 0 and self.map[y][x - 1] != CELL_WALL,
-            can_wait
-        ]
 
     def _get_valid_action_mask(self, can_wait=True):
         return [
-            self._get_valid_action_mask_by_coords(player['x'], player['y'], can_wait)
+            get_valid_action_mask_by_coords(player['x'], player['y'], self.info, can_wait)
             for player in self.players
         ]
 
@@ -92,17 +74,17 @@ class KutuluWorldEnv(gym.Env):
         return f"{action_name} {action_name}"
     
     def _parse_entity(self, line):
-        etype, eid, ex, ey, eparam0, eparam1, eparam2 = line.split()
+        ekind, eid, ex, ey, eparam0, eparam1, eparam2 = line.split()
         result = {
-            'type': etype,
+            'kind': ekind,
             'id': int(eid),
             'x': int(ex),
             'y': int(ey),
         }
         
-        if etype == 'EXPLORER':
+        if ekind == 'EXPLORER':
             result['sanity'] = int(eparam0)
-        elif etype == 'WANDERER':
+        elif ekind == 'WANDERER':
             result['wandering'] = int(eparam1)
             result['target'] = int(eparam2)
             if result['wandering']:
@@ -114,7 +96,7 @@ class KutuluWorldEnv(gym.Env):
         return result
     
     def _parse_player(self, line):
-        etype, eid, ex, ey, esanity, eplans, elight = line.split()
+        etkind, eid, ex, ey, esanity, eplans, elight = line.split()
         return {
             'id': int(eid),
             'x': int(ex),
@@ -128,7 +110,7 @@ class KutuluWorldEnv(gym.Env):
 
     def get_valid_action_mask(self, can_wait=True):
         return {
-            player['id']: self._get_valid_action_mask_by_coords(player['x'], player['y'], can_wait)
+            player['id']: get_valid_action_mask_by_coords(player['x'], player['y'], self.info, can_wait)
             for player in self.players
         }
 
@@ -149,7 +131,7 @@ class KutuluWorldEnv(gym.Env):
         return [
             k for k, v in zip(
                 DEFAULT_KUTULU_ACTIONS,
-                self._get_valid_action_mask_by_coords(x, y, can_wait)
+                get_valid_action_mask_by_coords(x, y, self.info, can_wait)
             )
             if v
         ]
@@ -177,6 +159,11 @@ class KutuluWorldEnv(gym.Env):
         self.map = data['map']
         self.width = len(self.map[0])
         self.height = len(self.map)
+        self.info = {
+            'lines': self.map,
+            'width': self.width, 
+            'height': self.height,
+        }
         self.game_id = data['gameId']
         
         self.entities = [
