@@ -32,7 +32,8 @@ def find_path(start_point, finish_point, lines):
         for choise in choices:
             candidate = add(point, choise)
             x,y = candidate
-            if lines[y][x] not in (CELL_EMPTY, CELL_SPAWN):
+            # if lines[y][x] not in (CELL_EMPTY, CELL_SPAWN):
+            if lines[y][x] == CELL_WALL:
                 continue
             g = g_dict[point] + 1
             h = distance(candidate, finish_point)
@@ -44,7 +45,8 @@ def find_path(start_point, finish_point, lines):
                 g_dict[candidate] = g
             if candidate in [x[1] for x in common_candidates]:
                 continue
-            assert candidate not in f_dict
+            if candidate in f_dict:
+                continue
             g_dict[candidate] = g
             f_dict[candidate] = f
             heapq.heappush(common_candidates, (f, candidate))

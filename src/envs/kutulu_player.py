@@ -1,4 +1,4 @@
-from src.envs.kutulu_world import KutuluWorldEnv
+from src.envs.kutulu_world import KutuluWorldEnv, CELL_WALL
 
 MOVE_REL_POS = {
     'UP': (0,-1),
@@ -70,6 +70,8 @@ class KutuluPlayer(BaseKutuluPlayer):
             if not 0 < pos[0] < len(self.env.map[0]) - 1:
                 continue
             if not 0 < pos[1] < len(self.env.map) - 1:
+                continue
+            if self.env.map[pos[1]][pos[0]] == CELL_WALL:
                 continue
             for e in entities:
                 entity_pos = (e['x'], e['y'])
