@@ -47,24 +47,29 @@ class TestKutuluPlayer:
         assert result == (None, None, None, None)
         mock_env._get_obs.assert_called_once_with(0)
     
-    def test_get_state_with_explorer(self, player, mock_env):
+    @pytest.mark.parametrize("player_pos, explorers, state", [
+        [(3, 3), [(3, 2)], ((0,), 1, None, None)],
+        [(3, 3), [(5, 3)], ((1,), 2, None, None)],
+        [(3, 3), [(4, 3)], ((1,), 1, None, None)],
+    ])
+    def test_get_state_with_explorer(self, player_pos, explorers, state, player, mock_env):
         """Test get_state with player and one other explorer."""
         # Setup mock _get_obs to return player and another explorer
+        
+        player_id = 0
         mock_env._get_obs.return_value = {
             'entities': [
-                {'type': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-                {'type': 'EXPLORER', 'id': 1, 'x': 5, 'y': 3}
+                {'type': 'EXPLORER', 'id': player_id, 'x': player_pos[0], 'y': player_pos[1]},
+            ] + [
+                {'type': 'EXPLORER', 'id': i + 1, 'x': x, 'y': y}
+                for i, (x, y) in enumerate(explorers) 
             ]
         }
         
         # Call get_state
         result = player.get_state(0)
         
-        # Explorer is to the right (index 1)
-        assert result[0] == (1,)  # Explorer direction
-        assert result[1] == 2     # Explorer distance
-        assert result[2] is None  # No wanderer
-        assert result[3] is None  # No wanderer distance
+        assert result == state
     
     def test_get_state_with_wanderer(self, player, mock_env):
         """Test get_state with player and one wanderer."""
