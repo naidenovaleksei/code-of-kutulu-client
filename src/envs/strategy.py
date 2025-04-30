@@ -14,8 +14,8 @@ class BaseQStrategy:
 
 
 class RandomStrategy(BaseQStrategy):
-    def getActionGreedy(self, state, actions):
-        return np.random.randint(len(actions))
+    def getActionGreedy(self, state, action_space_n):
+        return np.random.randint(action_space_n)
 
 
 class GreedyStrategy(BaseQStrategy):
@@ -26,8 +26,7 @@ class GreedyStrategy(BaseQStrategy):
     def check_state(self, state, action_space_n):
         return state in self.Q and len(self.Q[state]) == action_space_n
 
-    def getActionEpsGreedy(self, state, actions, eps):
-        action_space_n = len(actions)
+    def getActionEpsGreedy(self, state, action_space_n, eps):
         assert self.check_state(state, action_space_n)
         assert len(self.Q[state]) == action_space_n
         a_star = self.Q[state].argmax()
@@ -36,8 +35,7 @@ class GreedyStrategy(BaseQStrategy):
         At = np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
         return At
 
-    def getActionEpsGreedyMasked(self, state, actions, eps, mask):
-        action_space_n = len(actions)
+    def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
         assert self.check_state(state, action_space_n)
         assert len(self.Q[state]) == action_space_n
         a = np.ma.array(self.Q[state], mask=mask)
@@ -52,16 +50,14 @@ class LazyGreedyStrategy(GreedyStrategy):
     def __init__(self):
         super(LazyGreedyStrategy, self).__init__()
 
-    def getActionGreedy(self, state, actions):
-        action_space_n = len(actions)
+    def getActionGreedy(self, state, action_space_n):
         if state not in self.Q:
             return np.random.randint(action_space_n)
         assert len(self.Q[state]) == action_space_n
         a_star = self.Q[state].argmax()
         return a_star
 
-    def getActionGreedyMasked(self, state, actions, mask):
-        action_space_n = len(actions)
+    def getActionGreedyMasked(self, state, action_space_n, mask):
         if state not in self.Q:
             return np.random.randint(action_space_n)
         assert len(self.Q[state]) == action_space_n
