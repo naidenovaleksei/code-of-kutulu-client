@@ -99,7 +99,12 @@ class KutuluWorldEnv(gym.Env):
         elif ekind == 'SLASHER':
             # time before changing state
             result['change_time_left'] = int(eparam0)
-            
+        elif ekind in ('EFFECT_PLAN', 'EFFECT_LIGHT', 'EFFECT_YELL', ):
+            # time before changing state
+            result['out_time_left'] = int(eparam0)
+        elif ekind == 'EFFECT_SHELTER':
+            # time before changing state
+            result['energy_left'] = int(eparam0)
         else:
             raise ValueError(f'unknown kind: {ekind}')
         return result
@@ -162,6 +167,7 @@ class KutuluWorldEnv(gym.Env):
                 "leagueLevel": self.league_level
             }
         )
+        self.seed = seed
         data = response.json()
         # self.config = data['config']
         self.constants = data['constants']

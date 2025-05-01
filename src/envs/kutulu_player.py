@@ -16,7 +16,7 @@ class KutuluPlayer(BaseKutuluPlayer):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluPlayer, self).__init__(env)
 
-    def get_state(self, player_id):
+    def get_state(self, player_id, state_type):
         _obs = self.env._get_obs(player_id)
         entities = _obs['entities']
         player_pos = (entities[0]['x'], entities[0]['y'])
