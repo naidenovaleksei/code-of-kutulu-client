@@ -3,7 +3,7 @@ import pickle as pkl
 import numpy as np
 from unittest.mock import MagicMock, patch
 from src.envs.distance import find_path
-from src.envs.kutulu_player import KutuluPlayer
+from src.envs.kutulu_observer import KutuluClosestObserver
 from src.envs.kutulu_world import KutuluWorldEnv, CELL_WALL, DEFAULT_KUTULU_ACTIONS
 from src.envs.strategy import LazyGreedyStrategy
 
@@ -45,8 +45,8 @@ class TestKutuluPolicies:
     
     @pytest.fixture
     def player(self, mock_env):
-        """Create a KutuluPlayer instance with the mock environment."""
-        return KutuluPlayer(mock_env)
+        """Create a KutuluClosestObserver instance with the mock environment."""
+        return KutuluClosestObserver(mock_env)
 
     @pytest.fixture
     def strategy(self):

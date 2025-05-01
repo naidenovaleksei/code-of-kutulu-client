@@ -1,7 +1,7 @@
 import numpy as np
 from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
-from src.envs.agent import Agent
-from src.envs.kutulu_player import KutuluPlayer
+from src.envs.agent import Agent, CrossEntropyAgent
+from src.envs.kutulu_observer import KutuluClosestObserver
 
 WOOD_MAZES = [
     "PacMan",
@@ -32,7 +32,7 @@ BRONZE_MAZES = [
 ]
 
 class Trainer:
-    def __init__(self, num_experiments, agents_info, can_wait, league_level, reward_for_win, mazes=BRONZE_MAZES):
+    def __init__(self, num_experiments, agents_info, can_wait, league_level, reward_for_win, mazes=BRONZE_MAZES, shuffle=True):
         self.num_experiments = num_experiments
         self.action_space_n = len(DEFAULT_KUTULU_ACTIONS) - 1 + int(can_wait)
         self.mazes = mazes
@@ -40,14 +40,21 @@ class Trainer:
         self.players_count = len(agents_info)
         self.reward_for_win = reward_for_win
         self.can_wait = can_wait
+        self.shuffle = shuffle
         
         self.env = None
-        self.observer = None
+        self.observers = None
 
         self.agents = []
         for agent_info in agents_info:
             agent_info['action_space_n'] = self.action_space_n
-            agent = Agent(**agent_info)
+            if 'strategy' in agent_info:
+                agent = Agent(**agent_info)
+            else:
+                assert agent_info['cross_entropy']
+                agent_info = dict(agent_info)
+                del agent_info['cross_entropy']
+                agent = CrossEntropyAgent(**agent_info)
             self.agents.append(agent)
             
         self.agent_map = np.arange(len(self.agents))
@@ -63,21 +70,27 @@ class Trainer:
         )
         observation, info = self.env.reset()
         
-        self.observer = KutuluPlayer(self.env)
+        closest_observer = KutuluClosestObserver(self.env)
+        self.observers = []
+        for agent in self.agents:
+            assert agent.state_type == 'closest'
+            self.observers.append(closest_observer)
         return self.env
     
     def play_rollout(self):
         env = self.reset_env()
         rollout_rewards = []
         game_over = False
-        np.random.shuffle(self.agent_map)
+        if self.shuffle:
+            np.random.shuffle(self.agent_map)
         while not game_over:
             action = env.sample_valid_action(self.can_wait)
 
             for env_player in env.active_players():
                 player_id = env_player['id']
                 agent_id = self.agent_map[player_id]
-                state, At = self.agents[agent_id].generate_state_and_step(self.observer, player_id)
+                state, At = self.agents[agent_id].generate_state_and_step(
+                    self.observers[agent_id], player_id)
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
@@ -87,6 +100,12 @@ class Trainer:
                 agent_id = self.agent_map[player_id]
                 agent = self.agents[agent_id]
                 if agent.train:
-                    agent.train_step(reward, game_over)
+                    try:
+                        new_state = self.observers[agent_id].get_state(
+                            player_id, self.agents[agent_id].state_type
+                        )
+                        agent.train_step(reward, game_over, new_state)
+                    except StopIteration:
+                        pass
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards

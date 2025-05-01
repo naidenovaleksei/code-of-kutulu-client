@@ -5,16 +5,16 @@ from src.game.template import (
 )
 
 
-class BaseKutuluPlayer:
+class BaseKutuluClosestObserver:
     def __init__(self, env: KutuluWorldEnv):
         self.env = env
     
     def get_state(self) -> tuple:
         raise NotImplementedError
 
-class KutuluPlayer(BaseKutuluPlayer):
+class KutuluClosestObserver(BaseKutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
-        super(KutuluPlayer, self).__init__(env)
+        super(KutuluClosestObserver, self).__init__(env)
 
     def get_state(self, player_id, state_type):
         _obs = self.env._get_obs(player_id)

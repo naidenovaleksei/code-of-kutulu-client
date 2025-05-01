@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from src.envs.distance import find_path
-from src.envs.kutulu_player import KutuluPlayer
+from src.envs.kutulu_observer import KutuluClosestObserver
 from src.envs.kutulu_world import KutuluWorldEnv
 
-class TestKutuluPlayer:
+class TestKutuluClosestObserver:
     @pytest.fixture
     def mock_env(self):
         """Create a mock KutuluWorldEnv instance with a predefined map."""
@@ -28,8 +28,8 @@ class TestKutuluPlayer:
     
     @pytest.fixture
     def player(self, mock_env):
-        """Create a KutuluPlayer instance with the mock environment."""
-        return KutuluPlayer(mock_env)
+        """Create a KutuluClosestObserver instance with the mock environment."""
+        return KutuluClosestObserver(mock_env)
     
     def test_get_state_with_only_player(self, player, mock_env):
         """Test get_state with only the player entity present."""
