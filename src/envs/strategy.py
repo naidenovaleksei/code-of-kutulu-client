@@ -16,6 +16,12 @@ class BaseQStrategy:
 class RandomStrategy(BaseQStrategy):
     def getActionGreedy(self, state, action_space_n):
         return np.random.randint(action_space_n)
+    
+    def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
+        actions_idx = np.arange(action_space_n)[~mask]
+        if len(actions_idx) == 0:
+            return np.random.randint(action_space_n)
+        return np.random.choice(actions_idx)
 
 
 class GreedyStrategy(BaseQStrategy):
