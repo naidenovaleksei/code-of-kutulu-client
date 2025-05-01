@@ -15,10 +15,12 @@ from src.game.template import (
     CELL_WALL,
 )
 
+DEFAULT_REWARD_FOR_WIN = 1000
+
 
 class KutuluWorldEnv(gym.Env):
     def __init__(self, server_host, maze_name, league_level, players_count=4,
-                 actions=DEFAULT_KUTULU_ACTIONS):
+                 actions=DEFAULT_KUTULU_ACTIONS, reward_for_win=DEFAULT_REWARD_FOR_WIN):
         super(KutuluWorldEnv, self).__init__()
 
         self.host = f"http://{server_host}/game"
@@ -26,6 +28,7 @@ class KutuluWorldEnv(gym.Env):
         self.maze_name = maze_name
         self.league_level = league_level
         self.players_count = players_count
+        self.reward_for_win = reward_for_win
         
         self._actions = actions
         self.map = []
@@ -88,11 +91,17 @@ class KutuluWorldEnv(gym.Env):
             result['wandering'] = int(eparam1)
             result['target'] = int(eparam2)
             if result['wandering']:
-                result['wandering_left'] = int(eparam0)
+                # time before being recalled
+                result['recall_time_left'] = int(eparam0)
             else:
-                result['spawn_left'] = int(eparam0)
+                # time before spawn
+                result['spawn_time_left'] = int(eparam0)
+        elif ekind == 'SLASHER':
+            # time before changing state
+            result['change_time_left'] = int(eparam0)
+            
         else:
-            raise ValueError()
+            raise ValueError(f'unknown kind: {ekind}')
         return result
     
     def _parse_player(self, line):
@@ -116,7 +125,7 @@ class KutuluWorldEnv(gym.Env):
 
     def sample_valid_action(self, seed=None, can_wait=True):
         mask = self._get_valid_action_mask(can_wait)
-        if seed:
+        if seed is not None:
             prng = np.random.RandomState(seed)
             return [
                 prng.choice(np.where(np.array(player_mask))[0])
@@ -226,8 +235,11 @@ class KutuluWorldEnv(gym.Env):
             for player in self.players:
                 if player['active']:
                     rewards[player['id']] += self.turn
-            winner = max(self.players, key=lambda x: x['sanity'])['id']
-            rewards[winner] = rewards.get(winner, 0) + 1000
+            max_death_turns = max(self.death_turns.values())
+            for player in self.players:
+                player_id = player['id']
+                if self.death_turns[player_id] == max_death_turns:
+                    rewards[player_id] = rewards.get(player_id, 0) + self.reward_for_win
                 
         
         reward = [rewards.get(player['id']) for player in self.players]

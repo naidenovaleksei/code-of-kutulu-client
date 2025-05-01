@@ -81,9 +81,7 @@ class TestKutuluPolicies:
         
         # Call get_state
         state = player.get_state(player_id)
-        print(state)
         player_mask = ~np.array(mock_env._get_valid_action_mask_by_coords(player_pos[0], player_pos[1]))
-        print(player_mask)
         At = strategy.getActionGreedyMasked(state, 5, player_mask)
         
         assert At == 1
