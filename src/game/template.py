@@ -8,8 +8,8 @@ import zlib
 import base64
 
 
-data1 = b'eNoBLgLR/YADY251bXB5LmNvcmUubXVsdGlhcnJheQpfcmVjb25zdHJ1Y3QKcQBjbnVtcHkKbmRhcnJheQpxAUsAhXECQwFicQOHcQRScQUoSwFLCksFhnEGY251bXB5CmR0eXBlCnEHWAIAAABmOHEIiYiHcQlScQooSwNYAQAAADxxC05OTkr/////Sv////9LAHRxDGKJQpABAABAS329cVbfP0fg1b2kfNw/oWI/7FVY3z9Tgm3UslHfP1vmzRmEUt8/XMHPyxY22z8QVsl3HSvbP13ShvILN9s/Tfh6+Io32z/BQorQOsjXP+IdwCitpNK/wKOY2upPzj9Gpo0UUaTkvyaxFRPGXd2/RccQ/IFQzj+kOKtquIrkPznmaOfWwu4/Jy4mapnt8b/QQven3DXyvzJESYHjXPS/2olKCE2ccT/wHgeKY8X8v2zc0mwItvu/lI2N7WHS/r8XEI1BRB3+vzRBFMbk3s0/TKv6YscrwD9EzqfyZ7y+PwAO1AWnwyE/XFF8cBRU5L+KQ4P62DH4vx6fsuiLEvm/f4C8cfux+b9jDm9HS7n3vyhvmfFnEPe/GZqtckun6L8QVBJz8NruP1ejIlFB++2/ASpPcUc+zj/gcX6q+rXnv6pdpxOfMfq/Cg9sK3MD+L9KcC8u5lv4v9pVCitMkvi/hf/8x33n+L+/qInee00FwK5MufqRDgTAErmdELLAA8D/f/sxCyEFwM+YK1yGhgTAcQ10cQ5iLuI2CWo='
-data2 = b'eNo1y00OgjAQxfF2BlQUBD9Qj9AVF3kJN2DpAV7SA7gpXls6jZnV7+U/H13oQoAkevh5jhSDwmVUAT6xLtgFOPiV+xIeNiY2BUcLT5CM1tBBttOVZ9SRvT1DvhxQlf0Cjbxae/u397yNtj2g0MQnJPL1nn7JzikP'
+data1 = b'data1data1data1'
+data2 = b'data2data2data2'
 
 
 MOVE_REL_POS = {
