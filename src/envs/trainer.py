@@ -1,6 +1,7 @@
 import numpy as np
 from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
-from src.envs.agent import Agent, CrossEntropyAgent
+from src.envs.agents.qlearning_agent import QlearningAgent
+from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
     KutuluClosestBronzeObserver
@@ -52,7 +53,7 @@ class Trainer:
         for agent_info in agents_info:
             agent_info['action_space_n'] = self.action_space_n
             if 'strategy' in agent_info:
-                agent = Agent(**agent_info)
+                agent = QlearningAgent(**agent_info)
             else:
                 assert agent_info['cross_entropy']
                 agent_info = dict(agent_info)
