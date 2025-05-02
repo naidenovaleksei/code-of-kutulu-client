@@ -1,6 +1,9 @@
 import numpy as np
 import pickle as pkl
-from src.game.template import getActionGreedyMasked
+from src.game.template import (
+    getActionGreedyMasked,
+    getActionGreedyMasked2,
+)
 
 
 def load_strategy(checkpoint_dir):
@@ -68,13 +71,6 @@ class LazyGreedyStrategy(GreedyStrategy):
     def __init__(self):
         super(LazyGreedyStrategy, self).__init__()
 
-    def getActionGreedy(self, state, action_space_n):
-        if state not in self.Q:
-            return np.random.randint(action_space_n)
-        assert len(self.Q[state]) == action_space_n
-        a_star = self.Q[state].argmax()
-        return a_star
-
     def getActionGreedyMasked(self, state, action_space_n, mask):
         return getActionGreedyMasked(state, self.Q, action_space_n, mask)
 
@@ -83,3 +79,26 @@ class LazyGreedyStrategy(GreedyStrategy):
             actions = np.random.normal(size=action_space_n)
             self.Q[state] = actions
         return True
+
+
+class LazyGreedyStrategy2(LazyGreedyStrategy):
+    def __init__(self):
+        super(LazyGreedyStrategy2, self).__init__()
+
+    def getActionGreedyMasked(self, state, action_space_n, mask):
+        return getActionGreedyMasked2(state, self.Q, action_space_n, mask)
+
+    def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
+        assert self.check_state(state, action_space_n)
+        assert len(self.Q[state]) == action_space_n
+        a = np.ma.array(self.Q[state], mask=mask)
+        a_star = a.argmax()
+        # ps = np.ma.array(np.ones(action_space_n), mask=mask).filled(0)
+        ps = np.ones(action_space_n)
+        ps[mask] = 0
+        denom = ps.sum()
+        ps = ps * eps / denom
+        ps[a_star] = 1 - eps + eps / denom
+        assert np.allclose(ps.sum(), 1), (ps.sum(), 1)
+        At = np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
+        return At

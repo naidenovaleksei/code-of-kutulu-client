@@ -1,6 +1,6 @@
 requests
 gym
 tqdm
-numba
 pytest
 numpy
+torch

@@ -159,12 +159,48 @@ def get_state(player_pos, entities, lines, get_distances_func=get_distances):
         closest_wanderer_dist,
     )
 
+
+def get_state_bronze(player_pos, entities, lines, get_distances_func=get_distances):
+    explorers = [unit for unit in entities[1:] if unit["kind"] == "EXPLORER"]
+    wanderers = [
+        unit for unit in entities[1:]
+        if (unit["kind"] == "WANDERER" and unit["wandering"] == 1) or
+           (unit["kind"] == "SLASHER")
+    ]
+
+    explorer_distances = get_distances_func(explorers, player_pos, lines)
+    wanderers_distances = get_distances_func(wanderers, player_pos, lines)
+    closest_explorer_dir, closest_explorer_dist = get_min_direction_and_distance(explorer_distances)
+    closest_wanderer_dir, closest_wanderer_dist = get_min_direction_and_distance(wanderers_distances)
+
+    if closest_explorer_dist is not None:
+        closest_explorer_dist = min(closest_explorer_dist, MAX_EXPLORER_DIST)
+    if closest_wanderer_dist is not None:
+        closest_wanderer_dist = min(closest_wanderer_dist, MAX_WANDERER_DIST)
+    return (
+        closest_explorer_dir,
+        closest_explorer_dist,
+        closest_wanderer_dir,
+        closest_wanderer_dist,
+    )
+
 def getActionGreedyMasked(state, Q, action_space_n, mask):
     if state not in Q:
         actions_idx = np.arange(action_space_n)[~mask]
         if len(actions_idx) == 0:
             return np.random.randint(action_space_n)
         return np.random.choice(actions_idx)
+    assert len(Q[state]) == action_space_n
+    a = np.ma.array(Q[state], mask=mask)
+    a_star = a.argmax()
+    return a_star
+
+def getActionGreedyMasked2(state, Q, action_space_n, mask):
+    if state not in Q:
+        ps = np.ma.array(np.ones(len(ps)), mask=mask).filled(0)
+        if ps.sum() == 0:
+            return np.random.randint(action_space_n)
+        return np.random.choice(np.arange(len(ps)), p=ps / ps.sum())
     assert len(Q[state]) == action_space_n
     a = np.ma.array(Q[state], mask=mask)
     a_star = a.argmax()
@@ -186,9 +222,9 @@ def get_valid_action_mask_by_coords(x, y, info, can_wait=True):
 
 def simple_strategy(entities, new_Q, info):
     player_pos = (entities[0]['x'], entities[0]['y'])
-    state = get_state(player_pos, entities, info['lines'])
+    state = get_state_bronze(player_pos, entities, info['lines'])
     player_mask = ~np.array(get_valid_action_mask_by_coords(player_pos[0], player_pos[1], info))
-    action_id = getActionGreedyMasked(state, new_Q, len(DEFAULT_KUTULU_ACTIONS), player_mask)
+    action_id = getActionGreedyMasked2(state, new_Q, len(DEFAULT_KUTULU_ACTIONS), player_mask)
     
     rel_pos = MOVE_REL_POS[DEFAULT_KUTULU_ACTIONS[action_id]]
     

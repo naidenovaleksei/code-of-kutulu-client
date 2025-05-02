@@ -2,6 +2,7 @@ from src.envs.kutulu_world import KutuluWorldEnv
 from src.game.template import (
     get_state,
     get_distances,
+    get_state_bronze,
 )
 
 
@@ -53,3 +54,18 @@ class KutuluClosestObserver(BaseKutuluClosestObserver):
         def get_distances_cached_(entities, player_pos, lines):
             return self._get_distances(entities, player_pos)
         return get_distances_cached_
+
+
+class KutuluClosestBronzeObserver(KutuluClosestObserver):
+    def __init__(self, env: KutuluWorldEnv):
+        super(KutuluClosestBronzeObserver, self).__init__(env)
+
+    def get_state(self, player_id, state_type):
+        _obs = self.env._get_obs(player_id)
+        entities = _obs['entities']
+        player_pos = (entities[0]['x'], entities[0]['y'])
+        
+        state = get_state_bronze(player_pos, entities, self.env.map,
+                          get_distances_func=self.get_distances_cached())
+        return state
+    

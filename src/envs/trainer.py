@@ -1,7 +1,10 @@
 import numpy as np
 from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
 from src.envs.agent import Agent, CrossEntropyAgent
-from src.envs.kutulu_observer import KutuluClosestObserver
+from src.envs.kutulu_observer import (
+    KutuluClosestObserver,
+    KutuluClosestBronzeObserver
+)
 
 WOOD_MAZES = [
     "PacMan",
@@ -71,10 +74,16 @@ class Trainer:
         observation, info = self.env.reset()
         
         closest_observer = KutuluClosestObserver(self.env)
+        closest_bronze_observer = KutuluClosestBronzeObserver(self.env)
         self.observers = []
         for agent in self.agents:
-            assert agent.state_type == 'closest'
-            self.observers.append(closest_observer)
+            if agent.state_type == 'closest':
+                self.observers.append(closest_observer)
+            elif agent.state_type == 'closest_bronze':
+                self.observers.append(closest_bronze_observer)
+            else:
+                raise ValueError(f'unknown state_type: {agent.state_type}')
+
         return self.env
     
     def play_rollout(self):
