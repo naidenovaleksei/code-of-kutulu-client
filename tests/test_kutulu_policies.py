@@ -80,7 +80,7 @@ class TestKutuluPolicies:
         }
         
         # Call get_state
-        state = player.get_state(player_id)
+        state = player.get_state(player_id, 'closest')
         player_mask = ~np.array(mock_env._get_valid_action_mask_by_coords(player_pos[0], player_pos[1]))
         At = strategy.getActionGreedyMasked(state, 5, player_mask)
         

@@ -41,7 +41,7 @@ class TestKutuluClosestObserver:
         }
         
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
         
         # Since there are no other entities, all directions and distances should be None
         assert result == (None, None, None, None)
@@ -67,7 +67,7 @@ class TestKutuluClosestObserver:
         }
         
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
         
         assert result == state
     
@@ -82,7 +82,7 @@ class TestKutuluClosestObserver:
         }
 
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
 
         # Wanderer is above (index 0)
         assert result[0] is None  # No explorer
@@ -102,7 +102,7 @@ class TestKutuluClosestObserver:
         }
         
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
         
         # Explorer is to the right (index 1)
         assert result[0] == (4,)  # Explorer direction
@@ -124,7 +124,7 @@ class TestKutuluClosestObserver:
         }
         
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
         
         # Explorer is to the right (index 1)
         assert result[0] is None  # Explorer direction
@@ -146,7 +146,7 @@ class TestKutuluClosestObserver:
         }
         
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
         
         # Explorer is to the right (index 1)
         assert result[0] is None  # Explorer direction
@@ -169,7 +169,7 @@ class TestKutuluClosestObserver:
         }
 
         # Call get_state
-        result = player.get_state(0)
+        result = player.get_state(0, 'closest')
         
         # Explorer is to the left (index 3) with distance 1
         # Wanderer is up (index 0) with distance 2
