@@ -16,11 +16,13 @@ from src.game.template import (
 )
 
 DEFAULT_REWARD_FOR_WIN = 1000
+DEFAULT_REWARD_FOR_LOSE = 0
 
 
 class KutuluWorldEnv(gym.Env):
     def __init__(self, server_host, maze_name, league_level, players_count=4,
-                 actions=DEFAULT_KUTULU_ACTIONS, reward_for_win=DEFAULT_REWARD_FOR_WIN):
+                 actions=DEFAULT_KUTULU_ACTIONS, reward_for_win=DEFAULT_REWARD_FOR_WIN,
+                 reward_for_lose=DEFAULT_REWARD_FOR_LOSE, step_bonus=1):
         super(KutuluWorldEnv, self).__init__()
 
         self.host = f"http://{server_host}/game"
@@ -29,6 +31,7 @@ class KutuluWorldEnv(gym.Env):
         self.league_level = league_level
         self.players_count = players_count
         self.reward_for_win = reward_for_win
+        self.reward_for_lose = reward_for_lose
         
         self._actions = actions
         self.map = []
@@ -36,8 +39,13 @@ class KutuluWorldEnv(gym.Env):
         self.action_space = spaces.Dict({
             i: spaces.Discrete(len(actions))
             for i in range(self.players_count)
-        }) 
-        
+        })
+
+        if type(step_bonus) == int:
+            self.step_bonus = step_bonus
+        else:
+            assert step_bonus == 'correcting'
+            self.step_bonus = step_bonus
         # # Observation space: agent position (x, y)
         # self.observation_space = spaces.Box(
         #     low=0, high=self.grid_size-1, 
@@ -171,6 +179,8 @@ class KutuluWorldEnv(gym.Env):
         data = response.json()
         # self.config = data['config']
         self.constants = data['constants']
+        if self.step_bonus == 'correcting':
+            self.step_bonus = self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT']
         self.map = data['map']
         self.width = len(self.map[0])
         self.height = len(self.map)
@@ -228,14 +238,17 @@ class KutuluWorldEnv(gym.Env):
         }
         rewards = {}
         for player in self.players:
-            player['active'] = player['id'] in active_sanity
+            player_id = player['id']
+            player['active'] = player_id in active_sanity
             if player['active']:
-                rewards[player['id']] = active_sanity[player['id']] - player['sanity'] + 1
-                player['sanity'] = active_sanity[player['id']]
-                player['x'], player['y'] = active_pos[player['id']]
+                rewards[player_id] = active_sanity[player_id] - player['sanity'] + self.step_bonus
+                player['sanity'] = active_sanity[player_id]
+                player['x'], player['y'] = active_pos[player_id]
             else:
                 if player['id'] not in self.death_turns:
-                    self.death_turns[player['id']] = self.turn
+                    self.death_turns[player_id] = self.turn
+                    if self.reward_for_lose is not None and not game_over:
+                        rewards[player_id] = rewards.get(player_id, 0) + self.reward_for_lose
 
         if game_over:
             for player in self.players:
@@ -244,7 +257,8 @@ class KutuluWorldEnv(gym.Env):
             max_death_turns = max(self.death_turns.values())
             for player in self.players:
                 player_id = player['id']
-                if self.death_turns[player_id] == max_death_turns:
+                if self.death_turns[player_id] == max_death_turns \
+                    and self.reward_for_win is not None:
                     rewards[player_id] = rewards.get(player_id, 0) + self.reward_for_win
                 
         
@@ -252,7 +266,7 @@ class KutuluWorldEnv(gym.Env):
         
         observation = self._get_obs()
         info = self._get_info()
-        
+
         return observation, reward, game_over, info
 
     def active_players(self):

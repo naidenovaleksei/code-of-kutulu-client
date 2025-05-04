@@ -2,6 +2,7 @@ import numpy as np
 from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
 from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
+from src.envs.agents.qdn_agent import QDNAgent
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
     KutuluClosestBronzeObserver
@@ -36,13 +37,14 @@ BRONZE_MAZES = [
 ]
 
 class Trainer:
-    def __init__(self, num_experiments, agents_info, can_wait, league_level, reward_for_win, mazes=BRONZE_MAZES, shuffle=True):
+    def __init__(self, num_experiments, agents_info, can_wait, league_level,
+                 env_kwargs, mazes=BRONZE_MAZES, shuffle=True):
         self.num_experiments = num_experiments
         self.action_space_n = len(DEFAULT_KUTULU_ACTIONS) - 1 + int(can_wait)
         self.mazes = mazes
         self.league_level = league_level
         self.players_count = len(agents_info)
-        self.reward_for_win = reward_for_win
+        self.env_kwargs = env_kwargs
         self.can_wait = can_wait
         self.shuffle = shuffle
         
@@ -54,25 +56,33 @@ class Trainer:
             agent_info['action_space_n'] = self.action_space_n
             if 'strategy' in agent_info:
                 agent = QlearningAgent(**agent_info)
-            else:
-                assert agent_info['cross_entropy']
+            elif 'cross_entropy' in agent_info:
                 agent_info = dict(agent_info)
                 del agent_info['cross_entropy']
                 agent = CrossEntropyAgent(**agent_info)
+            elif 'qdn' in agent_info:
+                agent_info = dict(agent_info)
+                del agent_info['qdn']
+                agent = QDNAgent(**agent_info)
+            else:
+                raise ValueError(f'unknown kind: {agent_info}')
             self.agents.append(agent)
-            
+
         self.agent_map = np.arange(len(self.agents))
     
-    def reset_env(self):
-        maze_name = np.random.choice(self.mazes)
+    def reset_env(self, seed=None):
+        if seed is not None:
+            maze_name = np.random.RandomState(seed).choice(self.mazes)
+        else:
+            maze_name = np.random.choice(self.mazes)
         self.env = KutuluWorldEnv(
             server_host='localhost:8080',
             maze_name=maze_name,
             league_level=self.league_level,
             players_count=self.players_count,
-            reward_for_win=self.reward_for_win
+            **self.env_kwargs
         )
-        observation, info = self.env.reset()
+        observation, info = self.env.reset(seed=seed)
         
         closest_observer = KutuluClosestObserver(self.env)
         closest_bronze_observer = KutuluClosestBronzeObserver(self.env)

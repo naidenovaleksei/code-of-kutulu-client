@@ -197,10 +197,10 @@ def getActionGreedyMasked(state, Q, action_space_n, mask):
 
 def getActionGreedyMasked2(state, Q, action_space_n, mask):
     if state not in Q:
-        ps = np.ma.array(np.ones(len(ps)), mask=mask).filled(0)
+        ps = np.ma.array(np.ones(action_space_n), mask=mask).filled(0)
         if ps.sum() == 0:
             return np.random.randint(action_space_n)
-        return np.random.choice(np.arange(len(ps)), p=ps / ps.sum())
+        return np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
     assert len(Q[state]) == action_space_n
     a = np.ma.array(Q[state], mask=mask)
     a_star = a.argmax()
