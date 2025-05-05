@@ -26,24 +26,24 @@ EPSILON_START = 1.0
 EPSILON_FINAL = 0.02
 
 
-# def parse_dir(encoded_dir):
-#     result = [0, 0, 0, 0, 0, 0]
-#     if encoded_dir is None:
-#         return result
-#     for _dir in encoded_dir:
-#         result[_dir + 1] = 1
-#     return result
-
-
 def parse_dir(encoded_dir):
     if encoded_dir is None:
-        return [0, 0, 0, 0, 0, 0]
-    # return list(encoded_dir) + [0] *
-    return [x + 1 for x in encoded_dir] + [0] * (6 - len(encoded_dir))
+        return [0, 0, 0, 0, 1]
+    result = [0, 0, 0, 0, 0]
+    for _dir in encoded_dir:
+        result[_dir] = 1
+    return result
+
+
+# def parse_dir(encoded_dir):
+#     if encoded_dir is None:
+#         return [0, 0, 0, 0, 0, 0]
+#     # return list(encoded_dir) + [0] *
+#     return [x + 1 for x in encoded_dir] + [0] * (6 - len(encoded_dir))
 
 def parse_dist(encoded_dist):
     if encoded_dist is None:
-        return [100]
+        return [-1]
     return [encoded_dist]
 
 def encode_states(states):
@@ -84,7 +84,7 @@ class ExperienceBuffer:
         return states, actions, rewards, dones, next_states
 
 
-class QDNAgent(BaseAgent):
+class DQNAgent(BaseAgent):
     def __init__(self, state_type, action_space_n,
                  lr=LEARNING_RATE, replay_size=REPLAY_SIZE,
                  replay_start_size=REPLAY_START_SIZE,
@@ -94,7 +94,7 @@ class QDNAgent(BaseAgent):
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
                  alpha=None, gamma=GAMMA,
                  train=False, verbose=False):
-        # super(QDNAgent, self).__init__()
+        # super(DQNAgent, self).__init__()
         self.state_type = state_type
         self.action_space_n = action_space_n
         self.eps = epsilon_start
@@ -112,14 +112,14 @@ class QDNAgent(BaseAgent):
         self.exp_buffer = ExperienceBuffer(replay_size)
 
         self.model = DQN(
-            vocab_size=6,
-            embed_dim=16,
+            vocab_size=6 + 1,
+            embed_dim=32,
             hidden_dim=32,
             num_classes=action_space_n
         )
         self.tgt_net = DQN(
-            vocab_size=6,
-            embed_dim=16,
+            vocab_size=6 + 1,
+            embed_dim=32,
             hidden_dim=32,
             num_classes=action_space_n
         )
@@ -142,6 +142,7 @@ class QDNAgent(BaseAgent):
             action = getActionGreedyMasked2(state, {}, self.action_space_n, player_mask)
         else:
             data = encode_states([state])
+            # data['mask'] = torch.tensor([player_mask])
             model_output = self.model(data)[0].detach().cpu().numpy()
             q_vals_v = np.ma.array(model_output, mask=player_mask)
             action = q_vals_v.argmax()
@@ -155,7 +156,7 @@ class QDNAgent(BaseAgent):
             return
 
         state, action = self.state_actions
-        exp = Experience(state, action, reward, game_over, new_state)
+        exp = Experience(state, action, reward / 100, game_over, new_state)
         self.exp_buffer.append(exp)
 
         if len(self.exp_buffer) >= self.replay_start_size:

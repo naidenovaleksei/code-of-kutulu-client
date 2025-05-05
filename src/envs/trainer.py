@@ -2,7 +2,7 @@ import numpy as np
 from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
 from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
-from src.envs.agents.qdn_agent import QDNAgent
+from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
     KutuluClosestBronzeObserver
@@ -63,7 +63,7 @@ class Trainer:
             elif 'qdn' in agent_info:
                 agent_info = dict(agent_info)
                 del agent_info['qdn']
-                agent = QDNAgent(**agent_info)
+                agent = DQNAgent(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {agent_info}')
             self.agents.append(agent)
