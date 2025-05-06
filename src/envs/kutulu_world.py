@@ -91,8 +91,11 @@ class KutuluWorldEnv(gym.Env):
             'id': int(eid),
             'x': int(ex),
             'y': int(ey),
+            "param0": int(eparam0),
+            "param1": int(eparam1),
+            "param2": int(eparam2),
         }
-        
+
         if ekind == 'EXPLORER':
             result['sanity'] = int(eparam0)
         elif ekind == 'WANDERER':
@@ -257,7 +260,8 @@ class KutuluWorldEnv(gym.Env):
             max_death_turns = max(self.death_turns.values())
             for player in self.players:
                 player_id = player['id']
-                if self.death_turns[player_id] == max_death_turns \
+                if (player_id not in self.death_turns or \
+                    self.death_turns[player_id] == max_death_turns) \
                     and self.reward_for_win is not None:
                     rewards[player_id] = rewards.get(player_id, 0) + self.reward_for_win
                 

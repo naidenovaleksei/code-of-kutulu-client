@@ -3,6 +3,7 @@ from src.game.template import (
     get_state,
     get_distances,
     get_state_bronze,
+    get_state_ext,
 )
 
 
@@ -12,6 +13,7 @@ class BaseKutuluClosestObserver:
     
     def get_state(self) -> tuple:
         raise NotImplementedError
+
 
 class KutuluClosestObserver(BaseKutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
@@ -68,4 +70,17 @@ class KutuluClosestBronzeObserver(KutuluClosestObserver):
         state = get_state_bronze(player_pos, entities, self.env.map,
                           get_distances_func=self.get_distances_cached())
         return state
-    
+
+
+class KutuluClosestExtObserver(KutuluClosestObserver):
+    def __init__(self, env: KutuluWorldEnv):
+        super(KutuluClosestExtObserver, self).__init__(env)
+
+    def get_state(self, player_id, state_type):
+        _obs = self.env._get_obs(player_id)
+        entities = _obs['entities']
+        player_pos = (entities[0]['x'], entities[0]['y'])
+        
+        state = get_state_ext(player_pos, entities, self.env.map,
+                          get_distances_func=self.get_distances_cached())
+        return state

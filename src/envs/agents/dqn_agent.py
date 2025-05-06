@@ -46,16 +46,6 @@ def parse_dist(encoded_dist):
         return [-1]
     return [encoded_dist]
 
-def encode_states(states):
-    data = dict(
-        closest_explorer_dir=[parse_dir(state[0]) for state in states],
-        closest_explorer_dist=[parse_dist(state[1]) for state in states],
-        closest_wanderer_dir=[parse_dir(state[2]) for state in states],
-        closest_wanderer_dist=[parse_dist(state[3]) for state in states],
-    )
-    data = {k: torch.tensor(v) for k,v in data.items()}
-    return data
-
 
 Experience = collections.namedtuple('Experience', field_names=['state', 'action', 'reward', 'done', 'new_state'])
 
@@ -70,14 +60,22 @@ class ExperienceBuffer:
     def append(self, experience):
         self.buffer.append(experience)
 
+    def encode_states(self, states):
+        data = dict(
+            closest_explorer_dir=[parse_dir(state[0]) for state in states],
+            closest_explorer_dist=[parse_dist(state[1]) for state in states],
+            closest_wanderer_dir=[parse_dir(state[2]) for state in states],
+            closest_wanderer_dist=[parse_dist(state[3]) for state in states],
+        )
+        data = {k: torch.tensor(v) for k,v in data.items()}
+        return data
+
     def sample(self, batch_size):
         indices = np.random.choice(len(self.buffer), batch_size, replace=False)
         states, actions, rewards, dones, next_states = zip(*[self.buffer[idx] for idx in indices])
 
-        # return np.array(states), np.array(actions), np.array(rewards, dtype=np.float32), \
-        #        np.array(dones, dtype=np.uint8), np.array(next_states)
-        states = encode_states(np.array(states))
-        next_states = encode_states(np.array(next_states))
+        states = self.encode_states(np.array(states))
+        next_states = self.encode_states(np.array(next_states))
         actions = torch.tensor(actions)
         rewards = torch.tensor(np.array(rewards, dtype=np.float32))
         dones = torch.ByteTensor(np.array(dones, dtype=np.uint8))
@@ -141,7 +139,7 @@ class DQNAgent(BaseAgent):
         if np.random.random() < self.eps:
             action = getActionGreedyMasked2(state, {}, self.action_space_n, player_mask)
         else:
-            data = encode_states([state])
+            data = self.exp_buffer.encode_states([state])
             # data['mask'] = torch.tensor([player_mask])
             model_output = self.model(data)[0].detach().cpu().numpy()
             q_vals_v = np.ma.array(model_output, mask=player_mask)

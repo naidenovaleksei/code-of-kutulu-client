@@ -3,9 +3,11 @@ from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
 from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
+from src.envs.agents.dqn_agent_ext import DQNAgentExt
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
-    KutuluClosestBronzeObserver
+    KutuluClosestBronzeObserver,
+    KutuluClosestExtObserver,
 )
 
 WOOD_MAZES = [
@@ -64,6 +66,10 @@ class Trainer:
                 agent_info = dict(agent_info)
                 del agent_info['qdn']
                 agent = DQNAgent(**agent_info)
+            elif 'qdn_ext' in agent_info:
+                agent_info = dict(agent_info)
+                del agent_info['qdn_ext']
+                agent = DQNAgentExt(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {agent_info}')
             self.agents.append(agent)
@@ -86,12 +92,15 @@ class Trainer:
         
         closest_observer = KutuluClosestObserver(self.env)
         closest_bronze_observer = KutuluClosestBronzeObserver(self.env)
+        closest_ext_observer = KutuluClosestExtObserver(self.env)
         self.observers = []
         for agent in self.agents:
             if agent.state_type == 'closest':
                 self.observers.append(closest_observer)
             elif agent.state_type == 'closest_bronze':
                 self.observers.append(closest_bronze_observer)
+            elif agent.state_type == 'closest_ext':
+                self.observers.append(closest_ext_observer)
             else:
                 raise ValueError(f'unknown state_type: {agent.state_type}')
 

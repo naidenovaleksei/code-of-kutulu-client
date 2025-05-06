@@ -43,6 +43,8 @@ CELL_EMPTY = '.'
 CELL_WALL = '#'
 CELL_SPAWN = 'w'
 
+class UnreachedPositionError(Exception):
+    pass
 
 def distance(point1, point2):
     return abs(point1[0] - point2[0]) + abs(point1[1] - point2[1])
@@ -89,14 +91,14 @@ def find_path(start_point, finish_point, lines):
             g_dict[candidate] = g
             f_dict[candidate] = f
             heapq.heappush(common_candidates, (f, candidate))
-    assert False
+    raise UnreachedPositionError(f'cannot reach {finish_point} from {start_point}')
 
 def parse_desc(line):
-    unit_kind, unit_id, unit_x, unit_y, unit_life, eparam1, _ = line.split()
+    unit_kind, unit_id, unit_x, unit_y, eparam0, eparam1, eparam2 = line.split()
     unit_id = int(unit_id)
     unit_x = int(unit_x)
     unit_y = int(unit_y)
-    unit_life = int(unit_life)
+    unit_life = int(eparam0)
     return {
         "kind": unit_kind,
         "id": unit_id,
@@ -104,6 +106,9 @@ def parse_desc(line):
         "y": unit_y,
         "life": unit_life,
         "wandering": int(eparam1),
+        "param0": int(eparam0),
+        "param1": int(eparam1),
+        "param2": int(eparam2),
     }
 
 def get_distances(entities, player_pos, lines, find_path_func=find_path):
@@ -120,13 +125,16 @@ def get_distances(entities, player_pos, lines, find_path_func=find_path):
             entity_pos = (e['x'], e['y'])
             if entity_pos == player_pos:
                 return {MOVE_REL_POS['WAIT']: 0}
-            path = find_path_func(pos, entity_pos, lines)
-            if len(path):
-                assert path[-1] != pos
-                assert path[0] == entity_pos
-            distances[rel_pos] = min(distances.get(rel_pos, 1000), len(path))
+            try:
+                path = find_path_func(pos, entity_pos, lines)
+                if len(path):
+                    assert path[-1] != pos
+                    assert path[0] == entity_pos
+                distances[rel_pos] = min(distances.get(rel_pos, 1000), len(path))
+            except UnreachedPositionError as e:
+                pass
     return distances
-    
+
 def get_min_direction_and_distance(distances):
     if len(distances) == 0:
         return None, None
@@ -184,6 +192,25 @@ def get_state_bronze(player_pos, entities, lines, get_distances_func=get_distanc
         closest_wanderer_dist,
     )
 
+
+def get_state_ext(player_pos, entities, lines, get_distances_func=get_distances):
+    ENTITY_FIELDS = ['kind', 'rel_x', 'rel_y', 'param0', 'param1', 'param2', 'dist', 'dir', 'raw_dist', 'on_los']
+    
+    entities_features = []
+    for e in entities[1:]:
+        distances = get_distances_func([e], player_pos, lines)
+        _dir, _dist = get_min_direction_and_distance(distances)
+        e['rel_x'] = e['x'] - player_pos[0]
+        e['rel_y'] = e['y'] - player_pos[1]
+        e['dist'] = _dist
+        e['dir'] = _dir
+        e['raw_dist'] = abs(e['rel_x']) + abs(e['rel_y'])
+        e['on_los'] = (e['rel_x'] == 0 or e['rel_y'] == 0) and e['raw_dist'] == e['dist']
+        e = {k: v for k,v in e.items() if k in ENTITY_FIELDS}
+        entities_features.append(e)
+    return entities_features
+
+
 def getActionGreedyMasked(state, Q, action_space_n, mask):
     if state not in Q:
         actions_idx = np.arange(action_space_n)[~mask]
@@ -196,7 +223,7 @@ def getActionGreedyMasked(state, Q, action_space_n, mask):
     return a_star
 
 def getActionGreedyMasked2(state, Q, action_space_n, mask):
-    if state not in Q:
+    if not isinstance(state, tuple) or state not in Q:
         ps = np.ma.array(np.ones(action_space_n), mask=mask).filled(0)
         if ps.sum() == 0:
             return np.random.randint(action_space_n)
