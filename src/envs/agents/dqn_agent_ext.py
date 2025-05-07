@@ -45,12 +45,14 @@ ENTITY_TOKENS = [
 ENTITY_TOKENS_MAP = {k: v for v, k in enumerate(ENTITY_TOKENS)}
 MAX_ENTITY_COUNT = 10
 
-def parse_dir(encoded_dir):
+def parse_dist_dir(e):
+    encoded_dir = e['dir']
     if encoded_dir is None:
-        return [0, 0, 0, 0, 1]
-    result = [0, 0, 0, 0, 0]
+        return [0., 0., 0., 0., 0.]
+    encoded_dist = e['dist']
+    result = [0., 0., 0., 0., 0.]
     for _dir in encoded_dir:
-        result[_dir] = 1
+        result[_dir] = encoded_dist
     return result
 
 def parse_kind(e):
@@ -65,7 +67,7 @@ def parse_features(e):
         e['param2'],
         e['rel_x'],
         e['rel_y'],
-        e['dist'] or -1,
+        # e['dist'] or -1,
         e['raw_dist'],
         e['on_los'],
         e['param0'],
@@ -79,11 +81,11 @@ def parse_state(state):
         parse_kind(e) for e in state
     ]
     features_list = [parse_features(e) for e in state]
-    dir_list = [parse_dir(e['dir']) for e in state]
+    dir_list = [parse_dist_dir(e) for e in state]
     for _ in range(MAX_ENTITY_COUNT - len(state)):
         kind_list.append(0)
-        features_list.append([0., 0., 0., 0., 0., 0., 0., 0.])
-        dir_list.append([0, 0, 0, 0, 0])
+        features_list.append([0., 0., 0., 0., 0., 0., 0.])
+        dir_list.append([0., 0., 0., 0., 0.])
     return kind_list, features_list, dir_list
 
 
@@ -134,7 +136,7 @@ class DQNAgentExt(DQNAgent):
 
         self.model = DQNExt(
             vocab_size=len(ENTITY_TOKENS) + 1,
-            features_dim=8,
+            features_dim=7,
             embed_dim=32,
             hidden_dim=32,
             inner_dim=16,
@@ -142,7 +144,7 @@ class DQNAgentExt(DQNAgent):
         )
         self.tgt_net = DQNExt(
             vocab_size=len(ENTITY_TOKENS) + 1,
-            features_dim=8,
+            features_dim=7,
             embed_dim=32,
             hidden_dim=32,
             inner_dim=16,
