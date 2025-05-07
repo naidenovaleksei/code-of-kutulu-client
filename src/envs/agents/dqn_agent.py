@@ -136,7 +136,7 @@ class DQNAgent(BaseAgent):
         valid_actions = observer.env.get_valid_action_mask()[player_id]
         player_mask = ~np.array(valid_actions)
 
-        if np.random.random() < self.eps:
+        if self.train and np.random.random() < self.eps:
             action = getActionGreedyMasked2(state, {}, self.action_space_n, player_mask)
         else:
             data = self.exp_buffer.encode_states([state])

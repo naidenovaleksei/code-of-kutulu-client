@@ -33,6 +33,9 @@ class RandomStrategy(BaseQStrategy):
         return np.random.randint(action_space_n)
     
     def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
+        return self.getActionGreedyMasked(state, action_space_n, mask)
+    
+    def getActionGreedyMasked(self, state, action_space_n, mask):
         actions_idx = np.arange(action_space_n)[~mask]
         if len(actions_idx) == 0:
             return np.random.randint(action_space_n)
@@ -72,7 +75,7 @@ class LazyGreedyStrategy(GreedyStrategy):
         super(LazyGreedyStrategy, self).__init__()
 
     def getActionGreedyMasked(self, state, action_space_n, mask):
-        return getActionGreedyMasked(state, self.Q, action_space_n, mask)
+        return getActionGreedyMasked2(state, self.Q, action_space_n, mask)
 
     def check_state(self, state, action_space_n):
         if state not in self.Q:
@@ -84,9 +87,6 @@ class LazyGreedyStrategy(GreedyStrategy):
 class LazyGreedyStrategy2(LazyGreedyStrategy):
     def __init__(self):
         super(LazyGreedyStrategy2, self).__init__()
-
-    def getActionGreedyMasked(self, state, action_space_n, mask):
-        return getActionGreedyMasked2(state, self.Q, action_space_n, mask)
 
     def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
         assert self.check_state(state, action_space_n)

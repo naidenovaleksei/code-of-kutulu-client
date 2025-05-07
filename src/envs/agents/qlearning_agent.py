@@ -61,12 +61,19 @@ class QlearningAgent(BaseAgent):
         state = observer.get_state(player_id, self.state_type)
         valid_actions = observer.env.get_valid_action_mask()[player_id]
         player_mask = ~np.array(valid_actions)
-        action = self.strategy.getActionEpsGreedyMasked(
-            state,
-            self.action_space_n,
-            self.eps,
-            player_mask
-        )
+        if self.train:
+            action = self.strategy.getActionEpsGreedyMasked(
+                state,
+                self.action_space_n,
+                self.eps,
+                player_mask
+            )
+        else:
+            action = self.strategy.getActionGreedyMasked(
+                state,
+                self.action_space_n,
+                player_mask
+            )
         self.state_actions = (state, action)
         return state, action
 
