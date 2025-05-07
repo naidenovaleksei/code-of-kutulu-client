@@ -4,3 +4,4 @@ tqdm
 pytest
 numpy
 torch
+scipy

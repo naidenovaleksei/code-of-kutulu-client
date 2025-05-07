@@ -12,6 +12,8 @@ import base64
 data1 = b'data1data1data1'
 data2 = b'data2data2data2'
 
+mode = 'mode'
+
 
 MOVE_REL_POS = {
     'UP': (0,-1),
@@ -31,6 +33,27 @@ REL_SHIFT = {pos: abs(pos[0]) + abs(pos[1]) for pos in REL_POSITIONS}
 
 MAX_EXPLORER_DIST = 5
 MAX_WANDERER_DIST = 5
+
+MAX_ENTITY_COUNT = 20
+
+
+WANDERER_STATES = ["SPAWNING", "WANDERING", "STALKING", "RUSHING", "STUNNED"]
+ENTITY_TOKENS = [
+    "EXPLORER",
+    "WANDERER_SPAWNING",
+    "WANDERER_WANDERING",
+    "SLASHER_SPAWNING",
+    "SLASHER_WANDERING",
+    "SLASHER_STALKING",
+    "SLASHER_RUSHING",
+    "SLASHER_STUNNED",
+    "EFFECT_PLAN",
+    "EFFECT_LIGHT",
+    "EFFECT_SHELTER",
+    "EFFECT_YELL",
+]
+ENTITY_TOKENS_MAP = {k: v for v, k in enumerate(ENTITY_TOKENS)}
+
 
 DEFAULT_KUTULU_ACTIONS = [
     'UP',
@@ -111,6 +134,49 @@ def parse_desc(line):
         "param1": int(eparam1),
         "param2": int(eparam2),
     }
+
+def parse_dist_dir(e):
+    encoded_dir = e['dir']
+    if encoded_dir is None:
+        return [0., 0., 0., 0., 0.]
+    encoded_dist = e['dist']
+    result = [0., 0., 0., 0., 0.]
+    for _dir in encoded_dir:
+        result[_dir] = encoded_dist
+    return result
+
+def parse_kind(e):
+    kind = e['kind']
+    if kind in ('WANDERER', 'SLASHER'):
+        kind = f"{e['kind']}_{WANDERER_STATES[e['param1']]}"
+    return ENTITY_TOKENS_MAP[kind] + 1
+
+def parse_features(e):
+    result = [
+        e['param0'],
+        e['param2'],
+        e['rel_x'],
+        e['rel_y'],
+        # e['dist'] or -1,
+        e['raw_dist'],
+        e['on_los'],
+        e['param0'],
+    ]
+    result = [float(x) for x in result]
+    return result
+
+def parse_state(state):
+    state = state[:MAX_ENTITY_COUNT]
+    kind_list = [
+        parse_kind(e) for e in state
+    ]
+    features_list = [parse_features(e) for e in state]
+    dir_list = [parse_dist_dir(e) for e in state]
+    for _ in range(MAX_ENTITY_COUNT - len(state)):
+        kind_list.append(0)
+        features_list.append([0., 0., 0., 0., 0., 0., 0.])
+        dir_list.append([0., 0., 0., 0., 0.])
+    return kind_list, features_list, dir_list
 
 def get_distances(entities, player_pos, lines, find_path_func=find_path):
     distances = {}
@@ -321,13 +387,58 @@ def parse_info():
         'wanderer_life_time': wanderer_life_time,
     }
 
+
+class Solver:
+    def step(self):
+        pass
+
+class QlearningSolver():
+    def __init__(self, Q):
+        self.Q = Q
+        self.info = parse_info()
+
+    def step(self, entities):
+        return simple_strategy(entities, self.Q, self.info)
+
+
+class DQNSolver():
+    def __init__(self, weights):
+        self.weights = weights
+        self.info = parse_info()
+
+    def step(self, entities):
+        player_pos = (entities[0]['x'], entities[0]['y'])
+        state = get_state_ext(player_pos, entities, self.info['lines'])
+        player_mask = ~np.array(get_valid_action_mask_by_coords(player_pos[0], player_pos[1], self.info))
+        
+        kind_list, features_list, dir_list = parse_state(state)
+        data = {
+            'entity_kind': [kind_list],
+            'entity_features': [features_list],
+            'entity_dir': [dir_list],
+        }
+        
+        model_output = calculate_output_np(data, self.weights)[0]
+        q_vals_v = np.ma.array(model_output, mask=player_mask)
+        action_id = q_vals_v.argmax()
+        
+        if action_id == len(DEFAULT_KUTULU_ACTIONS) - 1:
+            return "WAIT"
+        
+        rel_pos = MOVE_REL_POS[DEFAULT_KUTULU_ACTIONS[action_id]]
+        next_cell = (player_pos[0] + rel_pos[0], player_pos[1] + rel_pos[1])
+        return f"MOVE {next_cell[0]} {next_cell[1]}"
+
 def main():
     vals = pkl.loads(zlib.decompress(base64.b64decode(data1)))
     keys = pkl.loads(zlib.decompress(base64.b64decode(data2)))
-    new_Q = dict(zip(keys, vals))
-    
-    info = parse_info()
-
+    checkpoint_data = dict(zip(keys, vals))
+    if mode == 'qlearning':
+        solver = QlearningSolver(checkpoint_data)
+    elif mode == 'dqn_ext':
+        solver = DQNSolver(checkpoint_data)
+    else:
+        raise ValueError(f'unknown mode: "{mode}"')
     
     # game loop
     while True:
@@ -335,8 +446,8 @@ def main():
         entities = []
         for i in range(entity_count):
             entities.append(parse_desc(input()))
-        
-        step = simple_strategy(entities, new_Q, info)
+
+        step = solver.step(entities)
         print(step)
 
 if __name__ == '__main__':

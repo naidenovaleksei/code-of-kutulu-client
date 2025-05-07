@@ -1,19 +1,17 @@
-import collections
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
 from src.envs.agents.dqn_agent import DQNAgent
-from src.game.template import (
-    getActionGreedyMasked2,
-)
 from src.envs.agents.dqn_agent import (
     ExperienceBuffer,
-    Experience,
 )
 from src.envs.models.dqn_model_ext import DQNExt
+from src.game.template import (
+    parse_state,
+    ENTITY_TOKENS,
+)
 
 GAMMA = 0.99
 BATCH_SIZE = 32
@@ -25,69 +23,6 @@ REPLAY_START_SIZE = 10000
 EPSILON_DECAY_LAST_FRAME = 10**5
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.02
-
-
-WANDERER_STATES = ["SPAWNING", "WANDERING", "STALKING", "RUSHING", "STUNNED"]
-ENTITY_TOKENS = [
-    "EXPLORER",
-    "WANDERER_SPAWNING",
-    "WANDERER_WANDERING",
-    "SLASHER_SPAWNING",
-    "SLASHER_WANDERING",
-    "SLASHER_STALKING",
-    "SLASHER_RUSHING",
-    "SLASHER_STUNNED",
-    "EFFECT_PLAN",
-    "EFFECT_LIGHT",
-    "EFFECT_SHELTER",
-    "EFFECT_YELL",
-]
-ENTITY_TOKENS_MAP = {k: v for v, k in enumerate(ENTITY_TOKENS)}
-MAX_ENTITY_COUNT = 10
-
-def parse_dist_dir(e):
-    encoded_dir = e['dir']
-    if encoded_dir is None:
-        return [0., 0., 0., 0., 0.]
-    encoded_dist = e['dist']
-    result = [0., 0., 0., 0., 0.]
-    for _dir in encoded_dir:
-        result[_dir] = encoded_dist
-    return result
-
-def parse_kind(e):
-    kind = e['kind']
-    if kind in ('WANDERER', 'SLASHER'):
-        kind = f"{e['kind']}_{WANDERER_STATES[e['param1']]}"
-    return ENTITY_TOKENS_MAP[kind] + 1
-
-def parse_features(e):
-    result = [
-        e['param0'],
-        e['param2'],
-        e['rel_x'],
-        e['rel_y'],
-        # e['dist'] or -1,
-        e['raw_dist'],
-        e['on_los'],
-        e['param0'],
-    ]
-    result = [float(x) for x in result]
-    return result
-
-def parse_state(state):
-    state = state[:MAX_ENTITY_COUNT]
-    kind_list = [
-        parse_kind(e) for e in state
-    ]
-    features_list = [parse_features(e) for e in state]
-    dir_list = [parse_dist_dir(e) for e in state]
-    for _ in range(MAX_ENTITY_COUNT - len(state)):
-        kind_list.append(0)
-        features_list.append([0., 0., 0., 0., 0., 0., 0.])
-        dir_list.append([0., 0., 0., 0., 0.])
-    return kind_list, features_list, dir_list
-
 
 class ExperienceBufferExt(ExperienceBuffer):
     def __init__(self, capacity):
