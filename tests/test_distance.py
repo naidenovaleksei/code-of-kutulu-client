@@ -1,5 +1,6 @@
 import pytest
 from src.envs.distance import find_path
+from src.game.template import UnreachedPositionError
 
 @pytest.fixture
 def sample_map():
@@ -118,5 +119,5 @@ def test_find_path_big(start_point, finish_point, expected, big_map):
     [(1, 1), (6, 1)],
 ])
 def test_wrong_positions(start_point, finish_point, sample_map):
-    with pytest.raises(AssertionError):
+    with pytest.raises(UnreachedPositionError):
         find_path(start_point, finish_point, sample_map)
