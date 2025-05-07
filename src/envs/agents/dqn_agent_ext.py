@@ -93,7 +93,7 @@ class ExperienceBufferExt(ExperienceBuffer):
     def __init__(self, capacity):
         super(ExperienceBufferExt, self).__init__(capacity)
 
-    def encode_states(self, states):
+    def encode_states(self, states, return_tensors=True):
         data = dict(
             entity_kind=[],
             entity_features=[],
@@ -104,7 +104,8 @@ class ExperienceBufferExt(ExperienceBuffer):
             data['entity_kind'].append(kind_list)
             data['entity_features'].append(features_list)
             data['entity_dir'].append(dir_list)
-        data = {k: torch.tensor(v) for k,v in data.items()}
+        if return_tensors:
+            data = {k: torch.tensor(v) for k,v in data.items()}
         return data
 
 

@@ -1,6 +1,7 @@
 import sys
 import math
 import numpy as np
+import scipy.special as sp
 import heapq
 
 import pickle as pkl
@@ -232,6 +233,48 @@ def getActionGreedyMasked2(state, Q, action_space_n, mask):
     a = np.ma.array(Q[state], mask=mask)
     a_star = a.argmax()
     return a_star
+
+def calculate_output_np(data, weights, num_classes=5):
+    data = {k: np.array(v) for k,v in data.items()}
+    kind_embs = weights['kind_embs.weight']
+    features_linear = weights['features_linear.weight']
+    features_linear_b = weights['features_linear.bias']
+    dir_linear = weights['dir_linear.weight']
+    dir_linear_b = weights['dir_linear.bias']
+    entity_linear = weights['entity_linear.weight']
+    entity_linear_b = weights['entity_linear.bias']
+    entity_impact = weights['entity_impact.weight']
+    entity_impact_b = weights['entity_impact.bias']
+    out_linear = weights['out_linear.weight']
+    out_linear_b = weights['out_linear.bias']
+    
+    assert data['entity_dir'].shape[-1] == num_classes
+    x_kind_embs = kind_embs[data['entity_kind']]
+    
+    entity_features = data['entity_features']
+    x_features = entity_features @ features_linear.T + features_linear_b
+
+    entity_dir = data['entity_dir']
+    x_dir = entity_dir @ dir_linear.T + dir_linear_b
+    entities_mask = (entity_dir > 0).max(axis=-1, keepdims=True)
+
+    x_entitity = np.concatenate((x_kind_embs, x_features, x_dir), axis=-1)
+    x = x_entitity @ entity_linear.T + entity_linear_b
+
+    entities_mask[entities_mask == 0] = -100000
+    entity_weights = (x_entitity @ entity_impact.T + entity_impact_b) * entities_mask
+    entity_weights = sp.softmax(entity_weights, axis=1)
+
+    # [batch_size, inner_dim, entity_dim]
+    x_transposed = x.transpose(0, 2, 1)
+    # [batch_size, inner_dim, num_classes]
+    x = (x_transposed @ entity_weights)
+    # [batch_size, num_classes, inner_dim]
+    x = x.transpose(0, 2, 1)
+    # [batch_size, num_classes]
+    output = (x @ out_linear.T + out_linear_b).squeeze(-1)
+
+    return output
 
 def get_valid_action_mask_by_coords(x, y, info, can_wait=True):
     # 'UP',
