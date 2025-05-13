@@ -1,0 +1,58 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class REINFORCEModel(nn.Module):
+    def __init__(self, vocab_size, embed_dim, features_dim, hidden_dim, inner_dim, num_classes):
+        super(REINFORCEModel, self).__init__()
+        
+        self.kind_embs = nn.Embedding(vocab_size, embed_dim)
+        self.features_linear = nn.Linear(features_dim, hidden_dim)
+        self.dir_linear = nn.Linear(num_classes, inner_dim)
+        self.entity_linear = nn.Linear(embed_dim + hidden_dim + inner_dim, inner_dim)
+        self.entity_impact = nn.Linear(embed_dim + hidden_dim + inner_dim, num_classes)
+        self.out_linear = nn.Linear(inner_dim, 1)
+        self.num_classes = num_classes
+        
+    def forward(self, data):
+        assert data['entity_dir'].shape[-1] == self.num_classes
+        
+        x_kind_embs = self.kind_embs(data['entity_kind'])
+        
+        entity_features = data['entity_features']
+        x_features = self.features_linear(entity_features)
+
+        entity_dir = data['entity_dir']
+        x_dir = self.dir_linear(entity_dir)
+        entities_mask = (entity_dir > 0).max(dim=-1, keepdim=True)[0]
+        
+        # [batch_size, entity_dim, embed_dim + hidden_dim + inner_dim]
+        x_entitity = torch.cat((x_kind_embs, x_features, x_dir), dim=-1)
+        # [batch_size, entity_dim, inner_dim]
+        x = self.entity_linear(x_entitity)
+        
+        entities_mask[entities_mask == 0] = -100000
+        entity_weights = self.entity_impact(x_entitity) * entities_mask
+        entity_weights = torch.softmax(entity_weights, dim=1)
+        # [batch_size, inner_dim, entity_dim]
+        x_transposed = x.transpose(1, 2)
+        # [batch_size, inner_dim, num_classes]
+        x = torch.bmm(x_transposed, entity_weights)
+        # [batch_size, num_classes, inner_dim]
+        x = x.transpose(2, 1)
+        # [batch_size, num_classes]
+        logits = self.out_linear(x).squeeze(-1)
+        # # Reshape to [batch_size * num_classes, inner_dim]
+        # batch_size = x.size(0)
+        # x = x.reshape(batch_size * self.num_classes, -1)
+        # # Apply linear layer
+        # x = self.out_linear(x)
+        # # Reshape back to [batch_size, num_classes]
+        # logits = x.reshape(batch_size, self.num_classes)
+        
+        # # Apply softmax to get action probabilities
+        return F.softmax(logits, dim=1)
+    
+    def get_log_probs(self, data):
+        """Return log probabilities of actions for policy gradient update"""
+        return torch.log(self.forward(data) + 1e-8)  # Add small epsilon to avoid log(0)

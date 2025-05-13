@@ -41,11 +41,8 @@ class KutuluWorldEnv(gym.Env):
             for i in range(self.players_count)
         })
 
-        if type(step_bonus) == int:
-            self.step_bonus = step_bonus
-        else:
-            assert step_bonus == 'correcting'
-            self.step_bonus = step_bonus
+        self.step_bonus = step_bonus
+        self.correct_bonus = correct_bonus
         # # Observation space: agent position (x, y)
         # self.observation_space = spaces.Box(
         #     low=0, high=self.grid_size-1, 
@@ -182,8 +179,10 @@ class KutuluWorldEnv(gym.Env):
         data = response.json()
         # self.config = data['config']
         self.constants = data['constants']
-        if self.step_bonus == 'correcting':
-            self.step_bonus = self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT']
+        if self.correct_bonus:
+            self.correct_step_bonus = self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT']
+        else:
+            self.correct_step_bonus = 0
         self.map = data['map']
         self.width = len(self.map[0])
         self.height = len(self.map)
@@ -244,7 +243,7 @@ class KutuluWorldEnv(gym.Env):
             player_id = player['id']
             player['active'] = player_id in active_sanity
             if player['active']:
-                rewards[player_id] = active_sanity[player_id] - player['sanity'] + self.step_bonus
+                rewards[player_id] = active_sanity[player_id] - player['sanity'] + self.step_bonus + self.correct_step_bonus
                 player['sanity'] = active_sanity[player_id]
                 player['x'], player['y'] = active_pos[player_id]
             else:

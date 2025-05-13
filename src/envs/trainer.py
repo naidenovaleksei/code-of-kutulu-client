@@ -4,6 +4,7 @@ from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.agents.dqn_agent_ext import DQNAgentExt
+from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
     KutuluClosestBronzeObserver,
@@ -70,6 +71,10 @@ class Trainer:
                 agent_info = dict(agent_info)
                 del agent_info['qdn_ext']
                 agent = DQNAgentExt(**agent_info)
+            elif 'reinforce' in agent_info:
+                agent_info = dict(agent_info)
+                del agent_info['reinforce']
+                agent = REINFORCEAgent(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {agent_info}')
             self.agents.append(agent)
@@ -123,18 +128,24 @@ class Trainer:
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
+            # print(rewards)
             rollout_rewards.append(rewards)
 
             for player_id, reward in enumerate(rewards):
                 agent_id = self.agent_map[player_id]
                 agent = self.agents[agent_id]
                 if agent.train:
-                    try:
-                        new_state = self.observers[agent_id].get_state(
-                            player_id, self.agents[agent_id].state_type
-                        )
-                        agent.train_step(reward, game_over, new_state)
-                    except StopIteration:
-                        pass
+                    if isinstance(agent, REINFORCEAgent):
+                        game_over_for_player = env.death_turns.get(player_id) == env.turn
+                        if game_over_for_player:
+                            agent.train_step(reward, True, None)
+                    else:
+                        try:
+                            new_state = self.observers[agent_id].get_state(
+                                player_id, self.agents[agent_id].state_type
+                            )
+                            agent.train_step(reward, game_over, new_state)
+                        except StopIteration:
+                            pass
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
