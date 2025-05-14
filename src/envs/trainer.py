@@ -41,13 +41,13 @@ BRONZE_MAZES = [
 
 class Trainer:
     def __init__(self, num_experiments, agents_info, can_wait, league_level,
-                 env_kwargs, mazes=BRONZE_MAZES, shuffle=True):
+                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True):
         self.num_experiments = num_experiments
         self.action_space_n = len(DEFAULT_KUTULU_ACTIONS) - 1 + int(can_wait)
         self.mazes = mazes
         self.league_level = league_level
         self.players_count = len(agents_info)
-        self.env_kwargs = env_kwargs
+        self.env_kwargs = env_kwargs or {}
         self.can_wait = can_wait
         self.shuffle = shuffle
         
@@ -120,8 +120,7 @@ class Trainer:
         while not game_over:
             action = env.sample_valid_action(self.can_wait)
 
-            for env_player in env.active_players():
-                player_id = env_player['id']
+            for player_id in env.active_players():
                 agent_id = self.agent_map[player_id]
                 state, At = self.agents[agent_id].generate_state_and_step(
                     self.observers[agent_id], player_id)
@@ -136,8 +135,7 @@ class Trainer:
                 agent = self.agents[agent_id]
                 if agent.train:
                     if isinstance(agent, REINFORCEAgent):
-                        game_over_for_player = env.death_turns.get(player_id) == env.turn
-                        if game_over_for_player:
+                        if env.is_game_over_for_player(player_id):
                             agent.train_step(reward, True, None)
                     else:
                         try:
