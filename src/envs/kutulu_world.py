@@ -12,8 +12,6 @@ from src.envs.distance import find_path
 from src.envs.kutulu_reward_manager import KutuluRewardManager
 from src.game.template import (
     get_valid_action_mask_by_coords,
-    DEFAULT_KUTULU_ACTIONS,
-    CELL_WALL,
 )
 
 DEFAULT_REWARD_FOR_WIN = 1000
@@ -21,8 +19,7 @@ DEFAULT_REWARD_FOR_LOSE = 0
 
 
 class KutuluWorldEnv(gym.Env):
-    def __init__(self, server_host, maze_name, league_level, players_count=4,
-                 actions=DEFAULT_KUTULU_ACTIONS):
+    def __init__(self, server_host, maze_name, league_level, actions, players_count=4):
         super(KutuluWorldEnv, self).__init__()
 
         self.host = f"http://{server_host}/game"
@@ -128,15 +125,6 @@ class KutuluWorldEnv(gym.Env):
                e for e in self.entities if not (e['kind'] == 'EXPLORER' and e['id'] == player_id)
             ]
 
-    def _get_valid_action_mask(self, can_wait=True):
-        return [
-            get_valid_action_mask_by_coords(
-                self.players[player_id]['x'], self.players[player_id]['y'],
-                self._get_info(), can_wait
-            )
-            for player_id in self.players_ids
-        ]
-
     def _convert_player_action(self, action):
         action_name = self._actions[action]
         return f"{action_name} {action_name}"
@@ -178,16 +166,9 @@ class KutuluWorldEnv(gym.Env):
         return result
 
     def _parse_player(self, line):
-        etkind, eid, ex, ey, esanity, eplans, elight = line.split()
-        return {
-            'id': int(eid),
-            'x': int(ex),
-            'y': int(ey),
-            'sanity': float(esanity),
-            'remainingPlans': int(eplans),
-            'remainingLights': int(elight),
-            'active': True,
-        }
+        player = self._parse_entity(line)
+        player['active'] = True
+        return player
     
     def _set_entities(self, state):
         self.entities = [
@@ -197,15 +178,8 @@ class KutuluWorldEnv(gym.Env):
     def _set_players(self, state, set_ids=False):
         if set_ids:
             self.players_ids = []
-        self.players = {
-            player_id: {
-                'active': False,
-                'x': player['x'],
-                'y': player['y'],
-                'id': player['id'],
-            }
-            for player_id, player in self.players.items()
-        }
+        for player in self.players.values():
+            player['active'] = False
         for e in state[1:]:
             if e.startswith('EXPLORER'):
                 player = self._parse_player(e)
@@ -213,16 +187,17 @@ class KutuluWorldEnv(gym.Env):
                 if set_ids:
                     self.players_ids.append(player['id'])
 
-    def get_valid_action_mask(self, can_wait=True):
+    def get_valid_action_mask(self):
         return {
             player_id: get_valid_action_mask_by_coords(
-                player['x'], player['y'], self._get_info(), can_wait
-            )
+                player, self._get_info(),
+            )[:len(self._actions)]
             for player_id, player in self.players.items()
         }
 
-    def sample_valid_action(self, seed=None, can_wait=True):
-        mask = self._get_valid_action_mask(can_wait)
+    def sample_valid_action(self, seed=None):
+        mask_dict = self.get_valid_action_mask()
+        mask = [mask_dict[player_id] for player_id in self.players_ids]
         if seed is not None:
             prng = np.random.RandomState(seed)
             return [
@@ -232,15 +207,6 @@ class KutuluWorldEnv(gym.Env):
         return [
             np.random.choice(np.where(np.array(player_mask))[0])
             for player_mask in mask
-        ]
-
-    def get_valid_action_names_by_coords(self, x, y, can_wait=True):
-        return [
-            k for k, v in zip(
-                DEFAULT_KUTULU_ACTIONS,
-                get_valid_action_mask_by_coords(x, y, self._get_info(), can_wait)
-            )
-            if v
         ]
 
     @lru_cache(maxsize=10000)

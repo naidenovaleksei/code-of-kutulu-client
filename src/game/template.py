@@ -54,14 +54,24 @@ ENTITY_TOKENS = [
 ]
 ENTITY_TOKENS_MAP = {k: v for v, k in enumerate(ENTITY_TOKENS)}
 
-
-DEFAULT_KUTULU_ACTIONS = [
+MOVING_KUTULU_ACTIONS = [
     'UP',
     'RIGHT',
     'DOWN',
     'LEFT',
+]
+
+DEFAULT_KUTULU_ACTIONS = MOVING_KUTULU_ACTIONS + [
     'WAIT',
 ]
+
+EXTENDED_KUTULU_ACTIONS = DEFAULT_KUTULU_ACTIONS + [
+    'PLAN',
+    'LIGHT',
+    'YELL',
+]
+
+USED_ACTIONS = DEFAULT_KUTULU_ACTIONS
 
 CELL_EMPTY = '.'
 CELL_WALL = '#'
@@ -216,33 +226,12 @@ def get_min_direction_and_distance(distances):
 
 def get_state(player_pos, entities, lines, get_distances_func=get_distances):
     explorers = [unit for unit in entities[1:] if unit["kind"] == "EXPLORER"]
-    wanderers = [unit for unit in entities[1:] if unit["kind"] == "WANDERER" and unit["wandering"] == 1]
-    
-    explorer_distances = get_distances_func(explorers, player_pos, lines)
-    wanderers_distances = get_distances_func(wanderers, player_pos, lines)
-    closest_explorer_dir, closest_explorer_dist = get_min_direction_and_distance(explorer_distances)
-    closest_wanderer_dir, closest_wanderer_dist = get_min_direction_and_distance(wanderers_distances)
-
-    if closest_explorer_dist is not None:
-        closest_explorer_dist = min(closest_explorer_dist, MAX_EXPLORER_DIST)
-    if closest_wanderer_dist is not None:
-        closest_wanderer_dist = min(closest_wanderer_dist, MAX_WANDERER_DIST)
-    return (
-        closest_explorer_dir,
-        closest_explorer_dist,
-        closest_wanderer_dir,
-        closest_wanderer_dist,
-    )
-
-
-def get_state_bronze(player_pos, entities, lines, get_distances_func=get_distances):
-    explorers = [unit for unit in entities[1:] if unit["kind"] == "EXPLORER"]
     wanderers = [
         unit for unit in entities[1:]
         if (unit["kind"] == "WANDERER" and unit["wandering"] == 1) or
            (unit["kind"] == "SLASHER")
     ]
-
+    
     explorer_distances = get_distances_func(explorers, player_pos, lines)
     wanderers_distances = get_distances_func(wanderers, player_pos, lines)
     closest_explorer_dir, closest_explorer_dist = get_min_direction_and_distance(explorer_distances)
@@ -279,17 +268,7 @@ def get_state_ext(player_pos, entities, lines, get_distances_func=get_distances)
 
 
 def getActionGreedyMasked(state, Q, action_space_n, mask):
-    if state not in Q:
-        actions_idx = np.arange(action_space_n)[~mask]
-        if len(actions_idx) == 0:
-            return np.random.randint(action_space_n)
-        return np.random.choice(actions_idx)
-    assert len(Q[state]) == action_space_n
-    a = np.ma.array(Q[state], mask=mask)
-    a_star = a.argmax()
-    return a_star
-
-def getActionGreedyMasked2(state, Q, action_space_n, mask):
+    mask = mask[:action_space_n]
     if not isinstance(state, tuple) or state not in Q:
         ps = np.ma.array(np.ones(action_space_n), mask=mask).filled(0)
         if ps.sum() == 0:
@@ -300,7 +279,7 @@ def getActionGreedyMasked2(state, Q, action_space_n, mask):
     a_star = a.argmax()
     return a_star
 
-def calculate_output_np(data, weights, num_classes=5):
+def calculate_output_np(data, weights, num_classes, softmax=False, num_dirs=5):
     data = {k: np.array(v) for k,v in data.items()}
     kind_embs = weights['kind_embs.weight']
     features_linear = weights['features_linear.weight']
@@ -314,7 +293,7 @@ def calculate_output_np(data, weights, num_classes=5):
     out_linear = weights['out_linear.weight']
     out_linear_b = weights['out_linear.bias']
     
-    assert data['entity_dir'].shape[-1] == num_classes
+    assert data['entity_dir'].shape[-1] == num_dirs
     x_kind_embs = kind_embs[data['entity_kind']]
     
     entity_features = data['entity_features']
@@ -339,34 +318,32 @@ def calculate_output_np(data, weights, num_classes=5):
     x = x.transpose(0, 2, 1)
     # [batch_size, num_classes]
     output = (x @ out_linear.T + out_linear_b).squeeze(-1)
+    assert output.shape[-1] == num_classes
 
+    if softmax:
+        output = sp.softmax(output)
     return output
 
-def get_valid_action_mask_by_coords(x, y, info, can_wait=True):
+def get_valid_action_mask_by_coords(e, info):
     # 'UP',
     # 'RIGHT',
     # 'DOWN',
     # 'LEFT',
     # 'WAIT',
+    # 'PLAN',
+    # 'LIGHT',
+    # 'YELL',
+    x, y = e['x'], e['y']
     return [
         y > 0 and info['lines'][y - 1][x] != CELL_WALL,
         x < info['width'] - 1 and info['lines'][y][x + 1] != CELL_WALL,
         y < info['height'] - 1 and info['lines'][y + 1][x] != CELL_WALL,
         x > 0 and info['lines'][y][x - 1] != CELL_WALL,
-        can_wait
+        True,
+        e['param1'] > 0,
+        e['param2'] > 0,
+        True,
     ]
-
-def simple_strategy(entities, new_Q, info):
-    player_pos = (entities[0]['x'], entities[0]['y'])
-    state = get_state_bronze(player_pos, entities, info['lines'])
-    player_mask = ~np.array(get_valid_action_mask_by_coords(player_pos[0], player_pos[1], info))
-    action_id = getActionGreedyMasked2(state, new_Q, len(DEFAULT_KUTULU_ACTIONS), player_mask)
-    
-    rel_pos = MOVE_REL_POS[DEFAULT_KUTULU_ACTIONS[action_id]]
-    
-    next_cell = (player_pos[0] + rel_pos[0], player_pos[1] + rel_pos[1])
-
-    return f"MOVE {next_cell[0]} {next_cell[1]}"
 
 def parse_info():
     width = int(input())
@@ -389,54 +366,69 @@ def parse_info():
 
 
 class Solver:
-    def step(self):
-        pass
-
-class QlearningSolver():
-    def __init__(self, Q):
-        self.Q = Q
+    def __init__(self, actions):
         self.info = parse_info()
+        self.actions = actions
 
-    def step(self, entities):
-        return simple_strategy(entities, self.Q, self.info)
+    def convert_to_step(self, action_id, player_pos):
+        if action_id >= len(MOVING_KUTULU_ACTIONS):
+            return self.actions[action_id]
 
-
-class DQNSolver():
-    def __init__(self, weights):
-        self.weights = weights
-        self.info = parse_info()
+        rel_pos = MOVE_REL_POS[self.actions[action_id]]
+        next_cell = (player_pos[0] + rel_pos[0], player_pos[1] + rel_pos[1])
+        return f"MOVE {next_cell[0]} {next_cell[1]}"
 
     def step(self, entities):
         player_pos = (entities[0]['x'], entities[0]['y'])
+        player_mask = ~np.array(get_valid_action_mask_by_coords(entities[0], self.info))
+        action_id = self.calculate_action(entities, player_pos, player_mask)
+        return self.convert_to_step(action_id, player_pos)
+
+    def calculate_action(self, entities, player_pos, player_mask):
+        raise NotImplementedError
+
+
+class QlearningSolver(Solver):
+    def __init__(self, actions, Q):
+        super(QlearningSolver, self).__init__(actions)
+        self.Q = Q
+        assert list(self.Q.values())[0].shape[0] == len(actions)
+
+    def calculate_action(self, entities, player_pos, player_mask):
+        state = get_state(player_pos, entities, self.info['lines'])
+        action_id = getActionGreedyMasked(state, self.Q, len(self.actions), player_mask)
+        return action_id
+
+
+class DQNSolver(Solver):
+    def __init__(self, actions, weights):
+        super(DQNSolver, self).__init__(actions)
+        self.weights = weights
+        assert self.weights['entity_impact.weight'].shape[0] == len(actions)
+
+    def calculate_action(self, entities, player_pos, player_mask):
         state = get_state_ext(player_pos, entities, self.info['lines'])
-        player_mask = ~np.array(get_valid_action_mask_by_coords(player_pos[0], player_pos[1], self.info))
-        
         kind_list, features_list, dir_list = parse_state(state)
         data = {
             'entity_kind': [kind_list],
             'entity_features': [features_list],
             'entity_dir': [dir_list],
         }
-        
-        model_output = calculate_output_np(data, self.weights)[0]
+        model_output = calculate_output_np(data, self.weights, len(self.actions))[0]
+        player_mask = player_mask[:len(self.actions)]
         q_vals_v = np.ma.array(model_output, mask=player_mask)
         action_id = q_vals_v.argmax()
-        
-        if action_id == len(DEFAULT_KUTULU_ACTIONS) - 1:
-            return "WAIT"
-        
-        rel_pos = MOVE_REL_POS[DEFAULT_KUTULU_ACTIONS[action_id]]
-        next_cell = (player_pos[0] + rel_pos[0], player_pos[1] + rel_pos[1])
-        return f"MOVE {next_cell[0]} {next_cell[1]}"
+        return action_id
+
 
 def main():
     vals = pkl.loads(zlib.decompress(base64.b64decode(data1)))
     keys = pkl.loads(zlib.decompress(base64.b64decode(data2)))
     checkpoint_data = dict(zip(keys, vals))
     if mode == 'qlearning':
-        solver = QlearningSolver(checkpoint_data)
+        solver = QlearningSolver(USED_ACTIONS, checkpoint_data)
     elif mode == 'dqn_ext':
-        solver = DQNSolver(checkpoint_data)
+        solver = DQNSolver(USED_ACTIONS, checkpoint_data)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     

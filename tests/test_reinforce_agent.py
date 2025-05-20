@@ -11,6 +11,7 @@ def test_reinforce_model_output():
     """Test that the REINFORCE model produces valid probability distributions"""
     model = REINFORCEModel(
         vocab_size=len(ENTITY_TOKENS) + 1,
+        num_dirs=5,
         features_dim=7,
         embed_dim=32,
         hidden_dim=32,

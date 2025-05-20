@@ -2,7 +2,6 @@ import numpy as np
 import pickle as pkl
 from src.game.template import (
     getActionGreedyMasked,
-    getActionGreedyMasked2,
 )
 
 
@@ -36,6 +35,7 @@ class RandomStrategy(BaseQStrategy):
         return self.getActionGreedyMasked(state, action_space_n, mask)
     
     def getActionGreedyMasked(self, state, action_space_n, mask):
+        mask = mask[:action_space_n]
         actions_idx = np.arange(action_space_n)[~mask]
         if len(actions_idx) == 0:
             return np.random.randint(action_space_n)
@@ -62,6 +62,7 @@ class GreedyStrategy(BaseQStrategy):
     def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
         assert self.check_state(state, action_space_n)
         assert len(self.Q[state]) == action_space_n
+        mask = mask[:action_space_n]
         a = np.ma.array(self.Q[state], mask=mask)
         a_star = a.argmax()
         ps = np.ones(action_space_n) * eps / action_space_n
@@ -75,7 +76,7 @@ class LazyGreedyStrategy(GreedyStrategy):
         super(LazyGreedyStrategy, self).__init__()
 
     def getActionGreedyMasked(self, state, action_space_n, mask):
-        return getActionGreedyMasked2(state, self.Q, action_space_n, mask)
+        return getActionGreedyMasked(state, self.Q, action_space_n, mask)
 
     def check_state(self, state, action_space_n):
         if state not in self.Q:
@@ -90,7 +91,8 @@ class LazyGreedyStrategy2(LazyGreedyStrategy):
 
     def getActionEpsGreedyMasked(self, state, action_space_n, eps, mask):
         assert self.check_state(state, action_space_n)
-        assert len(self.Q[state]) == action_space_n
+        assert len(self.Q[state]) == action_space_n, f'{len(self.Q[state])} != {action_space_n}'
+        mask = mask[:action_space_n]
         a = np.ma.array(self.Q[state], mask=mask)
         a_star = a.argmax()
         # ps = np.ma.array(np.ones(action_space_n), mask=mask).filled(0)

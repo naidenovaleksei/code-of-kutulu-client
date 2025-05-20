@@ -72,6 +72,7 @@ class DQNAgentExt(DQNAgent):
 
         self.model = DQNExt(
             vocab_size=len(ENTITY_TOKENS) + 1,
+            num_dirs=5,
             features_dim=7,
             embed_dim=32,
             hidden_dim=32,
@@ -80,6 +81,7 @@ class DQNAgentExt(DQNAgent):
         )
         self.tgt_net = DQNExt(
             vocab_size=len(ENTITY_TOKENS) + 1,
+            num_dirs=5,
             features_dim=7,
             embed_dim=32,
             hidden_dim=32,

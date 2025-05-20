@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from src.envs.agents import BaseAgent
 from src.game.template import (
-    getActionGreedyMasked2,
+    getActionGreedyMasked,
     parse_state,
     ENTITY_TOKENS,
 )
@@ -95,6 +95,7 @@ class REINFORCEAgent(BaseAgent):
         # Initialize the policy network
         self.model = REINFORCEModel(
             vocab_size=len(ENTITY_TOKENS) + 1,
+            num_dirs=5,
             features_dim=7,
             embed_dim=32,
             hidden_dim=32,
@@ -136,7 +137,7 @@ class REINFORCEAgent(BaseAgent):
         
         # During training, sometimes choose random action for exploration
         if self.train and np.random.random() < self.eps:
-            action = getActionGreedyMasked2(state, {}, self.action_space_n, player_mask)
+            action = getActionGreedyMasked(state, {}, self.action_space_n, player_mask)
         else:
             # Use policy network to get action probabilities
             data = self.episode_buffer.encode_states([state])
@@ -152,7 +153,7 @@ class REINFORCEAgent(BaseAgent):
                 action_probs = action_probs / np.sum(action_probs)
             else:
                 # If all actions are masked, choose randomly from valid actions
-                action = getActionGreedyMasked2(state, {}, self.action_space_n, player_mask)
+                action = getActionGreedyMasked(state, {}, self.action_space_n, player_mask)
                 self.state_actions = (state, action)
                 return state, action
             

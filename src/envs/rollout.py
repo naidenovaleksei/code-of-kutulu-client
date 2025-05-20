@@ -8,12 +8,12 @@ def viz_map(env_map, entities):
     for line in curr_map:
         print(line)
 
-def rollout(env, seed, verbose=False, can_wait=True):
+def rollout(env, seed, verbose=False):
     info = env.reset(seed)
     rewards = []
     game_over = False
     while not game_over:
-        action = env.sample_valid_action(can_wait)
+        action = env.sample_valid_action()
 #         action = [4, 4, 4, 4]
         entities, reward, game_over, info = env.step(action)
         if verbose:

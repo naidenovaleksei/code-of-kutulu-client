@@ -4,19 +4,18 @@ import numpy as np
 from unittest.mock import MagicMock, patch
 from src.envs.distance import find_path
 from src.envs.kutulu_observer import KutuluClosestObserver
-from src.envs.kutulu_world import KutuluWorldEnv, CELL_WALL, DEFAULT_KUTULU_ACTIONS
+from src.envs.kutulu_world import KutuluWorldEnv
 from src.envs.strategy import LazyGreedyStrategy
+from src.game.template import CELL_WALL, DEFAULT_KUTULU_ACTIONS
 
 MODEL_DIR = "output/2025-04-30/20:47:29.344655"
 
 class TestKutuluPolicies:
     @pytest.fixture
-    def mock_env(self):
+    def env(self):
         """Create a mock KutuluWorldEnv instance with a predefined map."""
-        mock_env = MagicMock(spec=KutuluWorldEnv)
-        
-        # Sample map for testing
-        mock_env.map = [
+        env = KutuluWorldEnv('', '', 1, actions=DEFAULT_KUTULU_ACTIONS)
+        env.map = [
             '###########',
             '#.........#',
             '#.#.#.#.#.#',
@@ -25,28 +24,15 @@ class TestKutuluPolicies:
             '#.........#',
             '###########',
         ]
-        mock_env.width = len(mock_env.map[0])
-        mock_env.height = len(mock_env.map)
-        
-        def get_valid_action_mask_by_coords(x, y, can_wait=True):
-            return [
-                y > 0 and mock_env.map[y - 1][x] != CELL_WALL,
-                x < mock_env.width - 1 and mock_env.map[y][x + 1] != CELL_WALL,
-                y < mock_env.height - 1 and mock_env.map[y + 1][x] != CELL_WALL,
-                x > 0 and mock_env.map[y][x - 1] != CELL_WALL,
-                can_wait
-            ]
-        mock_env._get_valid_action_mask_by_coords = get_valid_action_mask_by_coords
-        
-        # Mock find_path_cached function to return predefined paths
-        mock_env.find_path_cached = lambda a, b: find_path(a, b, mock_env.map)
-        
-        return mock_env
-    
+        env.width = len(env.map[0])
+        env.height = len(env.map)
+        env.find_path_cached = lambda a, b: find_path(a, b, env.map)
+        return env
+
     @pytest.fixture
-    def player(self, mock_env):
+    def observer(self, env):
         """Create a KutuluClosestObserver instance with the mock environment."""
-        return KutuluClosestObserver(mock_env)
+        return KutuluClosestObserver(env)
 
     @pytest.fixture
     def strategy(self):
@@ -65,23 +51,25 @@ class TestKutuluPolicies:
     @pytest.mark.parametrize("player_pos, explorers", [
         [(3, 3), [(4, 3)]],
     ])
-    def test_get_state_with_one_explorer(self, player_pos, explorers, strategy, player, mock_env):
+    def test_get_state_with_one_explorer(self, player_pos, explorers, strategy, observer):
         """Test get_state with player and one other explorer."""
         # Setup mock _get_obs to return player and another explorer
         
         player_id = 0
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': player_id, 'x': player_pos[0], 'y': player_pos[1]},
-            ] + [
-                {'kind': 'EXPLORER', 'id': i + 1, 'x': x, 'y': y}
-                for i, (x, y) in enumerate(explorers) 
-            ]
-        }
+        obs = [
+            None,
+            f'EXPLORER 0 {player_pos[0]} {player_pos[1]} 0 0 0'
+        ] + [
+            f'EXPLORER {i + 1} {x} {y} 0 0 0'
+            for i, (x, y) in enumerate(explorers) 
+        ]
+        observer.env._set_entities(obs)
+        observer.env._set_players(obs, set_ids=True)
         
         # Call get_state
-        state = player.get_state(player_id, 'closest')
-        player_mask = ~np.array(mock_env._get_valid_action_mask_by_coords(player_pos[0], player_pos[1]))
+        state = observer.get_state(player_id, 'closest')
+        valid_actions = observer.env.get_valid_action_mask()[player_id]
+        player_mask = ~np.array(valid_actions)
         At = strategy.getActionGreedyMasked(state, 5, player_mask)
         
         assert At == 1

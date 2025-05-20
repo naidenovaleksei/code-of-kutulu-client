@@ -1,5 +1,7 @@
 import numpy as np
-from src.envs.kutulu_world import KutuluWorldEnv, DEFAULT_KUTULU_ACTIONS
+from src.envs.kutulu_world import (
+    KutuluWorldEnv,
+)
 from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
@@ -7,7 +9,6 @@ from src.envs.agents.dqn_agent_ext import DQNAgentExt
 from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
-    KutuluClosestBronzeObserver,
     KutuluClosestExtObserver,
 )
 
@@ -40,23 +41,21 @@ BRONZE_MAZES = [
 ]
 
 class Trainer:
-    def __init__(self, num_experiments, agents_info, can_wait, league_level,
+    def __init__(self, num_experiments, agents_info, league_level, actions,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True):
         self.num_experiments = num_experiments
-        self.action_space_n = len(DEFAULT_KUTULU_ACTIONS) - 1 + int(can_wait)
         self.mazes = mazes
         self.league_level = league_level
         self.players_count = len(agents_info)
         self.env_kwargs = env_kwargs or {}
-        self.can_wait = can_wait
         self.shuffle = shuffle
+        self.actions = actions
         
         self.env = None
         self.observers = None
 
         self.agents = []
         for agent_info in agents_info:
-            agent_info['action_space_n'] = self.action_space_n
             if 'strategy' in agent_info:
                 agent = QlearningAgent(**agent_info)
             elif 'cross_entropy' in agent_info:
@@ -91,19 +90,17 @@ class Trainer:
             maze_name=maze_name,
             league_level=self.league_level,
             players_count=self.players_count,
+            actions=self.actions,
             **self.env_kwargs
         )
         observation, info = self.env.reset(seed=seed)
         
         closest_observer = KutuluClosestObserver(self.env)
-        closest_bronze_observer = KutuluClosestBronzeObserver(self.env)
         closest_ext_observer = KutuluClosestExtObserver(self.env)
         self.observers = []
         for agent in self.agents:
             if agent.state_type == 'closest':
                 self.observers.append(closest_observer)
-            elif agent.state_type == 'closest_bronze':
-                self.observers.append(closest_bronze_observer)
             elif agent.state_type == 'closest_ext':
                 self.observers.append(closest_ext_observer)
             else:
@@ -118,7 +115,7 @@ class Trainer:
         if self.shuffle:
             np.random.shuffle(self.agent_map)
         while not game_over:
-            action = env.sample_valid_action(self.can_wait)
+            action = env.sample_valid_action()
 
             for player_id in env.active_players():
                 agent_id = self.agent_map[player_id]

@@ -7,11 +7,8 @@ import torch.optim as optim
 
 from src.envs.agents import BaseAgent
 from src.game.template import (
-    getActionGreedyMasked2,
+    getActionGreedyMasked,
 )
-# from src.envs.agents.cross_entropy_agent import (
-#     encode_states,
-# )
 from src.envs.models.dqn_model import DQN
 
 GAMMA = 0.99
@@ -33,13 +30,6 @@ def parse_dir(encoded_dir):
     for _dir in encoded_dir:
         result[_dir] = 1
     return result
-
-
-# def parse_dir(encoded_dir):
-#     if encoded_dir is None:
-#         return [0, 0, 0, 0, 0, 0]
-#     # return list(encoded_dir) + [0] *
-#     return [x + 1 for x in encoded_dir] + [0] * (6 - len(encoded_dir))
 
 def parse_dist(encoded_dist):
     if encoded_dist is None:
@@ -137,11 +127,11 @@ class DQNAgent(BaseAgent):
         player_mask = ~np.array(valid_actions)
 
         if self.train and np.random.random() < self.eps:
-            action = getActionGreedyMasked2(state, {}, self.action_space_n, player_mask)
+            action = getActionGreedyMasked(state, {}, self.action_space_n, player_mask)
         else:
             data = self.exp_buffer.encode_states([state])
-            # data['mask'] = torch.tensor([player_mask])
             model_output = self.model(data)[0].detach().cpu().numpy()
+            player_mask = player_mask[:self.action_space_n]
             q_vals_v = np.ma.array(model_output, mask=player_mask)
             action = q_vals_v.argmax()
 
