@@ -74,13 +74,18 @@ class KutuluWorldEnv(gym.Env):
         return observation, info
 
     def step(self, actions):
-        player_actions = [
-            {
+        player_actions = []
+        for i, action in enumerate(actions):
+            action_state = {
                 'playerId': i,
                 'action': self._convert_player_action(action)
             }
-            for i, action in enumerate(actions)
-        ]
+            player_actions.append(action_state)
+            if self._actions[action] == 'PLAN':
+                self.players[i]['effect_left'] = 4
+            elif self._actions[action] == 'LIGHT':
+                self.players[i]['effect_left'] = 2
+
         response = requests.post(
             f'{self.host}/turn',
             json={'playerActions': player_actions}
@@ -128,7 +133,7 @@ class KutuluWorldEnv(gym.Env):
     def _convert_player_action(self, action):
         action_name = self._actions[action]
         return f"{action_name} {action_name}"
-    
+
     def _parse_entity(self, line):
         ekind, eid, ex, ey, eparam0, eparam1, eparam2 = line.split()
         result = {
@@ -168,13 +173,14 @@ class KutuluWorldEnv(gym.Env):
     def _parse_player(self, line):
         player = self._parse_entity(line)
         player['active'] = True
+        player['effect_left'] = 0
         return player
-    
+
     def _set_entities(self, state):
         self.entities = [
             self._parse_entity(e) for e in state[1:]
         ]
-    
+
     def _set_players(self, state, set_ids=False):
         if set_ids:
             self.players_ids = []
@@ -183,6 +189,8 @@ class KutuluWorldEnv(gym.Env):
         for e in state[1:]:
             if e.startswith('EXPLORER'):
                 player = self._parse_player(e)
+                if player['id'] in self.players:
+                    player['effect_left'] = max(0, self.players[player['id']]['effect_left'] - 1)
                 self.players[player['id']] = player
                 if set_ids:
                     self.players_ids.append(player['id'])

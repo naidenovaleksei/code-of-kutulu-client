@@ -5,20 +5,19 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from src.envs.agents import BaseAgent
+from src.envs.agents.nn_agent import(
+    NNAgent,
+    GAMMA,
+    LEARNING_RATE,
+    EPSILON_START,
+    EPSILON_FINAL,
+    EPSILON_DECAY_LAST_FRAME,
+)
 from src.game.template import (
-    getActionGreedyMasked,
     parse_state,
     ENTITY_TOKENS,
 )
 from src.envs.models.reinforce_model import REINFORCEModel
-
-# Hyperparameters
-GAMMA = 0.99
-LEARNING_RATE = 1e-4
-EPSILON_START = 1.0
-EPSILON_FINAL = 0.02
-EPSILON_DECAY_LAST_FRAME = 10**5
 
 Episode = collections.namedtuple('Episode', field_names=['states', 'actions', 'rewards'])
 
@@ -71,98 +70,42 @@ class EpisodeBuffer:
         return data
 
 
-class REINFORCEAgent(BaseAgent):
+class REINFORCEAgent(NNAgent):
     def __init__(self, state_type, action_space_n,
                  lr=LEARNING_RATE,
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
                  gamma=GAMMA,
                  train=False, verbose=False):
-        self.state_type = state_type
-        self.action_space_n = action_space_n
-        self.eps = epsilon_start
-        self.epsilon_final = epsilon_final
-        self.epsilon_start = epsilon_start
-        self.epsilon_decay_last_frame = epsilon_decay_last_frame
-        self.gamma = gamma
-        self.train = train
-        self.verbose = verbose
-        self.state_actions = None
-        self.frame_idx = 0
-        self.episode_idx = 0
-        self.episode_buffer = EpisodeBuffer()
-        
-        # Initialize the policy network
-        self.model = REINFORCEModel(
-            vocab_size=len(ENTITY_TOKENS) + 1,
-            num_dirs=5,
-            features_dim=7,
-            embed_dim=32,
-            hidden_dim=32,
-            inner_dim=16,
-            num_classes=action_space_n
+        super(REINFORCEAgent, self).__init__(
+            state_type=state_type,
+            action_space_n=action_space_n,
+            lr=lr,
+            gamma=gamma,
+            epsilon_start=epsilon_start,
+            epsilon_final=epsilon_final,
+            epsilon_decay_last_frame=epsilon_decay_last_frame,
+            train=train,
+            verbose=verbose,
+            model=REINFORCEModel(
+                vocab_size=len(ENTITY_TOKENS) + 1,
+                num_dirs=5,
+                features_dim=7,
+                embed_dim=32,
+                hidden_dim=32,
+                inner_dim=16,
+                num_classes=action_space_n
+            ),
+            episode_buffer=EpisodeBuffer(),
         )
-        
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-        self.last_loss = np.inf
-        
-        # Start a new episode
+        self.episode_idx = 0
         self.episode_buffer.start_episode()
     
-    def _calculate_returns(self, rewards):
-        """Calculate discounted returns for all steps in an episode"""
-        returns = []
-        G = 0
-        
-        # Calculate returns from the end of the episode
-        for r in reversed(rewards):
-            G = r + self.gamma * G
-            returns.insert(0, G)
-            
-        # Normalize returns for stability
-        returns = torch.tensor(returns)
-        if len(returns) > 1:
-            returns = (returns - returns.mean()) / (returns.std() + 1e-9)
-            
-        return returns
-    
-    def generate_state_and_step(self, observer, player_id):
-        self.frame_idx += 1
-        self.eps = max(
-            self.epsilon_final, self.epsilon_start - self.frame_idx / self.epsilon_decay_last_frame)
-        
-        state = observer.get_state(player_id, self.state_type)
-        valid_actions = observer.env.get_valid_action_mask()[player_id]
-        player_mask = ~np.array(valid_actions)
-        
-        # During training, sometimes choose random action for exploration
-        if self.train and np.random.random() < self.eps:
-            action = getActionGreedyMasked(state, {}, self.action_space_n, player_mask)
-        else:
-            # Use policy network to get action probabilities
-            data = self.episode_buffer.encode_states([state])
-            action_probs = self.model(data)[0].detach().cpu().numpy()
-            
-            # Apply mask to invalid actions
-            for i in range(len(action_probs)):
-                if player_mask[i]:
-                    action_probs[i] = 0
-                    
-            # Renormalize probabilities
-            if np.sum(action_probs) > 0:
-                action_probs = action_probs / np.sum(action_probs)
-            else:
-                # If all actions are masked, choose randomly from valid actions
-                action = getActionGreedyMasked(state, {}, self.action_space_n, player_mask)
-                self.state_actions = (state, action)
-                return state, action
-            
-            # Sample action from probability distribution
-            action = np.random.choice(self.action_space_n, p=action_probs)
-        
-        self.state_actions = (state, action)
-        return state, action
-    
+    def generate_random_step(self, actions_masked, player_mask):
+        ps = actions_masked.filled(0)
+        action = np.random.choice(np.arange(len(ps)), p=ps / ps.sum())
+        return action
+
     def train_step(self, reward, game_over, new_state=None):
         if not self.train:
             return
@@ -170,25 +113,20 @@ class REINFORCEAgent(BaseAgent):
         state, action = self.state_actions
         # Add this step to our episode
         self.episode_buffer.add_step(state, action, reward / 100.0)
-        
-        # print(f"game_over={game_over} or reward={reward}")
+
         # If the episode has ended, train on it
         if game_over or reward is None:
-            self.train_model()
+            self._train_model()
             # Start a new episode
             self.episode_buffer.start_episode()
             self.episode_idx += 1
     
-    def check_policy(self):
-        return self.last_loss
-    
-    def train_model(self):
-        # print("train_model")
+    def _train_model(self):
         # End the current episode and get the episode data
         episode = self.episode_buffer.end_episode()
         if episode is None:
             return
-        
+
         # Prepare for training
         self.model.train()
         self.optimizer.zero_grad()
@@ -219,3 +157,20 @@ class REINFORCEAgent(BaseAgent):
         
         if self.verbose:
             print(f"Episode {self.episode_idx}, Loss: {loss.item():.4f}, Return: {np.sum(episode.rewards):.4f}")
+
+    def _calculate_returns(self, rewards):
+        """Calculate discounted returns for all steps in an episode"""
+        returns = []
+        G = 0
+        
+        # Calculate returns from the end of the episode
+        for r in reversed(rewards):
+            G = r + self.gamma * G
+            returns.insert(0, G)
+            
+        # Normalize returns for stability
+        returns = torch.tensor(returns)
+        if len(returns) > 1:
+            returns = (returns - returns.mean()) / (returns.std() + 1e-9)
+
+        return returns

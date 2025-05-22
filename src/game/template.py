@@ -340,9 +340,9 @@ def get_valid_action_mask_by_coords(e, info):
         y < info['height'] - 1 and info['lines'][y + 1][x] != CELL_WALL,
         x > 0 and info['lines'][y][x - 1] != CELL_WALL,
         True,
-        e['param1'] > 0,
-        e['param2'] > 0,
-        True,
+        e['param1'] > 0 and e['effect_left'] <= 0,
+        e['param2'] > 0 and e['effect_left'] <= 0,
+        False,
     ]
 
 def parse_info():
@@ -369,8 +369,14 @@ class Solver:
     def __init__(self, actions):
         self.info = parse_info()
         self.actions = actions
+        self.effect_left = 0
 
     def convert_to_step(self, action_id, player_pos):
+        if self.actions[action_id] == 'PLAN':
+            self.effect_left = 4
+        elif self.actions[action_id] == 'LIGHT':
+            self.effect_left = 2
+
         if action_id >= len(MOVING_KUTULU_ACTIONS):
             return self.actions[action_id]
 
@@ -380,7 +386,10 @@ class Solver:
 
     def step(self, entities):
         player_pos = (entities[0]['x'], entities[0]['y'])
-        player_mask = ~np.array(get_valid_action_mask_by_coords(entities[0], self.info))
+        player = entities[0]
+        self.effect_left = max(0, self.effect_left - 1)
+        player['effect_left'] = self.effect_left
+        player_mask = ~np.array(get_valid_action_mask_by_coords(player, self.info))
         action_id = self.calculate_action(entities, player_pos, player_mask)
         return self.convert_to_step(action_id, player_pos)
 

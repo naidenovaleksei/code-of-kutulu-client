@@ -94,17 +94,9 @@ class Trainer:
             **self.env_kwargs
         )
         observation, info = self.env.reset(seed=seed)
-        
-        closest_observer = KutuluClosestObserver(self.env)
-        closest_ext_observer = KutuluClosestExtObserver(self.env)
-        self.observers = []
+
         for agent in self.agents:
-            if agent.state_type == 'closest':
-                self.observers.append(closest_observer)
-            elif agent.state_type == 'closest_ext':
-                self.observers.append(closest_ext_observer)
-            else:
-                raise ValueError(f'unknown state_type: {agent.state_type}')
+            agent.set_env(self.env)
 
         return self.env
     
@@ -115,16 +107,16 @@ class Trainer:
         if self.shuffle:
             np.random.shuffle(self.agent_map)
         while not game_over:
-            action = env.sample_valid_action()
+            # action = env.sample_valid_action()
+            # WAIT
+            action = [4 for _ in range(len(self.agents))]
 
             for player_id in env.active_players():
                 agent_id = self.agent_map[player_id]
-                state, At = self.agents[agent_id].generate_state_and_step(
-                    self.observers[agent_id], player_id)
+                state, At = self.agents[agent_id].generate_state_and_step(player_id)
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
-            # print(rewards)
             rollout_rewards.append(rewards)
 
             for player_id, reward in enumerate(rewards):
@@ -136,9 +128,7 @@ class Trainer:
                             agent.train_step(reward, True, None)
                     else:
                         try:
-                            new_state = self.observers[agent_id].get_state(
-                                player_id, self.agents[agent_id].state_type
-                            )
+                            new_state = agent.get_state(player_id)
                             agent.train_step(reward, game_over, new_state)
                         except StopIteration:
                             pass

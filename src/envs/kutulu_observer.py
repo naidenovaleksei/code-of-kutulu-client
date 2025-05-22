@@ -10,7 +10,7 @@ class BaseKutuluClosestObserver:
     def __init__(self, env: KutuluWorldEnv):
         self.env = env
     
-    def get_state(self) -> tuple:
+    def get_state(self, player_id) -> tuple:
         raise NotImplementedError
 
 
@@ -18,7 +18,7 @@ class KutuluClosestObserver(BaseKutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluClosestObserver, self).__init__(env)
 
-    def get_state(self, player_id, state_type):
+    def get_state(self, player_id):
         _obs = self.env._get_obs(player_id)
         entities = _obs['entities']
         player_pos = (entities[0]['x'], entities[0]['y'])
@@ -47,7 +47,7 @@ class KutuluClosestExtObserver(KutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluClosestExtObserver, self).__init__(env)
 
-    def get_state(self, player_id, state_type):
+    def get_state(self, player_id):
         _obs = self.env._get_obs(player_id)
         entities = _obs['entities']
         player_pos = (entities[0]['x'], entities[0]['y'])

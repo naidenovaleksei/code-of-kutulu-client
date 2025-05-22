@@ -1,18 +1,6 @@
 import numpy as np
 from src.envs.strategy import BaseQStrategy
-
-
-class BaseAgent:
-    def __init__(self):
-        pass
-    def generate_state_and_step(self, observer, player_id):
-        raise NotImplementedError
-
-    def train_step(self, reward, game_over, new_state):
-        raise NotImplementedError
-
-    def check_policy(self):
-        raise NotImplementedError
+from src.envs.agents import BaseAgent
 
 
 TEST_STATES = [
@@ -36,30 +24,21 @@ TEST_STATES = [
 ]
 
 
-def check_policy(Q):
-    result_list = []
-    for state in TEST_STATES:
-        _dir = state[0][0]
-        result = np.argmax(Q.get(state, [0])) == _dir
-        result_list.append(result)
-    return np.mean(result_list)
-
-
 class QlearningAgent(BaseAgent):
     def __init__(self, strategy: BaseQStrategy, state_type, action_space_n, eps=0., train=False, alpha=None, gamma=None):
-        # super(QlearningAgent, self).__init__()
+        super(QlearningAgent, self).__init__(
+            state_type=state_type,
+            action_space_n=action_space_n,
+            train=train,
+        )
         self.strategy = strategy
-        self.state_type = state_type
-        self.action_space_n = action_space_n
         self.eps = eps
-        self.train = train
         self.alpha = alpha
         self.gamma = gamma
-        self.state_actions = None
 
-    def generate_state_and_step(self, observer, player_id):
-        state = observer.get_state(player_id, self.state_type)
-        valid_actions = observer.env.get_valid_action_mask()[player_id]
+    def generate_state_and_step(self, player_id):
+        state = self.get_state(player_id)
+        valid_actions = self.get_valid_actions(player_id)
         player_mask = ~np.array(valid_actions)
         if self.train:
             action = self.strategy.getActionEpsGreedyMasked(
@@ -91,4 +70,9 @@ class QlearningAgent(BaseAgent):
             )
 
     def check_policy(self):
-        return check_policy(self.strategy.Q)
+        result_list = []
+        for state in TEST_STATES:
+            _dir = state[0][0]
+            result = np.argmax(Q.get(state, [0])) == _dir
+            result_list.append(result)
+        return np.mean(result_list)

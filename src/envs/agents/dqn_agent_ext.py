@@ -52,44 +52,29 @@ class DQNAgentExt(DQNAgent):
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
-                 alpha=None, gamma=GAMMA,
+                 gamma=GAMMA,
                  train=False, verbose=False):
-        self.state_type = state_type
-        self.action_space_n = action_space_n
-        self.eps = epsilon_start
-        self.epsilon_final = epsilon_final
-        self.epsilon_start = epsilon_start
-        self.epsilon_decay_last_frame = epsilon_decay_last_frame
-        self.replay_start_size = replay_start_size
-        self.sync_target_frames = sync_target_frames
-        self.batch_size = batch_size
-        self.alpha = alpha
-        self.gamma = gamma
-        self.train = train
-        self.verbose = verbose
-        self.state_actions = None
-        self.exp_buffer = ExperienceBufferExt(replay_size)
-
-        self.model = DQNExt(
-            vocab_size=len(ENTITY_TOKENS) + 1,
-            num_dirs=5,
-            features_dim=7,
-            embed_dim=32,
-            hidden_dim=32,
-            inner_dim=16,
-            num_classes=action_space_n
+        super(DQNAgentExt, self).__init__(
+            state_type=state_type,
+            action_space_n=action_space_n,
+            lr=lr,
+            gamma=gamma,
+            epsilon_start=epsilon_start,
+            epsilon_final=epsilon_final,
+            epsilon_decay_last_frame=epsilon_decay_last_frame,
+            train=train,
+            verbose=verbose,
+            replay_start_size=replay_start_size,
+            sync_target_frames=sync_target_frames,
+            batch_size=batch_size,
+            model=DQNExt(
+                vocab_size=len(ENTITY_TOKENS) + 1,
+                num_dirs=5,
+                features_dim=7,
+                embed_dim=32,
+                hidden_dim=32,
+                inner_dim=16,
+                num_classes=action_space_n
+            ),
+            episode_buffer=ExperienceBufferExt(replay_size),
         )
-        self.tgt_net = DQNExt(
-            vocab_size=len(ENTITY_TOKENS) + 1,
-            num_dirs=5,
-            features_dim=7,
-            embed_dim=32,
-            hidden_dim=32,
-            inner_dim=16,
-            num_classes=action_space_n
-        )
-    
-        self.criterion = nn.MSELoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-        self.last_loss = np.inf
-        self.frame_idx = 0
