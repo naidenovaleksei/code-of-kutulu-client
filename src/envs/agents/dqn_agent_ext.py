@@ -3,7 +3,21 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from src.envs.agents.dqn_agent import DQNAgent
+
+from src.envs.agents.nn_agent import(
+    GAMMA,
+    LEARNING_RATE,
+    EPSILON_START,
+    EPSILON_FINAL,
+    EPSILON_DECAY_LAST_FRAME,
+)
+from src.envs.agents.dqn_agent import (
+    DQNAgent,
+    BATCH_SIZE,
+    REPLAY_SIZE,
+    SYNC_TARGET_FRAMES,
+    REPLAY_START_SIZE,
+)
 from src.envs.agents.dqn_agent import (
     ExperienceBuffer,
 )
@@ -13,16 +27,6 @@ from src.game.template import (
     ENTITY_TOKENS,
 )
 
-GAMMA = 0.99
-BATCH_SIZE = 32
-REPLAY_SIZE = 10000
-LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 1000
-REPLAY_START_SIZE = 10000
-
-EPSILON_DECAY_LAST_FRAME = 10**5
-EPSILON_START = 1.0
-EPSILON_FINAL = 0.02
 
 class ExperienceBufferExt(ExperienceBuffer):
     def __init__(self, capacity):

@@ -100,11 +100,12 @@ class REINFORCEAgent(NNAgent):
         )
         self.episode_idx = 0
         self.episode_buffer.start_episode()
-    
+
     def generate_random_step(self, actions_masked, player_mask):
         ps = actions_masked.filled(0)
-        action = np.random.choice(np.arange(len(ps)), p=ps / ps.sum())
-        return action
+        if ps.sum() == 0:
+            return np.random.randint(self.action_space_n)
+        return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
 
     def train_step(self, reward, game_over, new_state=None):
         if not self.train:

@@ -1,19 +1,9 @@
 import numpy as np
-import pickle as pkl
+# import pickle as pkl
 from src.game.template import (
     getActionGreedyMasked,
 )
 
-
-def load_strategy(checkpoint_dir):
-    with open(f"{checkpoint_dir}/data1.pkl", "rb") as f:
-        vals = pkl.loads(f.read())
-    with open(f"{checkpoint_dir}/data2.pkl", "rb") as f:
-        keys = pkl.loads(f.read())
-
-    new_pi = LazyGreedyStrategy()
-    new_pi.Q = dict(zip(keys, vals))
-    return new_pi
 
 
 class BaseQStrategy:

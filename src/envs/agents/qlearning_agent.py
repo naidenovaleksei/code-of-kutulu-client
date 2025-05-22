@@ -1,4 +1,5 @@
 import numpy as np
+import pickle as pkl
 from src.envs.strategy import BaseQStrategy
 from src.envs.agents import BaseAgent
 
@@ -73,6 +74,23 @@ class QlearningAgent(BaseAgent):
         result_list = []
         for state in TEST_STATES:
             _dir = state[0][0]
-            result = np.argmax(Q.get(state, [0])) == _dir
+            result = np.argmax(self.strategy.Q.get(state, [0])) == _dir
             result_list.append(result)
         return np.mean(result_list)
+
+    def save_agent(self, checkpoint_dir):
+        Q = self.strategy.Q
+        new_keys = list(Q.keys())
+        data1 = pkl.dumps(np.array(list(Q[k] for k in new_keys), dtype='float16'))
+        data2 = pkl.dumps(list(new_keys))
+        with open(f"{checkpoint_dir}/data1.pkl", "wb") as f:
+            f.write(data1)
+        with open(f"{checkpoint_dir}/data2.pkl", "wb") as f:
+            f.write(data2)
+
+    def load_agent(self, checkpoint_dir):
+        with open(f"{checkpoint_dir}/data1.pkl", "rb") as f:
+            vals = pkl.loads(f.read())
+        with open(f"{checkpoint_dir}/data2.pkl", "rb") as f:
+            keys = pkl.loads(f.read())
+        self.strategy.Q = dict(zip(keys, vals))

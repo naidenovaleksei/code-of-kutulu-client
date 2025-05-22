@@ -61,7 +61,13 @@ class NNAgent(BaseAgent):
 
     def check_policy(self):
         return self.last_loss
-    
+
+    def save_agent(self, checkpoint_dir):
+        torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
+
+    def load_agent(self, checkpoint_dir):
+        self.model.load_state_dict(torch.load(f"{checkpoint_dir}/model.pt"))
+
     def generate_random_step(self, actions_masked, player_mask):
         raise NotImplementedError
     

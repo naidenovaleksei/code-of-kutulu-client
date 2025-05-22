@@ -50,32 +50,25 @@ class Trainer:
         self.env_kwargs = env_kwargs or {}
         self.shuffle = shuffle
         self.actions = actions
-        
+
         self.env = None
-        self.observers = None
 
         self.agents = []
         for agent_info in agents_info:
-            if 'strategy' in agent_info:
+            agent_info = dict(agent_info)
+            _type = agent_info.pop('type')
+            if _type == 'qlearning':
                 agent = QlearningAgent(**agent_info)
-            elif 'cross_entropy' in agent_info:
-                agent_info = dict(agent_info)
-                del agent_info['cross_entropy']
+            elif _type == 'cross_entropy':
                 agent = CrossEntropyAgent(**agent_info)
-            elif 'qdn' in agent_info:
-                agent_info = dict(agent_info)
-                del agent_info['qdn']
+            elif _type == 'qdn':
                 agent = DQNAgent(**agent_info)
-            elif 'qdn_ext' in agent_info:
-                agent_info = dict(agent_info)
-                del agent_info['qdn_ext']
+            elif _type == 'qdn_ext':
                 agent = DQNAgentExt(**agent_info)
-            elif 'reinforce' in agent_info:
-                agent_info = dict(agent_info)
-                del agent_info['reinforce']
+            elif _type == 'reinforce':
                 agent = REINFORCEAgent(**agent_info)
             else:
-                raise ValueError(f'unknown kind: {agent_info}')
+                raise ValueError(f'unknown kind: {_type}')
             self.agents.append(agent)
 
         self.agent_map = np.arange(len(self.agents))
@@ -127,10 +120,8 @@ class Trainer:
                         if env.is_game_over_for_player(player_id):
                             agent.train_step(reward, True, None)
                     else:
-                        try:
+                        if player_id in env.active_players():
                             new_state = agent.get_state(player_id)
                             agent.train_step(reward, game_over, new_state)
-                        except StopIteration:
-                            pass
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
