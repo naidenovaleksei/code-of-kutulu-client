@@ -1,3 +1,5 @@
+import collections
+import numpy as np
 
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
@@ -11,6 +13,7 @@ class BaseAgent:
         self.train = train
         self.observer = None
         self.state_actions = None
+        self.output_std = np.inf
     
     def set_env(self, env):
         if self.state_type == 'closest':
@@ -29,8 +32,21 @@ class BaseAgent:
     def generate_state_and_step(self, player_id):
         raise NotImplementedError
 
+    def get_eps(self):
+        raise NotImplementedError
+    
+    def get_output_std(self):
+        return self.output_std
+
     def train_step(self, reward, game_over, new_state):
         raise NotImplementedError
 
     def check_policy(self):
         raise NotImplementedError
+
+    def save_agent(self, checkpoint_dir):
+        raise NotImplementedError
+
+    def load_agent(self, checkpoint_dir):
+        raise NotImplementedError
+        

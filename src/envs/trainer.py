@@ -1,16 +1,16 @@
+import os
+from datetime import datetime
+from tqdm import tqdm
 import numpy as np
-from src.envs.kutulu_world import (
-    KutuluWorldEnv,
-)
+from torch.utils.tensorboard import SummaryWriter
+
+from src.envs.kutulu_world import KutuluWorldEnv
+from src.envs.agent_validator import AgentValidator
 from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.agents.dqn_agent_ext import DQNAgentExt
 from src.envs.agents.reinforce_agent import REINFORCEAgent
-from src.envs.kutulu_observer import (
-    KutuluClosestObserver,
-    KutuluClosestExtObserver,
-)
 
 WOOD_MAZES = [
     "PacMan",
@@ -42,7 +42,7 @@ BRONZE_MAZES = [
 
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
-                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True):
+                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
@@ -51,10 +51,15 @@ class Trainer:
         self.shuffle = shuffle
         self.actions = actions
 
+        if exp_name is None:
+            exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.log_dir = os.path.join(log_dir, exp_name)
+        
         self.env = None
+        self.agent_validator = AgentValidator(self.actions)
 
         self.agents = []
-        for agent_info in agents_info:
+        for i, agent_info in enumerate(agents_info):
             agent_info = dict(agent_info)
             _type = agent_info.pop('type')
             if _type == 'qlearning':
@@ -69,6 +74,9 @@ class Trainer:
                 agent = REINFORCEAgent(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {_type}')
+            agent_dir = f'agent{i}_{_type}'
+            agent_log_dir = os.path.join(self.log_dir, agent_dir)
+            agent.writer = SummaryWriter(log_dir=agent_log_dir)
             self.agents.append(agent)
 
         self.agent_map = np.arange(len(self.agents))
@@ -125,3 +133,66 @@ class Trainer:
                             agent.train_step(reward, game_over, new_state)
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
+
+    def save_models(self):
+        date, time = str(datetime.now()).split()
+        checkpoints_dir = f'../output/{date}/{time}'
+        try:
+            os.mkdir(checkpoints_dir)
+        except FileExistsError:
+            pass
+        for i,agent in enumerate(self.agents):
+            checkpoint_dir = f'{checkpoints_dir}/agent{i}'
+            os.mkdir(checkpoint_dir)
+            agent.save_agent(checkpoint_dir)
+        return checkpoints_dir
+
+    def train(self, metrics_int=10, save_models_int=100):
+        reward_list = []
+        model_dir_list = []
+
+        for i in tqdm(range(self.num_experiments)):
+            rollout_rewards = self.play_rollout()
+            reward_list.append(rollout_rewards)
+            
+            step = i + 1
+            # Save models periodically
+            if step % save_models_int == 0:
+                model_dir = self.save_models()
+                model_dir_list.append(model_dir)
+                
+            # Log metrics periodically
+            if step % metrics_int == 0:
+                total_reward_list = np.array([np.nansum(rewards, axis=0) for rewards in reward_list])
+                rewards = np.mean(total_reward_list, axis=0)
+                winner_list = np.argmax(total_reward_list, 1)
+                winner_list = [np.sum(winner_list == i) / len(winner_list) for i, agent in enumerate(self.agents)]
+                check_policy = [agent.check_policy() for agent in self.agents]
+                # output_stds = [agent.get_output_std() for agent in self.agents]
+                eps = [agent.get_eps() for agent in self.agents]
+                av = self.agent_validator
+                check_exp = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
+                check_wan = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
+                
+                for i, agent in enumerate(self.agents):
+                    # Log all metrics in combined plots
+                    agent.writer.add_scalar('Play/Rewards', rewards[i], step)
+                    agent.writer.add_scalar('Play/Winners', winner_list[i], step)
+                    agent.writer.add_scalar('Train/Policy', check_policy[i], step)
+                    agent.writer.add_scalar('Train/Epsilon', eps[i], step)
+                    # agent.writer.add_scalar('Train/OutputStd', output_stds[i], step)
+                    agent.writer.add_scalar('Check/Explorer/acc', check_exp[i][0], step)
+                    agent.writer.add_scalar('Check/Wanderer/acc', check_wan[i][0], step)
+                    agent.writer.add_scalar('Check/Explorer/std', check_exp[i][1], step)
+                    agent.writer.add_scalar('Check/Wanderer/std', check_wan[i][1], step)
+                
+        
+        for i, agent in enumerate(self.agents):
+            agent.writer.close()
+        return reward_list, model_dir_list
+        
+    def close(self):
+        """Close resources used by the trainer"""
+        for i, agent in enumerate(self.agents):
+            if hasattr(agent, 'writer'):
+                agent.writer.close()

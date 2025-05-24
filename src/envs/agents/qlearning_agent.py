@@ -78,6 +78,9 @@ class QlearningAgent(BaseAgent):
             result_list.append(result)
         return np.mean(result_list)
 
+    def get_eps(self):
+        return self.eps
+
     def save_agent(self, checkpoint_dir):
         Q = self.strategy.Q
         new_keys = list(Q.keys())

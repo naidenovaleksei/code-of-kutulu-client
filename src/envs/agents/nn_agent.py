@@ -41,7 +41,7 @@ class NNAgent(BaseAgent):
 
     def generate_state_and_step(self, player_id):
         self.frame_idx += 1
-        
+
         valid_actions = self.get_valid_actions(player_id)
         player_mask = ~np.array(valid_actions)
         player_mask = player_mask[:self.action_space_n]
@@ -50,6 +50,8 @@ class NNAgent(BaseAgent):
         data = self.episode_buffer.encode_states([state])
         model_output = self.model(data)[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
+        
+        self.output_std = (actions_masked / actions_masked.sum()).std()
 
         if self.train and np.random.random() < self.get_eps():
             action = self.generate_random_step(actions_masked, player_mask)
