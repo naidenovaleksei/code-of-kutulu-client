@@ -1,6 +1,8 @@
 import os
+import json
 from datetime import datetime
 from tqdm import tqdm
+
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
@@ -11,6 +13,7 @@ from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.agents.dqn_agent_ext import DQNAgentExt
 from src.envs.agents.reinforce_agent import REINFORCEAgent
+from src.envs.strategy import RandomStrategy
 
 WOOD_MAZES = [
     "PacMan",
@@ -55,6 +58,16 @@ class Trainer:
             exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
         self.log_dir = os.path.join(log_dir, exp_name)
         
+        date, time = str(datetime.now()).split()
+        date_dir = f'../output/{date}'
+        os.makedirs(date_dir, exist_ok=True)
+        
+        self.checkpoints_dir = os.path.join(date_dir, exp_name)
+        os.makedirs(self.checkpoints_dir, exist_ok=True)
+
+        with open(f'{self.checkpoints_dir}/agents_info.json', 'w') as f:
+            json.dump(agents_info, f)
+        
         self.env = None
         self.agent_validator = AgentValidator(self.actions)
 
@@ -63,6 +76,10 @@ class Trainer:
             agent_info = dict(agent_info)
             _type = agent_info.pop('type')
             if _type == 'qlearning':
+                if agent_info['strategy'] == 'random':
+                    agent_info['strategy'] = RandomStrategy()
+                else:
+                    raise ValueError(f'wrong strategy: {agent_info['strategy']}')
                 agent = QlearningAgent(**agent_info)
             elif _type == 'cross_entropy':
                 agent = CrossEntropyAgent(**agent_info)
@@ -134,18 +151,14 @@ class Trainer:
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 
-    def save_models(self):
-        date, time = str(datetime.now()).split()
-        checkpoints_dir = f'../output/{date}/{time}'
-        try:
-            os.mkdir(checkpoints_dir)
-        except FileExistsError:
-            pass
+    def save_models(self, step):
         for i,agent in enumerate(self.agents):
-            checkpoint_dir = f'{checkpoints_dir}/agent{i}'
-            os.mkdir(checkpoint_dir)
-            agent.save_agent(checkpoint_dir)
-        return checkpoints_dir
+            checkpoint_dir = f'{self.checkpoints_dir}/agent{i}'
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpoint_dir_step = f'{checkpoint_dir}/{step}'
+            os.makedirs(checkpoint_dir_step, exist_ok=True)
+            agent.save_agent(checkpoint_dir_step)
+        return self.checkpoints_dir
 
     def train(self, metrics_int=10, save_models_int=100):
         reward_list = []
@@ -158,7 +171,7 @@ class Trainer:
             step = i + 1
             # Save models periodically
             if step % save_models_int == 0:
-                model_dir = self.save_models()
+                model_dir = self.save_models(step)
                 model_dir_list.append(model_dir)
                 
             # Log metrics periodically

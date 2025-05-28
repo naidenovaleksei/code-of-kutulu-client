@@ -6,3 +6,5 @@ numpy
 torch
 scipy
 tensorboard
+jupyter
+seaborn

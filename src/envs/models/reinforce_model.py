@@ -31,10 +31,8 @@ class REINFORCEModel(nn.Module):
         x_entitity = torch.cat((x_kind_embs, x_features, x_dir), dim=-1)
         # [batch_size, entity_dim, inner_dim]
         x = self.entity_linear(x_entitity)
-        
-        entities_mask[entities_mask == 0] = -100000
+
         entity_weights = self.entity_impact(x_entitity) * entities_mask
-        entity_weights = torch.softmax(entity_weights, dim=1)
         # [batch_size, inner_dim, entity_dim]
         x_transposed = x.transpose(1, 2)
         # [batch_size, inner_dim, num_classes]

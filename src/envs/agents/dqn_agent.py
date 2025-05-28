@@ -62,8 +62,8 @@ class ExperienceBuffer:
         indices = np.random.choice(len(self.buffer), batch_size, replace=False)
         states, actions, rewards, dones, next_states = zip(*[self.buffer[idx] for idx in indices])
 
-        states = self.encode_states(np.array(states))
-        next_states = self.encode_states(np.array(next_states))
+        states = self.encode_states(states)
+        next_states = self.encode_states(next_states)
         actions = torch.tensor(actions)
         rewards = torch.tensor(np.array(rewards, dtype=np.float32))
         dones = torch.ByteTensor(np.array(dones, dtype=np.uint8))

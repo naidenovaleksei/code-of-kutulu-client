@@ -11,8 +11,10 @@ class DQNExt(nn.Module):
         self.dir_linear = nn.Linear(num_dirs, inner_dim)
         self.entity_linear = nn.Linear(embed_dim + hidden_dim + inner_dim, inner_dim)
         self.entity_impact = nn.Linear(embed_dim + hidden_dim + inner_dim, num_classes)
-        self.out_linear = nn.Linear(inner_dim, 1)
+        # self.out_linear = nn.Linear(inner_dim, 1)
+        self.out_linear = nn.Linear(inner_dim * num_classes, num_classes)
         self.num_classes = num_classes
+        self.inner_dim = inner_dim
         self.num_dirs = num_dirs
         
     def forward(self, data):
@@ -31,10 +33,9 @@ class DQNExt(nn.Module):
         x_entitity = torch.cat((x_kind_embs, x_features, x_dir), dim=-1)
         # [batch_size, entity_dim, inner_dim]
         x = self.entity_linear(x_entitity)
-        
-        entities_mask[entities_mask == 0] = -100000
+
         entity_weights = self.entity_impact(x_entitity) * entities_mask
-        entity_weights = torch.softmax(entity_weights, dim=1)
+        # entity_weights = torch.softmax(self.entity_impact(x_entitity), dim=-1) * entities_mask
         # [batch_size, inner_dim, entity_dim]
         x_transposed = x.transpose(1, 2)
         # [batch_size, inner_dim, num_classes]
@@ -42,7 +43,8 @@ class DQNExt(nn.Module):
         # [batch_size, num_classes, inner_dim]
         x = x.transpose(2, 1)
         # [batch_size, num_classes]
-        output = self.out_linear(x).squeeze(-1)
+        output = self.out_linear(x.reshape(-1, self.num_classes * self.inner_dim))
+        # output = self.out_linear(x).squeeze(-1)
         
         # # [batch_size, num_classes]
         # ind = (self.entity_impact(x_entitity) * entities_mask).max(1)[1].squeeze(-1)

@@ -74,7 +74,7 @@ class DQNAgentExt(DQNAgent):
             model=DQNExt(
                 vocab_size=len(ENTITY_TOKENS) + 1,
                 num_dirs=5,
-                features_dim=7,
+                features_dim=8,
                 embed_dim=32,
                 hidden_dim=32,
                 inner_dim=16,

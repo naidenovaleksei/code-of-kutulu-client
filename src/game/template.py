@@ -1,4 +1,5 @@
 import sys
+import io
 import math
 import numpy as np
 import scipy.special as sp
@@ -149,10 +150,9 @@ def parse_dist_dir(e):
     encoded_dir = e['dir']
     if encoded_dir is None:
         return [0., 0., 0., 0., 0.]
-    encoded_dist = e['dist']
     result = [0., 0., 0., 0., 0.]
     for _dir in encoded_dir:
-        result[_dir] = encoded_dist
+        result[_dir] = 1
     return result
 
 def parse_kind(e):
@@ -164,13 +164,13 @@ def parse_kind(e):
 def parse_features(e):
     result = [
         e['param0'],
+        e['param1'],
         e['param2'],
         e['rel_x'],
         e['rel_y'],
-        # e['dist'] or -1,
+        e['dist'] if e['dist'] is not None else 100,
         e['raw_dist'],
         e['on_los'],
-        e['param0'],
     ]
     result = [float(x) for x in result]
     return result
@@ -184,7 +184,7 @@ def parse_state(state):
     dir_list = [parse_dist_dir(e) for e in state]
     for _ in range(MAX_ENTITY_COUNT - len(state)):
         kind_list.append(0)
-        features_list.append([0., 0., 0., 0., 0., 0., 0.])
+        features_list.append([0., 0., 0., 0., 0., 0., 0., 0.])
         dir_list.append([0., 0., 0., 0., 0.])
     return kind_list, features_list, dir_list
 
@@ -339,7 +339,7 @@ def get_valid_action_mask_by_coords(e, info):
         x < info['width'] - 1 and info['lines'][y][x + 1] != CELL_WALL,
         y < info['height'] - 1 and info['lines'][y + 1][x] != CELL_WALL,
         x > 0 and info['lines'][y][x - 1] != CELL_WALL,
-        True,
+        False,
         e['param1'] > 0 and e['effect_left'] <= 0,
         e['param2'] > 0 and e['effect_left'] <= 0,
         False,
@@ -432,6 +432,7 @@ class DQNSolver(Solver):
 
 def main():
     vals = pkl.loads(zlib.decompress(base64.b64decode(data1)))
+    vals = [np.load(io.BytesIO(byte_data)) for byte_data in vals]
     keys = pkl.loads(zlib.decompress(base64.b64decode(data2)))
     checkpoint_data = dict(zip(keys, vals))
     if mode == 'qlearning':
