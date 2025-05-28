@@ -175,18 +175,29 @@ def parse_features(e):
     result = [float(x) for x in result]
     return result
 
-def parse_state(state):
-    state = state[:MAX_ENTITY_COUNT]
+def parse_state(state, max_entity_count=MAX_ENTITY_COUNT):
+    state = state[:max_entity_count]
     kind_list = [
         parse_kind(e) for e in state
     ]
     features_list = [parse_features(e) for e in state]
     dir_list = [parse_dist_dir(e) for e in state]
-    for _ in range(MAX_ENTITY_COUNT - len(state)):
+    for _ in range(max_entity_count - len(state)):
         kind_list.append(0)
         features_list.append([0., 0., 0., 0., 0., 0., 0., 0.])
         dir_list.append([0., 0., 0., 0., 0.])
     return kind_list, features_list, dir_list
+
+def parse_state_by_kind(state, kinds=[
+    "EXPLORER", "WANDERER", "SLASHER",
+    "EFFECT_PLAN", "EFFECT_LIGHT", "EFFECT_SHELTER", "EFFECT_YELL"
+    ]):
+    result = {}
+    for kind in kinds:
+        state_by_kind = [e for e in state if e['kind'] == kind]
+        _, features_list, dir_list = parse_state(state_by_kind)
+        result[kind] = (features_list, dir_list)
+    return result
 
 def get_distances(entities, player_pos, lines, find_path_func=find_path):
     distances = {}
