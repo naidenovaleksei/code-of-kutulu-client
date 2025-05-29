@@ -3,7 +3,9 @@ import torch.nn as nn
 # from src.envs.models.dqn_model import DQN
 
 class DQNExt(nn.Module):
-    def __init__(self, vocab_size, num_dirs, embed_dim, features_dim, hidden_dim, inner_dim, num_classes):
+    def __init__(self, num_classes, vocab_size,
+                 num_dirs=5, embed_dim=32, features_dim=8,
+                 hidden_dim=32, inner_dim=16, out_linear_bias=False):
         super(DQNExt, self).__init__()
         
         self.kind_embs = nn.Embedding(vocab_size, embed_dim)
@@ -11,7 +13,7 @@ class DQNExt(nn.Module):
         self.dir_linear = nn.Linear(num_dirs, inner_dim)
         self.entity_linear = nn.Linear(embed_dim + hidden_dim + inner_dim, inner_dim)
         self.entity_impact = nn.Linear(embed_dim + hidden_dim + inner_dim, num_classes)
-        self.out_linear = nn.Linear(inner_dim, 1, bias=False)
+        self.out_linear = nn.Linear(inner_dim, 1, bias=out_linear_bias)
         # self.out_linear = nn.Linear(inner_dim * num_classes, num_classes)
         self.num_classes = num_classes
         self.inner_dim = inner_dim

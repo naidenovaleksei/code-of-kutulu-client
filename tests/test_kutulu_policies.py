@@ -67,7 +67,7 @@ class TestKutuluPolicies:
         observer.env._set_players(obs, set_ids=True)
         
         # Call get_state
-        state = observer.get_state(player_id, 'closest')
+        state = observer.get_state(player_id)
         valid_actions = observer.env.get_valid_action_mask()[player_id]
         player_mask = ~np.array(valid_actions)
         At = strategy.getActionGreedyMasked(state, 5, player_mask)

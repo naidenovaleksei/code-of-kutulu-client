@@ -64,10 +64,8 @@ class DQNAgentByKind(DQNAgent):
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
-                 gamma=GAMMA,
-                 train=False, verbose=False):
-        entity_kinds = ["EXPLORER", "WANDERER", "SLASHER"]
-        
+                 gamma=GAMMA, model_params={},
+                 train=False, verbose=False):        
         super(DQNAgentByKind, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -83,13 +81,8 @@ class DQNAgentByKind(DQNAgent):
             batch_size=batch_size,
             model=DQNExtByKind(
                 vocab_size=len(ENTITY_TOKENS) + 1,
-                num_dirs=5,
-                features_dim=8,
-                embed_dim=32,
-                hidden_dim=32,
-                inner_dim=16,
                 num_classes=action_space_n,
-                entity_kinds=entity_kinds,
+                **model_params,
             ),
             episode_buffer=ExperienceBufferByKind(replay_size),
         )

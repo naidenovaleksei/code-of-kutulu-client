@@ -75,7 +75,7 @@ class REINFORCEAgent(NNAgent):
                  lr=LEARNING_RATE,
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
-                 gamma=GAMMA,
+                 gamma=GAMMA, model_params={},
                  train=False, verbose=False):
         super(REINFORCEAgent, self).__init__(
             state_type=state_type,
@@ -88,14 +88,9 @@ class REINFORCEAgent(NNAgent):
             train=train,
             verbose=verbose,
             model=REINFORCEModel(
+                num_classes=action_space_n,
                 vocab_size=len(ENTITY_TOKENS) + 1,
-                num_dirs=5,
-                features_dim=7,
-                embed_dim=32,
-                hidden_dim=32,
-                inner_dim=16,
-                num_classes=action_space_n
-            ),
+                **model_params),
             episode_buffer=EpisodeBuffer(),
         )
         self.episode_idx = 0

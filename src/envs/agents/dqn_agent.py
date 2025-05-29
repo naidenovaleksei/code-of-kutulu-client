@@ -79,15 +79,10 @@ class DQNAgent(NNAgent):
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
                  gamma=GAMMA,
-                 model=None, episode_buffer=None,
+                 model=None, model_params={}, episode_buffer=None,
                  train=False, verbose=False):
         if model is None:
-            model = DQN(
-                vocab_size=6 + 1,
-                embed_dim=32,
-                hidden_dim=32,
-                num_classes=action_space_n
-            )
+            model = DQN(action_space_n, **model_params)
         if episode_buffer is None:
             episode_buffer = ExperienceBuffer(replay_size)
         super(DQNAgent, self).__init__(

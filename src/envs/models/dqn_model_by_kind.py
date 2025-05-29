@@ -4,12 +4,20 @@ import torch.nn as nn
 from src.envs.models.dqn_model_ext import DQNExt
 
 class DQNExtByKind(nn.Module):
-    def __init__(self, vocab_size, num_dirs, embed_dim, features_dim, hidden_dim, inner_dim, num_classes, entity_kinds=None):
+    def __init__(self,
+                vocab_size,
+                num_classes,
+                entity_kinds = ["EXPLORER", "WANDERER", "SLASHER"],
+                num_dirs=5,
+                features_dim=8,
+                embed_dim=32,
+                hidden_dim=32,
+                inner_dim=16):
         super(DQNExtByKind, self).__init__()
         
-        # Default entity kinds if not provided
-        if entity_kinds is None:
-            entity_kinds = ["EXPLORER", "WANDERER", "SLASHER", "EFFECT_PLAN", "EFFECT_LIGHT", "EFFECT_SHELTER", "EFFECT_YELL"]
+        # # Default entity kinds if not provided
+        # if entity_kinds is None:
+        #     entity_kinds = ["EXPLORER", "WANDERER", "SLASHER", "EFFECT_PLAN", "EFFECT_LIGHT", "EFFECT_SHELTER", "EFFECT_YELL"]
         
         self.entity_kinds = entity_kinds
         

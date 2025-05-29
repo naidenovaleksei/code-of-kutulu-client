@@ -3,7 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class REINFORCEModel(nn.Module):
-    def __init__(self, vocab_size, num_dirs, embed_dim, features_dim, hidden_dim, inner_dim, num_classes):
+    def __init__(self,
+                vocab_size,
+                num_classes,
+                num_dirs=5,
+                features_dim=7,
+                embed_dim=32,
+                hidden_dim=32,
+                inner_dim=16):
         super(REINFORCEModel, self).__init__()
         
         self.kind_embs = nn.Embedding(vocab_size, embed_dim)

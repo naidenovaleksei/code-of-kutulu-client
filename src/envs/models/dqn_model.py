@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class DQN(nn.Module):
-    def __init__(self, vocab_size, embed_dim, hidden_dim, num_classes):
+    def __init__(self, num_classes, vocab_size=7, embed_dim=32, hidden_dim=32):
         super(DQN, self).__init__()
         self.edist_embs = nn.Embedding(vocab_size, embed_dim)
         self.wdist_embs = nn.Embedding(vocab_size, embed_dim)

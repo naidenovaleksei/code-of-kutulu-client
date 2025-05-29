@@ -1,88 +1,54 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from tests.utils import calculate_entities
 from src.envs.distance import find_path
 from src.envs.kutulu_observer import KutuluClosestObserver
 from src.envs.kutulu_world import KutuluWorldEnv
+from src.game.template import DEFAULT_KUTULU_ACTIONS
 
+    
 class TestKutuluClosestObserver:
     @pytest.fixture
-    def mock_env(self):
-        """Create a mock KutuluWorldEnv instance with a predefined map."""
-        mock_env = MagicMock(spec=KutuluWorldEnv)
-        
-        # Sample map for testing
-        mock_env.map = [
-            '###########',
-            '#.........#',
-            '#.#.#.#.#.#',
-            '#.........#',
-            '#.#.#.#.#.#',
-            '#.........#',
-            '###########',
-        ]
-        
-        # Mock find_path_cached function to return predefined paths
-        mock_env.find_path_cached = lambda a, b: find_path(a, b, mock_env.map)
-        
-        return mock_env
-    
-    @pytest.fixture
-    def player(self, mock_env):
+    def observer(self, mock_env):
         """Create a KutuluClosestObserver instance with the mock environment."""
         return KutuluClosestObserver(mock_env)
     
-    def test_get_state_with_only_player(self, player, mock_env):
+    @pytest.mark.parametrize("player_pos, explorers, state", [
+        [(3, 3), [], (None, None, None, None)],
+    ])
+    def test_get_state_with_only_player(self, player_pos, explorers, state, observer):
         """Test get_state with only the player entity present."""
-        # Setup mock _get_obs to return only the player
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3}
-            ]
-        }
-        
+        entities = calculate_entities(player_pos, explorers=explorers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         # Call get_state
-        result = player.get_state(0, 'closest')
-        
+        result = observer.get_state(0)
         # Since there are no other entities, all directions and distances should be None
-        assert result == (None, None, None, None)
-        mock_env._get_obs.assert_called_once_with(0)
-    
+        assert result == state
+
     @pytest.mark.parametrize("player_pos, explorers, state", [
         [(3, 3), [(3, 2)], ((0,), 1, None, None)],
         [(3, 3), [(5, 3)], ((1,), 2, None, None)],
         [(3, 3), [(4, 3)], ((1,), 1, None, None)],
     ])
-    def test_get_state_with_explorer(self, player_pos, explorers, state, player, mock_env):
+    def test_get_state_with_explorer(self, player_pos, explorers, state, observer):
         """Test get_state with player and one other explorer."""
-        # Setup mock _get_obs to return player and another explorer
-        
-        player_id = 0
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': player_id, 'x': player_pos[0], 'y': player_pos[1]},
-            ] + [
-                {'kind': 'EXPLORER', 'id': i + 1, 'x': x, 'y': y}
-                for i, (x, y) in enumerate(explorers) 
-            ]
-        }
-        
+        entities = calculate_entities(player_pos, explorers=explorers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         # Call get_state
-        result = player.get_state(0, 'closest')
-        
+        result = observer.get_state(0)
         assert result == state
-    
-    def test_get_state_with_wanderer(self, player, mock_env):
-        """Test get_state with player and one wanderer."""
-        # Setup mock _get_obs to return player and a wanderer
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-                {'kind': 'WANDERER', 'id': 2, 'x': 3, 'y': 1, 'wandering': 1}
-            ]
-        }
 
+    @pytest.mark.parametrize("player_pos, wanderers", [
+        [(3, 3), [(3, 1, 1)]],
+    ])
+    def test_get_state_with_wanderer(self, player_pos, wanderers, observer):
+        """Test get_state with player and one wanderer."""
+        entities = calculate_entities(player_pos, wanderers=wanderers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         # Call get_state
-        result = player.get_state(0, 'closest')
+        result = observer.get_state(0)
 
         # Wanderer is above (index 0)
         assert result[0] is None  # No explorer
@@ -90,110 +56,69 @@ class TestKutuluClosestObserver:
         assert result[2] == (0,)  # Wanderer direction
         assert result[3] == 2     # Wanderer distance
     
-    def test_get_state_the_same_position(self, player, mock_env):
+    @pytest.mark.parametrize("player_pos, explorers, wanderers", [
+        [(3, 3), [(3, 3)], [(3, 3, 1)]],
+    ])
+    def test_get_state_the_same_position(self, player_pos, explorers, wanderers, observer):
         """Test get_state with player and one other explorer."""
-        # Setup mock _get_obs to return player and another explorer
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-                {'kind': 'EXPLORER', 'id': 1, 'x': 3, 'y': 3},
-                {'kind': 'WANDERER', 'id': 2, 'x': 3, 'y': 3, 'wandering': 1}
-            ]
-        }
+        entities = calculate_entities(player_pos, explorers, wanderers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         
         # Call get_state
-        result = player.get_state(0, 'closest')
+        result = observer.get_state(0)
         
         # Explorer is to the right (index 1)
         assert result[0] == (4,)  # Explorer direction
         assert result[1] == 0     # Explorer distance
         assert result[2] == (4,)  # No wanderer
         assert result[3] == 0     # No wanderer distance
-    
-    def test_get_state_wanderers_around_1(self, player, mock_env):
-        """Test get_state with player and one other explorer."""
-        # Setup mock _get_obs to return player and another explorer
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-                {'kind': 'WANDERER', 'id': 0, 'x': 2, 'y': 3, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 1, 'x': 3, 'y': 2, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 2, 'x': 4, 'y': 3, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 3, 'x': 3, 'y': 4, 'wandering': 1},
-            ]
-        }
-        
+
+    @pytest.mark.parametrize("player_pos, wanderers", [
+        [(3, 3), [(2, 3, 1), (3, 2, 1), (4, 3, 1), (3, 4, 1)]],
+    ])
+    def test_get_state_wanderers_around_1(self, player_pos, wanderers, observer):
+        """Test get_state with player and one wanderer."""
+        entities = calculate_entities(player_pos, wanderers=wanderers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         # Call get_state
-        result = player.get_state(0, 'closest')
-        
+        result = observer.get_state(0)
         # Explorer is to the right (index 1)
         assert result[0] is None  # Explorer direction
         assert result[1] is None  # Explorer distance
         assert result[2] == (0, 1, 2, 3,)  # No wanderer
         assert result[3] == 1     # No wanderer distance
-    
-    def test_get_state_wanderers_around_2(self, player, mock_env):
-        """Test get_state with player and one other explorer."""
-        # Setup mock _get_obs to return player and another explorer
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-                {'kind': 'WANDERER', 'id': 0, 'x': 1, 'y': 3, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 1, 'x': 3, 'y': 1, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 2, 'x': 5, 'y': 3, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 3, 'x': 3, 'y': 5, 'wandering': 1},
-            ]
-        }
-        
+
+    @pytest.mark.parametrize("player_pos, wanderers", [
+        [(3, 3), [(1, 3, 1), (3, 1, 1), (5, 3, 1), (3, 5, 1)]],
+    ])
+    def test_get_state_wanderers_around_2(self, player_pos, wanderers, observer):
+        """Test get_state with player and one wanderer."""
+        entities = calculate_entities(player_pos, wanderers=wanderers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         # Call get_state
-        result = player.get_state(0, 'closest')
-        
+        result = observer.get_state(0)
         # Explorer is to the right (index 1)
         assert result[0] is None  # Explorer direction
         assert result[1] is None  # Explorer distance
         assert result[2] == (0, 1, 2, 3,)  # No wanderer
         assert result[3] == 2     # No wanderer distance
-    
-    def test_get_state_with_multiple_entities(self, player, mock_env):
-        """Test get_state with player, explorers, and wanderers."""
-        # Setup mock _get_obs to return player, explorers, and wanderers
-        mock_env._get_obs.return_value = {
-            'entities': [
-                {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-                {'kind': 'EXPLORER', 'id': 1, 'x': 5, 'y': 3},
-                {'kind': 'EXPLORER', 'id': 2, 'x': 1, 'y': 3},
-                {'kind': 'WANDERER', 'id': 3, 'x': 3, 'y': 1, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 4, 'x': 3, 'y': 5, 'wandering': 1},
-                {'kind': 'WANDERER', 'id': 5, 'x': 3, 'y': 2, 'wandering': 0}  # Not wandering
-            ]
-        }
 
+    @pytest.mark.parametrize("player_pos, explorers, wanderers", [
+        [(3, 3), [(5, 3), (1, 3)], [(3, 1, 1), (3, 5, 1), (3, 2, 0)]],
+    ])
+    def test_get_state_wanderers_around_2(self, player_pos, explorers, wanderers, observer):
+        """Test get_state with player and one wanderer."""
+        entities = calculate_entities(player_pos, explorers, wanderers)
+        observer.env._set_entities(entities)
+        observer.env._set_players(entities, set_ids=True)
         # Call get_state
-        result = player.get_state(0, 'closest')
-        
+        result = observer.get_state(0)
         # Explorer is to the left (index 3) with distance 1
         # Wanderer is up (index 0) with distance 2
         assert result[0] == (1, 3)         # Either left or right explorer is closest
         assert result[1] == 2              # Distance to closest explorer
         assert result[2] == (0, 2)         # Closest wanderer is up
         assert result[3] == 2              # Distance to closest wanderer
-    
-    # def test_get_state_with_max_distance_limits(self, player, mock_env):
-    #     """Test get_state with max distance limits for explorers and wanderers."""
-    #     # Setup mock _get_obs to return player, explorers, and wanderers
-    #     mock_env._get_obs.return_value = {
-    #         'entities': [
-    #             {'kind': 'EXPLORER', 'id': 0, 'x': 3, 'y': 3},
-    #             {'kind': 'EXPLORER', 'id': 1, 'x': 5, 'y': 3},
-    #             {'kind': 'WANDERER', 'id': 2, 'x': 3, 'y': 1, 'wandering': 1}
-    #         ]
-    #     }
-        
-    #     # Call get_state with max distance limits
-    #     result = player.get_state(0, max_explorer_dist=0, max_wanderer_dist=1)
-        
-    #     # Check that distances are capped
-    #     assert result[0] == (1,)  # Explorer is to the right
-    #     assert result[1] == 0     # Explorer distance capped at 0
-    #     assert result[2] == (0,)  # Wanderer is up
-    #     assert result[3] == 1     # Wanderer distance capped at 1

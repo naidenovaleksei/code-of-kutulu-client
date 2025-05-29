@@ -312,11 +312,14 @@ def calculate_output_np(data, weights, num_classes, softmax=False, num_dirs=5):
     entity_impact = weights['entity_impact.weight']
     entity_impact_b = weights['entity_impact.bias']
     out_linear = weights['out_linear.weight']
-    out_linear_b = weights['out_linear.bias']
-    
+    if 'out_linear.bias' in weights:
+        out_linear_b = weights['out_linear.bias']
+    else:
+        out_linear_b = 0
+
     assert data['entity_dir'].shape[-1] == num_dirs
     x_kind_embs = kind_embs[data['entity_kind']]
-    
+
     entity_features = data['entity_features']
     x_features = entity_features @ features_linear.T + features_linear_b
 
@@ -327,9 +330,7 @@ def calculate_output_np(data, weights, num_classes, softmax=False, num_dirs=5):
     x_entitity = np.concatenate((x_kind_embs, x_features, x_dir), axis=-1)
     x = x_entitity @ entity_linear.T + entity_linear_b
 
-    entities_mask[entities_mask == 0] = -100000
     entity_weights = (x_entitity @ entity_impact.T + entity_impact_b) * entities_mask
-    entity_weights = sp.softmax(entity_weights, axis=1)
 
     # [batch_size, inner_dim, entity_dim]
     x_transposed = x.transpose(0, 2, 1)

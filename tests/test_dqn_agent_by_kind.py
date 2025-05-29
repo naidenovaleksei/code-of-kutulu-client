@@ -2,7 +2,10 @@ import unittest
 import numpy as np
 import torch
 
-from src.game.template import parse_state_by_kind
+from src.game.template import (
+    parse_state_by_kind,
+    ENTITY_TOKENS,
+)
 from src.envs.agents.dqn_agent_by_kind import ExperienceBufferByKind, DQNAgentByKind
 from src.envs.models.dqn_model_by_kind import DQNExtByKind
 
@@ -25,8 +28,8 @@ class TestDQNAgentByKind(unittest.TestCase):
         # Check the result
         self.assertIn('EXPLORER', result)
         self.assertIn('WANDERER', result)
-        self.assertEqual(len(result['EXPLORER'][0]), 2)  # 2 explorers
-        self.assertEqual(len(result['WANDERER'][0]), 1)  # 1 wanderer
+        self.assertEqual(len(result['EXPLORER'][0]), 3)  # 2 explorers + 1 padding
+        self.assertEqual(len(result['WANDERER'][0]), 10)  # 1 wanderer + 9 padding (MAX_ENTITY_COUNT_BY_KIND["WANDERER"] = 10)
     
     def test_experience_buffer_by_kind(self):
         # Create a sample state
@@ -52,8 +55,10 @@ class TestDQNAgentByKind(unittest.TestCase):
     def test_dqn_ext_by_kind(self):
         # Create a model
         model = DQNExtByKind(
+            vocab_size=len(ENTITY_TOKENS) + 1,
             num_dirs=5,
             features_dim=8,
+            embed_dim=32,
             hidden_dim=32,
             inner_dim=16,
             num_classes=5,
@@ -63,10 +68,12 @@ class TestDQNAgentByKind(unittest.TestCase):
         # Create sample data
         data = {
             'EXPLORER': {
+                'entity_kind': torch.ones(1, 2).long(),
                 'entity_features': torch.randn(1, 2, 8),
                 'entity_dir': torch.randn(1, 2, 5),
             },
             'WANDERER': {
+                'entity_kind': torch.ones(1, 1).long(),
                 'entity_features': torch.randn(1, 1, 8),
                 'entity_dir': torch.randn(1, 1, 5),
             },
