@@ -12,6 +12,7 @@ from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.agents.dqn_agent_ext import DQNAgentExt
+from src.envs.agents.dqn_agent_by_kind import DQNAgentByKind
 from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.envs.strategy import RandomStrategy
 
@@ -89,6 +90,8 @@ class Trainer:
                 agent = DQNAgentExt(**agent_info)
             elif _type == 'reinforce':
                 agent = REINFORCEAgent(**agent_info)
+            elif _type == 'qdn_by_kind':
+                agent = DQNAgentByKind(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {_type}')
             agent_dir = f'agent{i}_{_type}'

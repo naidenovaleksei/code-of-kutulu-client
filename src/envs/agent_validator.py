@@ -4,20 +4,27 @@ from src.envs.kutulu_world import KutuluWorldEnv
 from src.game.template import MOVE_REL_POS, REL_POSITIONS
 
 class AgentValidator:
-    def __init__(self, actions):
+    def __init__(self, actions, player_pos=(4, 4), player_params=(100,0,0),
+                 explorers_params=(100,0,0), wanderers_params=(10,1,0)):
         self.env = KutuluWorldEnv('', '', 1, actions=actions)
         self.env.map = [
-            #0123456
-            '#######', # 0
-            '#.....#', # 1
-            '#.#.#.#', # 2
-            '#.....#', # 3
-            '#.#.#.#', # 4
-            '#.....#', # 5
-            '#######', # 6
+            #012345678
+            '#########', # 0
+            '#..#.#..#', # 1
+            '#.......#', # 2
+            '#..#.#..#', # 3
+            '#.......#', # 4
+            '#..#.#..#', # 5
+            '#.......#', # 6
+            '#..#.#..#', # 7
+            '#########', # 8
         ]
         self.env.width = len(self.env.map[0])
         self.env.height = len(self.env.map)
+        self.player_pos = player_pos
+        self.player_params = player_params
+        self.explorers_params = explorers_params
+        self.wanderers_params = wanderers_params
     
     def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3):
         result = []
@@ -43,15 +50,21 @@ class AgentValidator:
         return np.mean(result), np.mean(output_stds)
 
     def _set_env(self, agent, explorers, wanderers):
-        player_pos = (3, 3)
+        player_pos = self.player_pos
+        assert len(self.player_params) == 3
+        assert len(self.explorers_params) == 3
+        assert len(self.wanderers_params) == 3
+        player_params = " ".join(map(str, self.player_params))
+        explorers_params = " ".join(map(str, self.explorers_params))
+        wanderers_params = " ".join(map(str, self.wanderers_params))
         obs = [
             None,
-            f'EXPLORER 0 {player_pos[0]} {player_pos[1]} 100 0 0'
+            f'EXPLORER 0 {player_pos[0]} {player_pos[1]} {player_params}'
         ] + [
-            f'EXPLORER {i + 1} {player_pos[0] + x} {player_pos[1] + y} 100 0 0'
+            f'EXPLORER {i + 1} {player_pos[0] + x} {player_pos[1] + y} {explorers_params}'
             for i, (x, y) in enumerate(explorers) 
         ] + [
-            f'WANDERER {i + 10} {player_pos[0] + x} {player_pos[1] + y} 10 1 0'
+            f'WANDERER {i + 10} {player_pos[0] + x} {player_pos[1] + y} {wanderers_params}'
             for i, (x, y) in enumerate(wanderers) 
         ]
         self.env._set_entities(obs)

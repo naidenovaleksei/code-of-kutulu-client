@@ -36,6 +36,15 @@ MAX_EXPLORER_DIST = 5
 MAX_WANDERER_DIST = 5
 
 MAX_ENTITY_COUNT = 20
+MAX_ENTITY_COUNT_BY_KIND = {
+    "EXPLORER": 3,
+    "WANDERER": 10,
+    "SLASHER": 4,
+    "EFFECT_PLAN": 2,
+    "EFFECT_LIGHT": 2,
+    "EFFECT_SHELTER": 2,
+    "EFFECT_YELL": 1,
+}
 
 
 WANDERER_STATES = ["SPAWNING", "WANDERING", "STALKING", "RUSHING", "STUNNED"]
@@ -195,8 +204,9 @@ def parse_state_by_kind(state, kinds=[
     result = {}
     for kind in kinds:
         state_by_kind = [e for e in state if e['kind'] == kind]
-        _, features_list, dir_list = parse_state(state_by_kind)
-        result[kind] = (features_list, dir_list)
+        kind_list, features_list, dir_list = parse_state(
+            state_by_kind, MAX_ENTITY_COUNT_BY_KIND[kind])
+        result[kind] = (kind_list, features_list, dir_list)
     return result
 
 def get_distances(entities, player_pos, lines, find_path_func=find_path):
