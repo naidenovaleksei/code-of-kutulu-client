@@ -12,7 +12,8 @@ class DQNExtByKind(nn.Module):
                 features_dim=8,
                 embed_dim=32,
                 hidden_dim=32,
-                inner_dim=16):
+                inner_dim=16,
+                out_linear_bias=False):
         super(DQNExtByKind, self).__init__()
         
         # # Default entity kinds if not provided
@@ -30,6 +31,7 @@ class DQNExtByKind(nn.Module):
                     hidden_dim=hidden_dim,
                     inner_dim=inner_dim,
                     num_classes=num_classes,
+                    out_linear_bias=out_linear_bias,
             )
             for kind in self.entity_kinds
         })

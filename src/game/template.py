@@ -388,8 +388,8 @@ def parse_info():
 
 
 class Solver:
-    def __init__(self, actions):
-        self.info = parse_info()
+    def __init__(self, info, actions):
+        self.info = info
         self.actions = actions
         self.effect_left = 0
 
@@ -420,8 +420,8 @@ class Solver:
 
 
 class QlearningSolver(Solver):
-    def __init__(self, actions, Q):
-        super(QlearningSolver, self).__init__(actions)
+    def __init__(self, info, actions, Q):
+        super(QlearningSolver, self).__init__(info, actions)
         self.Q = Q
         assert list(self.Q.values())[0].shape[0] == len(actions)
 
@@ -432,12 +432,12 @@ class QlearningSolver(Solver):
 
 
 class DQNSolver(Solver):
-    def __init__(self, actions, weights):
-        super(DQNSolver, self).__init__(actions)
+    def __init__(self, info, actions, weights: dict):
+        super(DQNSolver, self).__init__(info, actions)
         self.weights = weights
         assert self.weights['entity_impact.weight'].shape[0] == len(actions)
 
-    def calculate_action(self, entities, player_pos, player_mask):
+    def calculate_output(self, entities, player_pos):
         state = get_state_ext(player_pos, entities, self.info['lines'])
         kind_list, features_list, dir_list = parse_state(state)
         data = {
@@ -446,6 +446,63 @@ class DQNSolver(Solver):
             'entity_dir': [dir_list],
         }
         model_output = calculate_output_np(data, self.weights, len(self.actions))[0]
+        return model_output
+
+    def calculate_action(self, entities, player_pos, player_mask):
+        model_output = self.calculate_output(entities, player_pos)
+        player_mask = player_mask[:len(self.actions)]
+        q_vals_v = np.ma.array(model_output, mask=player_mask)
+        action_id = q_vals_v.argmax()
+        return action_id
+
+
+class DQNByKindSolver(Solver):
+    def __init__(self, info, weights, actions=DEFAULT_KUTULU_ACTIONS):
+        super(DQNByKindSolver, self).__init__(info, actions)
+        assert weights['model_by_kind.WANDERER.entity_impact.weight'].shape[0] == len(actions)
+        for key, val in weights.items():
+            if key.endswith('entity_impact.weight'):
+                assert val.shape[0] == len(actions), f'wrong shape for {key} layers'
+
+        # self.weights_dict = weights
+        self.entity_kinds = set([key.split('.')[1] for key in weights.keys()])
+        
+        self.weights_dict = {
+            kind: {
+                k[len(f"model_by_kind.{kind}."):]: v
+                for k, v in weights.items()
+                if k.startswith(f"model_by_kind.{kind}.")
+            }
+            for kind in self.entity_kinds
+        }
+
+    def calculate_output(self, entities, player_pos):
+        state = get_state_ext(player_pos, entities, self.info['lines'])
+        data_by_kind = {}
+        state_by_kind = parse_state_by_kind(state)
+        for kind, (kind_list, features_list, dir_list) in state_by_kind.items():
+            if kind not in data_by_kind:
+                data_by_kind[kind] = {
+                    'entity_kind': [],
+                    'entity_features': [],
+                    'entity_dir': [],
+                }
+            data_by_kind[kind]['entity_kind'].append(kind_list)
+            data_by_kind[kind]['entity_features'].append(features_list)
+            data_by_kind[kind]['entity_dir'].append(dir_list)
+        
+        model_outputs = []
+        for kind in self.entity_kinds:
+            weights = self.weights_dict[kind]
+            data = data_by_kind[kind]
+            model_output = calculate_output_np(data, weights, len(self.actions))[0]
+            model_outputs.append(model_output)
+        
+        all_model_output = np.array(model_outputs).sum(axis=0)
+        return all_model_output
+
+    def calculate_action(self, entities, player_pos, player_mask):
+        model_output = self.calculate_output(entities, player_pos)
         player_mask = player_mask[:len(self.actions)]
         q_vals_v = np.ma.array(model_output, mask=player_mask)
         action_id = q_vals_v.argmax()
@@ -457,10 +514,13 @@ def main():
     vals = [np.load(io.BytesIO(byte_data)) for byte_data in vals]
     keys = pkl.loads(zlib.decompress(base64.b64decode(data2)))
     checkpoint_data = dict(zip(keys, vals))
+    info = parse_info()
     if mode == 'qlearning':
-        solver = QlearningSolver(USED_ACTIONS, checkpoint_data)
+        solver = QlearningSolver(info, USED_ACTIONS, checkpoint_data)
     elif mode == 'dqn_ext':
-        solver = DQNSolver(USED_ACTIONS, checkpoint_data)
+        solver = DQNSolver(info, USED_ACTIONS, checkpoint_data)
+    elif mode == 'dqn_by_kind':
+        solver = DQNByKindSolver(info, checkpoint_data, USED_ACTIONS)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     
