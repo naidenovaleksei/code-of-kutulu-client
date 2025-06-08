@@ -15,12 +15,9 @@ from src.game.template import (
     REL_POSITIONS,
 )
 
-DEFAULT_REWARD_FOR_WIN = 1000
-DEFAULT_REWARD_FOR_LOSE = 0
-
 
 class KutuluWorldEnv(gym.Env):
-    def __init__(self, server_host, maze_name, league_level, actions, players_count=4):
+    def __init__(self, server_host, maze_name, league_level, actions, reward_params={}, players_count=4):
         super(KutuluWorldEnv, self).__init__()
 
         self.host = f"http://{server_host}/game"
@@ -28,6 +25,7 @@ class KutuluWorldEnv(gym.Env):
         self.maze_name = maze_name
         self.league_level = league_level
         self.players_count = players_count
+        self.reward_params = reward_params
 
         self._actions = actions
         self.map = []
@@ -59,7 +57,8 @@ class KutuluWorldEnv(gym.Env):
         data = response.json()
         self.constants = data['constants']
         self.reward_manager = KutuluRewardManager(
-            spread_madness_per_turn=self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT']
+            spread_madness_per_turn=self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT'],
+            **self.reward_params
         )
         self.map = data['map']
         self.width = len(self.map[0])
