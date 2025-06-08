@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import copy
+import pickle as pkl
 
 from src.envs.agents.nn_agent import(
     NNAgent,
@@ -35,12 +36,20 @@ def parse_dist(encoded_dist):
     return [encoded_dist]
 
 
-Experience = collections.namedtuple('Experience', field_names=['state', 'action', 'reward', 'done', 'new_state'])
+Experience = collections.namedtuple('Experience', field_names=[
+    'state',
+    'action',
+    'reward',
+    'done',
+    'new_state',
+    'maze_name',
+])
 
 
 class ExperienceBuffer:
-    def __init__(self, capacity):
+    def __init__(self, capacity, need_aug=False):
         self.buffer = collections.deque(maxlen=capacity)
+        self.need_aug = need_aug
 
     def __len__(self):
         return len(self.buffer)
@@ -60,14 +69,56 @@ class ExperienceBuffer:
 
     def sample(self, batch_size):
         indices = np.random.choice(len(self.buffer), batch_size, replace=False)
-        states, actions, rewards, dones, next_states = zip(*[self.buffer[idx] for idx in indices])
-
+        states, actions, rewards, dones, next_states, _ = zip(*[self.buffer[idx] for idx in indices])
+        if self.need_aug:
+            states = list(states)
+            next_states = list(next_states)
+            actions = list(actions)
+            assert len(next_states) == batch_size
+            for i in range(batch_size):
+                # [+1, +2, +3]
+                dir_shift = np.random.randint(1, 4)
+                states[i] = self._aug_rotation_state(states[i], dir_shift)
+                next_states[i] = self._aug_rotation_state(next_states[i], dir_shift)
+                actions[i] = self._aug_rotation_dir(actions[i], dir_shift, ignore_errors=True)
         states = self.encode_states(states)
         next_states = self.encode_states(next_states)
         actions = torch.tensor(actions)
         rewards = torch.tensor(np.array(rewards, dtype=np.float32))
-        dones = torch.ByteTensor(np.array(dones, dtype=np.uint8))
+        dones = torch.BoolTensor(np.array(dones))
         return states, actions, rewards, dones, next_states
+
+    def save_buffer(self, fname):
+        with open(fname, "wb") as f:
+            pkl.dump(self.buffer, f)
+    
+    def load_buffer(self, fname):
+        with open(fname, "rb") as f:
+            self.buffer = pkl.load(f)
+    
+    def _aug_rotation_state(self, state, dir_shift):
+        return [
+            self._aug_rotation_entity(e, dir_shift)
+            for e in state
+        ]
+
+    def _aug_rotation_entity(self, e, dir_shift):
+        new_e = dict(e)
+        if e['dir'] is not None:
+            new_e['dir'] = tuple(
+                self._aug_rotation_dir(d, dir_shift) for d in e['dir']
+            )
+        theta = np.pi / 2 * dir_shift
+        new_e['rel_x'] = int(np.round(e['rel_x'] * np.cos(theta) - e['rel_y'] * np.sin(theta)))
+        new_e['rel_y'] = int(np.round(e['rel_x'] * np.sin(theta) + e['rel_y'] * np.cos(theta)))
+        return new_e
+
+    def _aug_rotation_dir(self, _dir, dir_shift, ignore_errors=False):
+        if _dir >= 4:
+            if ignore_errors or _dir == 4:
+                return _dir
+            raise ValueError(f'wrong dir: {_dir}')
+        return (_dir + dir_shift) % 4
 
 
 class DQNAgent(NNAgent):
@@ -111,12 +162,14 @@ class DQNAgent(NNAgent):
             return np.random.randint(self.action_space_n)
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
 
-    def train_step(self, reward, game_over, new_state=None):
+    def train_step(self, reward, game_over, new_state):
         if reward is None or not self.train:
             return
 
         state, action = self.state_actions
-        exp = Experience(state, action, reward / 100, game_over, new_state)
+        if new_state is None:
+            new_state = state
+        exp = Experience(state, action, reward, game_over, new_state, self.maze_name)
         self.episode_buffer.append(exp)
 
         if len(self.episode_buffer) >= self.replay_start_size:
@@ -132,12 +185,12 @@ class DQNAgent(NNAgent):
         states, actions, rewards, dones, next_states = batch
         state_action_values = self.model(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
         next_state_values = self.tgt_net(next_states).max(1)[0]
-        # next_state_values[dones] = 0.0
+        next_state_values[dones] = 0.0
         next_state_values = next_state_values.detach()
 
-        normalized_rewards = torch.sign(rewards) * torch.log1p(torch.abs(rewards))
+        # normalized_rewards = torch.sign(rewards) * torch.log1p(torch.abs(rewards))
 
-        expected_state_action_values = next_state_values * self.gamma + normalized_rewards
+        expected_state_action_values = next_state_values * self.gamma + rewards
         loss = self.criterion(state_action_values, expected_state_action_values)
         loss.backward()
         self.optimizer.step()

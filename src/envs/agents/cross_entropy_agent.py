@@ -67,7 +67,7 @@ class CrossEntropyAgent(BaseAgent):
             self.state_actions.append((state, action))
         return state, action
 
-    def train_step(self, reward, game_over, new_state=None):
+    def train_step(self, reward, game_over, new_state):
         if not self.train:
             return
 

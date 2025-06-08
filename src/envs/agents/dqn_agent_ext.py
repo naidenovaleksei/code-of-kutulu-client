@@ -29,8 +29,8 @@ from src.game.template import (
 
 
 class ExperienceBufferExt(ExperienceBuffer):
-    def __init__(self, capacity):
-        super(ExperienceBufferExt, self).__init__(capacity)
+    def __init__(self, capacity, need_aug=False):
+        super(ExperienceBufferExt, self).__init__(capacity, need_aug)
 
     def encode_states(self, states, return_tensors=True):
         data = dict(

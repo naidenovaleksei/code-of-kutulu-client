@@ -76,6 +76,6 @@ class NNAgent(BaseAgent):
     def train_model(self):
         raise NotImplementedError
 
-    def train_step(self, reward, game_over, new_state=None):
+    def train_step(self, reward, game_over, new_state):
         raise NotImplementedError
         

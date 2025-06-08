@@ -28,8 +28,8 @@ from src.envs.models.dqn_model_by_kind import DQNExtByKind
 
 
 class ExperienceBufferByKind(ExperienceBuffer):
-    def __init__(self, capacity):
-        super(ExperienceBufferByKind, self).__init__(capacity)
+    def __init__(self, capacity, need_aug=False):
+        super(ExperienceBufferByKind, self).__init__(capacity, need_aug)
 
     def encode_states(self, states, return_tensors=True):
         data_by_kind = {}
@@ -61,6 +61,7 @@ class DQNAgentByKind(DQNAgent):
                  lr=LEARNING_RATE, replay_size=REPLAY_SIZE,
                  replay_start_size=REPLAY_START_SIZE,
                  batch_size=BATCH_SIZE,
+                 need_aug=False,
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
@@ -84,5 +85,5 @@ class DQNAgentByKind(DQNAgent):
                 num_classes=action_space_n,
                 **model_params,
             ),
-            episode_buffer=ExperienceBufferByKind(replay_size),
+            episode_buffer=ExperienceBufferByKind(replay_size, need_aug),
         )
