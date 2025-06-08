@@ -47,8 +47,6 @@ def test_convert_qdn_ext():
         'action_space_n': 8,
     }
     agent = REINFORCEAgent(**info)
-    agent.model.load_state_dict(torch.load(f"./output/2025-05-20/21:20:19.338686/agent1/model.pt"))
-
     weights = {}
     for k,v in agent.model.named_parameters():
         weights[k] = v.detach().cpu().numpy()

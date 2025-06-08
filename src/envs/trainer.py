@@ -80,7 +80,7 @@ class Trainer:
                 if agent_info['strategy'] == 'random':
                     agent_info['strategy'] = RandomStrategy()
                 else:
-                    raise ValueError(f'wrong strategy: {agent_info['strategy']}')
+                    raise ValueError(f'wrong strategy: {agent_info["strategy"]}')
                 agent = QlearningAgent(**agent_info)
             elif _type == 'cross_entropy':
                 agent = CrossEntropyAgent(**agent_info)
@@ -103,9 +103,9 @@ class Trainer:
     
     def reset_env(self, seed=None):
         if seed is not None:
-            maze_name = np.random.RandomState(seed).choice(self.mazes)
+            maze_name = np.random.RandomState(seed).choice(self.mazes).item()
         else:
-            maze_name = np.random.choice(self.mazes)
+            maze_name = np.random.choice(self.mazes).item()
         self.env = KutuluWorldEnv(
             server_host='localhost:8080',
             maze_name=maze_name,
@@ -121,7 +121,7 @@ class Trainer:
 
         return self.env
     
-    def play_rollout(self):
+    def play_rollout(self, verbose=False):
         env = self.reset_env()
         rollout_rewards = []
         game_over = False
@@ -138,19 +138,19 @@ class Trainer:
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
+            if verbose:
+                self.env.viz_map()
             rollout_rewards.append(rewards)
 
             for player_id, reward in enumerate(rewards):
                 agent_id = self.agent_map[player_id]
                 agent = self.agents[agent_id]
                 if agent.train:
-                    if isinstance(agent, REINFORCEAgent):
-                        if env.is_game_over_for_player(player_id):
-                            agent.train_step(reward, True, None)
-                    else:
-                        if player_id in env.active_players():
-                            new_state = agent.get_state(player_id)
-                            agent.train_step(reward, game_over, new_state)
+                    if env.is_game_over_for_player(player_id):
+                        agent.train_step(reward, True, None)
+                    elif not isinstance(agent, REINFORCEAgent) and player_id in env.active_players():
+                        new_state = agent.get_state(player_id)
+                        agent.train_step(reward, game_over, new_state)
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 
@@ -170,7 +170,7 @@ class Trainer:
         for i in tqdm(range(self.num_experiments)):
             rollout_rewards = self.play_rollout()
             reward_list.append(rollout_rewards)
-            
+
             step = i + 1
             # Save models periodically
             if step % save_models_int == 0:
@@ -189,20 +189,22 @@ class Trainer:
                 av = self.agent_validator
                 check_exp = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
                 check_wan = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
-                
+
                 for i, agent in enumerate(self.agents):
                     # Log all metrics in combined plots
                     agent.writer.add_scalar('Play/Rewards', rewards[i], step)
                     agent.writer.add_scalar('Play/Winners', winner_list[i], step)
                     agent.writer.add_scalar('Train/Policy', check_policy[i], step)
                     agent.writer.add_scalar('Train/Epsilon', eps[i], step)
-                    # agent.writer.add_scalar('Train/OutputStd', output_stds[i], step)
                     agent.writer.add_scalar('Check/Explorer/acc', check_exp[i][0], step)
                     agent.writer.add_scalar('Check/Wanderer/acc', check_wan[i][0], step)
                     agent.writer.add_scalar('Check/Explorer/std', check_exp[i][1], step)
                     agent.writer.add_scalar('Check/Wanderer/std', check_wan[i][1], step)
-                
-        
+                    if check_exp[i][2] is not None:
+                        agent.writer.add_scalar('Check/Explorer/top_a', check_exp[i][2], step)
+                    if check_wan[i][2] is not None:
+                        agent.writer.add_scalar('Check/Wanderer/top_a', check_wan[i][2], step)
+
         for i, agent in enumerate(self.agents):
             agent.writer.close()
         return reward_list, model_dir_list
