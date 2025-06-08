@@ -1,3 +1,4 @@
+from collections import Counter
 import numpy as np
 
 from src.envs.kutulu_world import KutuluWorldEnv
@@ -26,9 +27,10 @@ class AgentValidator:
         self.explorers_params = explorers_params
         self.wanderers_params = wanderers_params
     
-    def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3):
+    def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3, verbose=False):
         result = []
         output_stds = []
+        actions = []
         params = []
         train = agent.train
         agent.train = False
@@ -42,12 +44,27 @@ class AgentValidator:
             params += next_params
         for answer, explorers, wanderers in params:
             self._set_env(agent, explorers, wanderers)
-            state, action = agent.generate_state_and_step(0)
+            _, action = agent.generate_state_and_step(0)
             output_stds.append(agent.get_output_std())
             result.append(action in answer)
+            actions.append(action.item())
+            if verbose:
+                print(f'answer: {answer}, action: {action}, explorers: {explorers}, wanderers: {wanderers}')
+                print(f'action: {result[-1]}, std: {output_stds[-1]}')
+                self.env.viz_map(action=action, agent_id=0)
+                print()
         agent.observer = None
         agent.train = train
-        return np.mean(result), np.mean(output_stds)
+        if verbose:
+            return result, output_stds, actions
+        ad = dict(Counter(actions))
+        max_v = max(ad.values())
+        max_ad = {k for k,v in ad.items() if v == max_v}
+        if len(max_ad) == 1:
+            top_action = list(max_ad)[0]
+        else:
+            top_action = None
+        return np.mean(result), np.mean(output_stds), top_action
 
     def _set_env(self, agent, explorers, wanderers):
         player_pos = self.player_pos

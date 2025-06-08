@@ -102,7 +102,7 @@ class REINFORCEAgent(NNAgent):
             return np.random.randint(self.action_space_n)
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
 
-    def train_step(self, reward, game_over, new_state=None):
+    def train_step(self, reward, game_over, new_state):
         if not self.train:
             return
         

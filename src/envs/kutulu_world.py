@@ -12,6 +12,7 @@ from src.envs.distance import find_path
 from src.envs.kutulu_reward_manager import KutuluRewardManager
 from src.game.template import (
     get_valid_action_mask_by_coords,
+    REL_POSITIONS,
 )
 
 DEFAULT_REWARD_FOR_WIN = 1000
@@ -104,6 +105,23 @@ class KutuluWorldEnv(gym.Env):
         info = self._get_info()
 
         return observation, reward, game_over, info
+
+    def viz_map(self, action=None, agent_id=None):
+        curr_map = [list(line) for line in self.map]
+        for e in self.entities:
+            curr_map[e['y']][e['x']] = e['kind'][0]
+            if e['kind'] == 'EXPLORER':
+                curr_map[e['y']][e['x']] = str(e['id'])
+                if e['id'] == agent_id:
+                    agent_pos = (e['x'], e['y'])
+        if action is not None:
+            rel_pos = REL_POSITIONS[action]
+            x = agent_pos[0] + rel_pos[0]
+            y = agent_pos[1] + rel_pos[1]
+            curr_map[y][x] = '^'
+        for line in curr_map:
+            print(''.join(line))
+        print()
 
     def _get_info(self):
         return {

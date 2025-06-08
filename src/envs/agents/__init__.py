@@ -14,8 +14,10 @@ class BaseAgent:
         self.observer = None
         self.state_actions = None
         self.output_std = np.inf
+        self.maze_name = None
     
     def set_env(self, env):
+        self.maze_name = env.maze_name
         if self.state_type == 'closest':
             self.observer = KutuluClosestObserver(env)
         elif self.state_type == 'closest_ext':
