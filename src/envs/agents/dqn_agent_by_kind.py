@@ -1,24 +1,9 @@
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import copy
-
-from src.envs.agents.nn_agent import(
-    GAMMA,
-    LEARNING_RATE,
-    EPSILON_START,
-    EPSILON_FINAL,
-    EPSILON_DECAY_LAST_FRAME,
+from src.envs.buffers import (
+    BaseStateEncoder,
 )
 from src.envs.agents.dqn_agent import (
     DQNAgent,
-    BATCH_SIZE,
-    REPLAY_SIZE,
-    SYNC_TARGET_FRAMES,
-    REPLAY_START_SIZE,
-    Experience,
-    ExperienceBuffer,
 )
 from src.game.template import (
     parse_state_by_kind,
@@ -27,10 +12,7 @@ from src.game.template import (
 from src.envs.models.dqn_model_by_kind import DQNExtByKind
 
 
-class ExperienceBufferByKind(ExperienceBuffer):
-    def __init__(self, capacity, need_aug=False):
-        super(ExperienceBufferByKind, self).__init__(capacity, need_aug)
-
+class DQNStateEncoderByKind(BaseStateEncoder):
     def encode_states(self, states, return_tensors=True):
         data_by_kind = {}
 
@@ -52,38 +34,22 @@ class ExperienceBufferByKind(ExperienceBuffer):
             for kind in data_by_kind:
                 for key in data_by_kind[kind]:
                     data_by_kind[kind][key] = torch.tensor(data_by_kind[kind][key])
-        
+
         return data_by_kind
 
 
 class DQNAgentByKind(DQNAgent):
-    def __init__(self, state_type, action_space_n,
-                 lr=LEARNING_RATE, replay_size=REPLAY_SIZE,
-                 replay_start_size=REPLAY_START_SIZE,
-                 batch_size=BATCH_SIZE,
-                 need_aug=False,
-                 sync_target_frames=SYNC_TARGET_FRAMES,
-                 epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
-                 epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
-                 gamma=GAMMA, model_params={},
-                 train=False, verbose=False):        
+    def __init__(self, state_type, action_space_n, model_params=None, **kw):    
+        if model_params is None:
+            model_params = {}  
         super(DQNAgentByKind, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
-            lr=lr,
-            gamma=gamma,
-            epsilon_start=epsilon_start,
-            epsilon_final=epsilon_final,
-            epsilon_decay_last_frame=epsilon_decay_last_frame,
-            train=train,
-            verbose=verbose,
-            replay_start_size=replay_start_size,
-            sync_target_frames=sync_target_frames,
-            batch_size=batch_size,
             model=DQNExtByKind(
                 vocab_size=len(ENTITY_TOKENS) + 1,
                 num_classes=action_space_n,
                 **model_params,
             ),
-            episode_buffer=ExperienceBufferByKind(replay_size, need_aug),
+            state_encoder=DQNStateEncoderByKind(),
+            **kw
         )
