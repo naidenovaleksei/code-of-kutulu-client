@@ -37,7 +37,7 @@ class BaseAgent:
     def get_valid_actions(self, player_id):
         return self.observer.env.get_valid_action_mask()[player_id]
 
-    def generate_state_and_step(self, player_id):
+    def generate_state_and_step(self, player_id, need_update):
         raise NotImplementedError
 
     def get_eps(self):

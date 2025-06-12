@@ -44,7 +44,7 @@ class AgentValidator:
             params += next_params
         for answer, explorers, wanderers in params:
             self._set_env(agent, explorers, wanderers)
-            _, action = agent.generate_state_and_step(0)
+            _, action = agent.generate_state_and_step(0, need_update=False)
             output_stds.append(agent.get_output_std())
             result.append(action in answer)
             actions.append(action.item())

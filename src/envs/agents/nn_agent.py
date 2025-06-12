@@ -14,7 +14,7 @@ class NNAgent(BaseAgent):
     def __init__(self, state_type, action_space_n,
                  model,
                  lr, gamma,
-                 epsilon_start, epsilon_final, epsilon_decay_last_frame,
+                 epsilon_start, epsilon_final, epsilon_decay_last_frame, epsilon_reset,
                  episode_buffer,
                  train, verbose=False):
         super(NNAgent, self).__init__(
@@ -24,7 +24,9 @@ class NNAgent(BaseAgent):
         )
         self.epsilon_final = epsilon_final
         self.epsilon_start = epsilon_start
+        self.eps = self.epsilon_start
         self.epsilon_decay_last_frame = epsilon_decay_last_frame
+        self.epsilon_reset = epsilon_reset
         self.gamma = gamma
         self.verbose = verbose
         self.episode_buffer = episode_buffer
@@ -36,11 +38,13 @@ class NNAgent(BaseAgent):
     def get_eps(self):
         return max(
             self.epsilon_final,
-            self.epsilon_start - self.frame_idx / self.epsilon_decay_last_frame
+            self.eps,
         )
 
-    def generate_state_and_step(self, player_id):
-        self.frame_idx += 1
+    def generate_state_and_step(self, player_id, need_update=True):
+        if need_update:
+            self.frame_idx += 1
+            self._update_eps()
 
         valid_actions = self.get_valid_actions(player_id)
         player_mask = ~np.array(valid_actions)
@@ -50,9 +54,8 @@ class NNAgent(BaseAgent):
         data = self.episode_buffer.encode_states([state])
         model_output = self.model(data)[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
-        
-        self.output_std = (actions_masked / actions_masked.sum()).std()
 
+        self.output_std = (actions_masked / actions_masked.sum()).std()
         if self.train and np.random.random() < self.get_eps():
             action = self.generate_random_step(actions_masked, player_mask)
         else:
@@ -69,6 +72,13 @@ class NNAgent(BaseAgent):
 
     def load_agent(self, checkpoint_dir):
         self.model.load_state_dict(torch.load(f"{checkpoint_dir}/model.pt"))
+
+    def _update_eps(self):
+        self.eps -= self.epsilon_start / self.epsilon_decay_last_frame
+        if self.epsilon_reset is not None:
+            if self.frame_idx == self.epsilon_reset:
+                self.eps = min(self.epsilon_start, self.eps * 2)
+                self.epsilon_reset *= 2
 
     def generate_random_step(self, actions_masked, player_mask):
         raise NotImplementedError

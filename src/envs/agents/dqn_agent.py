@@ -53,18 +53,17 @@ class DQNStateEncoder(BaseStateEncoder):
 
 class DQNAgent(NNAgent):
     def __init__(self, state_type, action_space_n,
-                 lr=LEARNING_RATE, replay_size=REPLAY_SIZE,
+                 buffer_params,
+                 epsilon_params,
+                 lr=LEARNING_RATE,
                  replay_start_size=REPLAY_START_SIZE,
                  batch_size=BATCH_SIZE,
-                 need_aug=False,
                  sync_target_frames=SYNC_TARGET_FRAMES,
-                 epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
-                 epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
                  gamma=GAMMA,
                  model=None, model_params=None, state_encoder=None,
                  train=False, verbose=False,
-                 prioritized_replay=False, alpha=0.6, beta=0.4):
-        if model is None:  
+                 prioritized_replay=False):
+        if model is None:
             if model_params is None:
                 model_params = {}
             model = DQN(action_space_n, **model_params)
@@ -72,20 +71,22 @@ class DQNAgent(NNAgent):
             state_encoder = DQNStateEncoder()
         if prioritized_replay:
             episode_buffer = PrioritizedExperienceBuffer(
-                state_encoder, replay_size, need_aug, alpha, beta
+                state_encoder, **buffer_params,
             )
         else:
             episode_buffer = ExperienceBuffer(
-                state_encoder, replay_size, need_aug
+                state_encoder, **buffer_params,
             )
+        assert len(set(epsilon_params) - set(['start', 'final', 'decay', 'reset'])) == 0
         super(DQNAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
             lr=lr,
             gamma=gamma,
-            epsilon_start=epsilon_start,
-            epsilon_final=epsilon_final,
-            epsilon_decay_last_frame=epsilon_decay_last_frame,
+            epsilon_start=epsilon_params.get('start', EPSILON_START),
+            epsilon_final=epsilon_params.get('final', EPSILON_FINAL),
+            epsilon_decay_last_frame=epsilon_params.get('decay', EPSILON_DECAY_LAST_FRAME),
+            epsilon_reset=epsilon_params.get('reset'),
             train=train,
             verbose=verbose,
             model=model,

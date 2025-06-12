@@ -39,9 +39,9 @@ class DQNStateEncoderByKind(BaseStateEncoder):
 
 
 class DQNAgentByKind(DQNAgent):
-    def __init__(self, state_type, action_space_n, model_params=None, **kw):    
+    def __init__(self, state_type, action_space_n, model_params=None, **kw):
         if model_params is None:
-            model_params = {}  
+            model_params = {}
         super(DQNAgentByKind, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,

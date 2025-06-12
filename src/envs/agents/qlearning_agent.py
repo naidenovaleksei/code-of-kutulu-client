@@ -37,7 +37,7 @@ class QlearningAgent(BaseAgent):
         self.alpha = alpha
         self.gamma = gamma
 
-    def generate_state_and_step(self, player_id):
+    def generate_state_and_step(self, player_id, need_update=True):
         state = self.get_state(player_id)
         valid_actions = self.get_valid_actions(player_id)
         player_mask = ~np.array(valid_actions)
