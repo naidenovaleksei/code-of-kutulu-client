@@ -3,7 +3,50 @@ from src.game.template import (
     get_state,
     get_distances,
     get_state_ext,
+    REL_POSITIONS,
+    get_state_conv,
 )
+
+
+# public static final char WALL 			= '#';
+# public static final char EMPTY 			= '.';
+# public static final char WANDERER_SPAWN 	= 'w';
+# public static final char OTHER_SPAWN 	= 's';
+# public static final char PLAYER_SPAWN 	= 'S';
+# public static final char SHELTER 		= 'U';
+VIZ_MAP = {
+    "EXPLORER": 'E',
+    "WANDERER": 'W',
+    "SLASHER": 'R',
+    "EFFECT_PLAN": 'P',
+    "EFFECT_LIGHT": 'L',
+    "EFFECT_SHELTER": 'H',
+    "EFFECT_YELL": 'Y',
+}
+
+
+def viz_observation(observation, action=None):
+    lines = observation['info']['lines']
+    entities = observation['obs']['entities']
+    player_id = observation['player_id']
+
+    curr_map = [list(line) for line in lines]
+    for e in entities:
+        if e['id'] == player_id:
+            agent_pos = (e['x'], e['y'])
+            curr_map[e['y']][e['x']] = 'A'
+        elif e['kind'] == 'EXPLORER':
+            curr_map[e['y']][e['x']] = str(e['id'])
+        else:
+            curr_map[e['y']][e['x']] = VIZ_MAP[e['kind']]
+    if action is not None and action < len(REL_POSITIONS):
+        rel_pos = REL_POSITIONS[action]
+        x = agent_pos[0] + rel_pos[0]
+        y = agent_pos[1] + rel_pos[1]
+        curr_map[y][x] = '^'
+    for line in curr_map:
+        print(''.join(line))
+    print()
 
 
 class BaseKutuluClosestObserver:
@@ -54,4 +97,18 @@ class KutuluClosestExtObserver(KutuluClosestObserver):
         
         state = get_state_ext(player_pos, entities, self.env.map,
                           get_distances_func=self.get_distances_cached())
+        return state
+
+
+class KutuluConvObserver(BaseKutuluClosestObserver):
+    def __init__(self, env: KutuluWorldEnv, size: int):
+        super(KutuluConvObserver, self).__init__(env)
+        self.size = size
+
+    def get_state(self, player_id):
+        _obs = self.env._get_obs(player_id)
+        entities = _obs['entities']
+        info = self.env._get_info()
+        
+        state = get_state_conv(player_id, entities, self.env.map, self.size)
         return state

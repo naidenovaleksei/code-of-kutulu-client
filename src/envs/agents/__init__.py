@@ -3,7 +3,7 @@ import numpy as np
 
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
-    KutuluClosestExtObserver
+    KutuluClosestExtObserver,
 )
 
 class BaseAgent:
@@ -14,10 +14,8 @@ class BaseAgent:
         self.observer = None
         self.state_actions = None
         self.output_std = np.inf
-        self.maze_name = None
     
     def set_env(self, env):
-        self.maze_name = env.maze_name
         if self.state_type == 'closest':
             self.observer = KutuluClosestObserver(env)
         elif self.state_type == 'closest_ext':
@@ -27,6 +25,14 @@ class BaseAgent:
 
     def get_state(self, player_id):
         return self.observer.get_state(player_id)
+    
+    def get_raw_observation(self, player_id):
+        return {
+            'const': self.observer.env.constants,
+            'info': self.observer.env._get_info(),
+            'obs': self.observer.env._get_obs(),
+            'player_id': player_id,
+        }
     
     def get_valid_actions(self, player_id):
         return self.observer.env.get_valid_action_mask()[player_id]

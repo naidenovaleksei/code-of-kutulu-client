@@ -129,6 +129,7 @@ class KutuluWorldEnv(gym.Env):
             'lines': self.map,
             'width': self.width, 
             'height': self.height,
+            'maze_name': self.maze_name,
         }
 
     def _get_obs(self, player_id=None):

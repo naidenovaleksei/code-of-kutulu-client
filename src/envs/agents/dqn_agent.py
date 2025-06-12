@@ -42,7 +42,7 @@ Experience = collections.namedtuple('Experience', field_names=[
     'reward',
     'done',
     'new_state',
-    'maze_name',
+    'observation',
 ])
 
 
@@ -126,6 +126,7 @@ class DQNAgent(NNAgent):
                  lr=LEARNING_RATE, replay_size=REPLAY_SIZE,
                  replay_start_size=REPLAY_START_SIZE,
                  batch_size=BATCH_SIZE,
+                 need_aug=False,
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
                  epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
@@ -135,7 +136,7 @@ class DQNAgent(NNAgent):
         if model is None:
             model = DQN(action_space_n, **model_params)
         if episode_buffer is None:
-            episode_buffer = ExperienceBuffer(replay_size)
+            episode_buffer = ExperienceBuffer(replay_size, need_aug)
         super(DQNAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -166,10 +167,10 @@ class DQNAgent(NNAgent):
         if reward is None or not self.train:
             return
 
-        state, action = self.state_actions
+        state, action, observation = self.state_actions
         if new_state is None:
             new_state = state
-        exp = Experience(state, action, reward, game_over, new_state, self.maze_name)
+        exp = Experience(state, action, reward, game_over, new_state, observation)
         self.episode_buffer.append(exp)
 
         if len(self.episode_buffer) >= self.replay_start_size:

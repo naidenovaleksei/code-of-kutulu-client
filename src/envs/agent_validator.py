@@ -60,10 +60,7 @@ class AgentValidator:
         ad = dict(Counter(actions))
         max_v = max(ad.values())
         max_ad = {k for k,v in ad.items() if v == max_v}
-        if len(max_ad) == 1:
-            top_action = list(max_ad)[0]
-        else:
-            top_action = None
+        top_action = len(max_ad)
         return np.mean(result), np.mean(output_stds), top_action
 
     def _set_env(self, agent, explorers, wanderers):

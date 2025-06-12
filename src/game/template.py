@@ -87,6 +87,25 @@ CELL_EMPTY = '.'
 CELL_WALL = '#'
 CELL_SPAWN = 'w'
 
+
+MAP_MAP = {
+    '#': 0,
+    '.': 1,
+    'w': 1,
+    's': 1,
+    'S': 1,
+    'U': 2,
+}
+FEATURE_ENTITY_DICT = {
+    'EXPLORER': ['param0', 'param1', 'param2'],
+    'WANDERER': ['param0', 'param1'],
+    'SLASHER': ['param0', 'param1'],
+    'EFFECT_PLAN': ['param0'],
+    'EFFECT_LIGHT': ['param0'],
+    'EFFECT_SHELTER': ['param0'],
+    'EFFECT_YELL': ['param0']
+}
+
 class UnreachedPositionError(Exception):
     pass
 
@@ -286,6 +305,39 @@ def get_state_ext(player_pos, entities, lines, get_distances_func=get_distances)
         e = {k: v for k,v in e.items() if k in ENTITY_FIELDS}
         entities_features.append(e)
     return entities_features
+
+
+def get_state_conv(player_id, entities, lines, size):
+    data = {}
+    curr_map = [list(line) for line in lines]
+    agent_entity = None
+    for e in entities:
+        if e['id'] == player_id:
+            agent_pos = (e['x'], e['y'])
+            agent_entity = e
+    assert agent_entity is not None
+    curr_map = [[MAP_MAP['#']] * int(size * 2 + 1) for i in range(int(size * 2 + 1))]
+    for rel_x in range(-size, size + 1):
+        for rel_y in range(-size, size + 1):
+            y = agent_pos[1] + rel_y
+            x = agent_pos[0] + rel_x
+            if 0 <= y and y < len(lines) and 0 <= x and x < len(lines[0]):
+                curr_map[size + rel_y][size + rel_x] = MAP_MAP[lines[y][x]]
+    data['map'] = curr_map
+    for kind, features in FEATURE_ENTITY_DICT.items():
+        for feature in features:
+            curr_map = [[0] * int(size * 2 + 1) for i in range(int(size * 2 + 1))]
+            if kind == 'EXPLORER':
+                curr_map[size][size] = agent_entity[feature]
+            for e in entities:
+                if kind == 'EXPLORER' and e['id'] == agent_entity['id']:
+                    continue
+                rel_x = max(min(e['x'] - agent_pos[0], size), -size)
+                rel_y = max(min(e['y'] - agent_pos[1], size), -size)
+                if abs(rel_x) <= size and abs(rel_y) <= size and e['kind'] == kind:
+                    curr_map[size + rel_y][size + rel_x] = e[feature]
+            data[f'{kind}_{feature}'] = curr_map
+    return data
 
 
 def getActionGreedyMasked(state, Q, action_space_n, mask):

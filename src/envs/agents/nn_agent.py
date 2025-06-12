@@ -58,7 +58,7 @@ class NNAgent(BaseAgent):
         else:
             action = actions_masked.argmax()
 
-        self.state_actions = (state, action)
+        self.state_actions = (state, action, self.get_raw_observation(player_id))
         return state, action
 
     def check_policy(self):

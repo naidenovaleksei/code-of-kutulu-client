@@ -14,6 +14,7 @@ from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.agents.dqn_agent_ext import DQNAgentExt
 from src.envs.agents.dqn_agent_by_kind import DQNAgentByKind
 from src.envs.agents.reinforce_agent import REINFORCEAgent
+from src.envs.agents.dqn_agent_conv import DQNAgentConv
 from src.envs.strategy import RandomStrategy
 
 WOOD_MAZES = [
@@ -92,6 +93,8 @@ class Trainer:
                 agent = REINFORCEAgent(**agent_info)
             elif _type == 'qdn_by_kind':
                 agent = DQNAgentByKind(**agent_info)
+            elif _type == 'qdn_conv':
+                agent = DQNAgentConv(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {_type}')
             agent_dir = f'agent{i}_{_type}'
@@ -121,8 +124,8 @@ class Trainer:
 
         return self.env
     
-    def play_rollout(self, verbose=False):
-        env = self.reset_env()
+    def play_rollout(self, seed=None, verbose=False):
+        env = self.reset_env(seed)
         rollout_rewards = []
         game_over = False
         if self.shuffle:
@@ -189,6 +192,7 @@ class Trainer:
                 av = self.agent_validator
                 check_exp = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
                 check_wan = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
+                frame_ids = [agent.frame_idx if isinstance(agent, DQNAgent) else None for agent in self.agents]
 
                 for i, agent in enumerate(self.agents):
                     # Log all metrics in combined plots
@@ -200,6 +204,8 @@ class Trainer:
                     agent.writer.add_scalar('Check/Wanderer/acc', check_wan[i][0], step)
                     agent.writer.add_scalar('Check/Explorer/std', check_exp[i][1], step)
                     agent.writer.add_scalar('Check/Wanderer/std', check_wan[i][1], step)
+                    if frame_ids[i] is not None:
+                        agent.writer.add_scalar('Check/frame_id', frame_ids[i], step)
                     if check_exp[i][2] is not None:
                         agent.writer.add_scalar('Check/Explorer/top_a', check_exp[i][2], step)
                     if check_wan[i][2] is not None:
