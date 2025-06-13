@@ -3,6 +3,7 @@ import io
 import math
 import numpy as np
 import scipy.special as sp
+from scipy.signal import correlate2d
 import heapq
 
 import pickle as pkl
@@ -313,9 +314,12 @@ def get_state_conv(player_id, entities, lines, size):
     agent_entity = None
     for e in entities:
         if e['id'] == player_id:
-            agent_pos = (e['x'], e['y'])
             agent_entity = e
-    assert agent_entity is not None
+            break
+
+    assert agent_entity is not None, f"Agent with id {player_id} not found in entities"
+
+    agent_pos = (agent_entity['x'], agent_entity['y'])
     curr_map = [[MAP_MAP['#']] * int(size * 2 + 1) for i in range(int(size * 2 + 1))]
     for rel_x in range(-size, size + 1):
         for rel_y in range(-size, size + 1):
@@ -500,6 +504,117 @@ class DQNSolver(Solver):
         model_output = calculate_output_np(data, self.weights, len(self.actions))[0]
         return model_output
 
+    def calculate_action(self, entities, player_pos, player_mask):
+        model_output = self.calculate_output(entities, player_pos)
+        player_mask = player_mask[:len(self.actions)]
+        q_vals_v = np.ma.array(model_output, mask=player_mask)
+        action_id = q_vals_v.argmax()
+        return action_id
+
+
+class DQNConvSolver(Solver):
+    def __init__(self, info, actions, weights: dict, size=3):
+        super(DQNConvSolver, self).__init__(info, actions)
+        self.weights = weights
+        self.size = size
+        assert self.weights['fc2.weight'].shape[0] == len(actions)
+        
+    def calculate_output(self, entities, player_pos):
+        # player_pos is already provided as a parameter, so we don't need to extract it from entities
+        player_id = entities[0]['id']
+        state = get_state_conv(player_id, entities, self.info['lines'], self.size)
+        
+        features = []
+        for k in [
+            'map',
+            'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
+            'WANDERER_param0', 'WANDERER_param1',
+            'SLASHER_param0', 'SLASHER_param1',
+            'EFFECT_PLAN_param0',
+            'EFFECT_LIGHT_param0',
+            'EFFECT_SHELTER_param0',
+            'EFFECT_YELL_param0'
+            ]:
+            features.append(state[k])
+
+        data = np.array([features])
+        
+        weights = self.weights
+        conv1 = weights['conv1.weight']
+        conv1_b = weights['conv1.bias']
+        conv2 = weights['conv2.weight']
+        conv2_b = weights['conv2.bias']
+        fc1 = weights['fc1.weight']
+        fc1_b = weights['fc1.bias']
+        fc2 = weights['fc2.weight']
+        fc2_b = weights['fc2.bias']
+        bn1 = weights['bn1.weight']
+        bn1_b = weights['bn1.bias']
+        bn1_mean = weights['bn1.running_mean']
+        bn1_var = weights['bn1.running_var']
+        bn2 = weights['bn2.weight']
+        bn2_b = weights['bn2.bias']
+        bn2_mean = weights['bn2.running_mean']
+        bn2_var = weights['bn2.running_var']
+
+        x = data
+        x = self._conv2d(x, conv1, conv1_b)
+        x = self._batchnorm2d(x, bn1_mean, bn1_var, bn1, bn1_b)
+        x = self._relu(x)
+        x = self._conv2d(x, conv2, conv2_b)
+        x = self._batchnorm2d(x, bn2_mean, bn2_var, bn2, bn2_b)
+        x = self._relu(x)
+        x = self._maxpool2d(x)
+
+        # # Flatten
+        N = x.shape[0]
+        x = x.reshape(N, -1)
+
+        # # FC layers
+        x = self._relu(np.dot(x, fc1.T) + fc1_b)
+        x = np.dot(x, fc2.T) + fc2_b
+        
+        return x[0]
+    
+    def _relu(self, x):
+        return np.maximum(0, x)
+
+    def _maxpool2d(self, x, kernel_size=2, stride=2):
+        N, C, H, W = x.shape
+        out_H = H // stride
+        out_W = W // stride
+        pooled = np.zeros((N, C, out_H, out_W))
+        for n in range(N):
+            for c in range(C):
+                for i in range(out_H):
+                    for j in range(out_W):
+                        h_start = i * stride
+                        w_start = j * stride
+                        pooled[n, c, i, j] = np.max(
+                            x[n, c, h_start:h_start + kernel_size, w_start:w_start + kernel_size]
+                        )
+        return pooled
+
+    def _conv2d(self, x, weight, bias, padding=1):
+        N, C_in, H, W = x.shape
+        C_out, _, kH, kW = weight.shape
+        x_padded = np.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)), mode='constant')
+        out = np.zeros((N, C_out, H, W))
+
+        for n in range(N):
+            for cout in range(C_out):
+                for cin in range(C_in):
+                    out[n, cout] += correlate2d(
+                        x_padded[n, cin], weight[cout, cin], mode='valid'
+                    )
+                out[n, cout] += bias[cout]
+        return out
+
+    def _batchnorm2d(self, x, mean, var, weight, bias, eps=1e-5):
+        # x: [N, C, H, W]
+        return weight[None, :, None, None] * ((x - mean[None, :, None, None]) / np.sqrt(var[None, :, None, None] + eps)) + bias[None, :, None, None]
+
+    
     def calculate_action(self, entities, player_pos, player_mask):
         model_output = self.calculate_output(entities, player_pos)
         player_mask = player_mask[:len(self.actions)]
