@@ -77,7 +77,9 @@ class DQNAgent(NNAgent):
             episode_buffer = ExperienceBuffer(
                 state_encoder, **buffer_params,
             )
-        assert len(set(epsilon_params) - set(['start', 'final', 'decay', 'reset'])) == 0
+        assert len(set(epsilon_params) - set([
+            'start', 'final', 'decay', 'reset', 'reset_coef',
+        ])) == 0
         super(DQNAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -87,6 +89,7 @@ class DQNAgent(NNAgent):
             epsilon_final=epsilon_params.get('final', EPSILON_FINAL),
             epsilon_decay_last_frame=epsilon_params.get('decay', EPSILON_DECAY_LAST_FRAME),
             epsilon_reset=epsilon_params.get('reset'),
+            epsilon_reset_coef=epsilon_params.get('reset_coef'),
             train=train,
             verbose=verbose,
             model=model,

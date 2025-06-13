@@ -14,7 +14,8 @@ class NNAgent(BaseAgent):
     def __init__(self, state_type, action_space_n,
                  model,
                  lr, gamma,
-                 epsilon_start, epsilon_final, epsilon_decay_last_frame, epsilon_reset,
+                 epsilon_start, epsilon_final, epsilon_decay_last_frame,
+                 epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
                  train, verbose=False):
         super(NNAgent, self).__init__(
@@ -27,6 +28,7 @@ class NNAgent(BaseAgent):
         self.eps = self.epsilon_start
         self.epsilon_decay_last_frame = epsilon_decay_last_frame
         self.epsilon_reset = epsilon_reset
+        self.epsilon_reset_coef = epsilon_reset_coef
         self.gamma = gamma
         self.verbose = verbose
         self.episode_buffer = episode_buffer
@@ -76,9 +78,9 @@ class NNAgent(BaseAgent):
     def _update_eps(self):
         self.eps -= self.epsilon_start / self.epsilon_decay_last_frame
         if self.epsilon_reset is not None:
-            if self.frame_idx == self.epsilon_reset:
+            if self.frame_idx >= self.epsilon_reset:
                 self.eps = min(self.epsilon_start, self.eps * 2)
-                self.epsilon_reset *= 2
+                self.epsilon_reset *= self.epsilon_reset_coef
 
     def generate_random_step(self, actions_masked, player_mask):
         raise NotImplementedError
