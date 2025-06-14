@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from src.envs.models.dqn_model_ext import DQNExt
+from src.envs.models.ext_state_model import ExtStateModel
 
 class DQNExtByKind(nn.Module):
     def __init__(self,
@@ -23,7 +23,7 @@ class DQNExtByKind(nn.Module):
         self.entity_kinds = entity_kinds
         
         self.model_by_kind = nn.ModuleDict({
-            kind: DQNExt(
+            kind: ExtStateModel(
                     vocab_size=vocab_size,
                     num_dirs=num_dirs,
                     embed_dim=embed_dim,

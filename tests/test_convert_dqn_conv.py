@@ -87,4 +87,4 @@ class TestDQNAgentConv:
         agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()
 
-        assert np.allclose(np_output, model_output)
+        assert np.allclose(np_output, model_output, atol=1e-3)

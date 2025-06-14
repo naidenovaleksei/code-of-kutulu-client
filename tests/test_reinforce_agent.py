@@ -3,20 +3,21 @@ import numpy as np
 import torch
 
 from src.envs.agents.reinforce_agent import REINFORCEAgent
-from src.envs.models.reinforce_model import REINFORCEModel
+from src.envs.models.ext_state_model import ExtStateModel
 from src.game.template import ENTITY_TOKENS
 
 
 def test_reinforce_model_output():
     """Test that the REINFORCE model produces valid probability distributions"""
-    model = REINFORCEModel(
+    model = ExtStateModel(
         vocab_size=len(ENTITY_TOKENS) + 1,
         num_dirs=5,
         features_dim=7,
         embed_dim=32,
         hidden_dim=32,
         inner_dim=16,
-        num_classes=5
+        num_classes=5,
+        return_softmax=True,
     )
     
     # Create dummy input data
@@ -60,7 +61,7 @@ def test_reinforce_agent_creation():
     )
     
     # Check that model was initialized
-    assert isinstance(agent.model, REINFORCEModel)
+    assert isinstance(agent.model, ExtStateModel)
     
     # Check that episode buffer was initialized
     assert agent.episode_buffer is not None

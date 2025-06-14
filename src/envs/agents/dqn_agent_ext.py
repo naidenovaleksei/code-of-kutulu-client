@@ -5,7 +5,7 @@ from src.envs.agents.dqn_agent import (
 from src.envs.buffers import (
     BaseStateEncoder,
 )
-from src.envs.models.dqn_model_ext import DQNExt
+from src.envs.models.ext_state_model import ExtStateModel
 from src.game.template import (
     parse_state,
     ENTITY_TOKENS,
@@ -36,7 +36,7 @@ class DQNAgentExt(DQNAgentBase):
         super(DQNAgentExt, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
-            model=DQNExt(
+            model=ExtStateModel(
                 vocab_size=len(ENTITY_TOKENS) + 1,
                 num_classes=action_space_n,
                 **model_params,

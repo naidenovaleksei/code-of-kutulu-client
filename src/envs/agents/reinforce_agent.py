@@ -1,9 +1,6 @@
 import collections
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
 
 from src.envs.agents.nn_agent import(
     NNAgent,
@@ -13,21 +10,24 @@ from src.envs.agents.nn_agent import(
     EPSILON_FINAL,
     EPSILON_DECAY_LAST_FRAME,
 )
+from src.envs.agents.dqn_agent_ext import (
+    DQNStateEncoderExt,
+)
 from src.game.template import (
-    parse_state,
     ENTITY_TOKENS,
 )
-from src.envs.models.reinforce_model import REINFORCEModel
+from src.envs.models.ext_state_model import ExtStateModel
 
 Episode = collections.namedtuple('Episode', field_names=['states', 'actions', 'rewards'])
 
 
 class EpisodeBuffer:
-    def __init__(self):
+    def __init__(self, state_encoder):
         self.states = []
         self.actions = []
         self.rewards = []
         self.current_episode = None
+        self.state_encoder = state_encoder
         
     def start_episode(self):
         self.states = []
@@ -53,21 +53,9 @@ class EpisodeBuffer:
         self.rewards = []
         
         return self.current_episode
-    
-    def encode_states(self, states, return_tensors=True):
-        data = dict(
-            entity_kind=[],
-            entity_features=[],
-            entity_dir=[],
-        )
-        for state in states:
-            kind_list, features_list, dir_list = parse_state(state)
-            data['entity_kind'].append(kind_list)
-            data['entity_features'].append(features_list)
-            data['entity_dir'].append(dir_list)
-        if return_tensors:
-            data = {k: torch.tensor(v) for k,v in data.items()}
-        return data
+
+    def encode_states(self, states):
+        return self.state_encoder.encode_states(states)
 
 
 class REINFORCEAgent(NNAgent):
@@ -88,11 +76,14 @@ class REINFORCEAgent(NNAgent):
             epsilon_reset_coef=epsilon_params.get('reset_coef'),
             train=train,
             verbose=verbose,
-            model=REINFORCEModel(
+            model=ExtStateModel(
                 num_classes=action_space_n,
                 vocab_size=len(ENTITY_TOKENS) + 1,
+                return_softmax=True,
                 **model_params),
-            episode_buffer=EpisodeBuffer(),
+            episode_buffer=EpisodeBuffer(
+                state_encoder=DQNStateEncoderExt(),
+            ),
         )
         self.episode_idx = 0
         self.episode_buffer.start_episode()

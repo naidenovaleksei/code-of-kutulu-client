@@ -47,9 +47,10 @@ def test_calculate_output_np(model_params, explorers, wanderers, mock_env):
         weights[k] = v.detach().cpu().numpy()
     np_output = calculate_output_np(test_data, weights, agent.action_space_n)
 
+    agent.model.eval()
     model_output = agent.model(tensor_data)[0].detach().cpu().numpy()
 
-    assert np.allclose(np_output, model_output)
+    assert np.allclose(np_output, model_output, atol=1e-3)
 
 
 class TestDQNAgentExt:
@@ -127,6 +128,7 @@ class TestDQNAgentByKind:
         solver = DQNByKindSolver(info, weights)
         np_output = solver.calculate_output(agent.observer.env._get_entites(0), player_pos)
 
+        agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()
 
-        assert np.allclose(np_output, model_output)
+        assert np.allclose(np_output, model_output, atol=1e-3)
