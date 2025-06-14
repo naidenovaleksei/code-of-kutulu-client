@@ -1,9 +1,9 @@
-import collections
 import numpy as np
 
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
     KutuluClosestExtObserver,
+    KutuluConvObserver,
 )
 
 class BaseAgent:
@@ -14,12 +14,14 @@ class BaseAgent:
         self.observer = None
         self.state_actions = None
         self.output_std = np.inf
-    
+
     def set_env(self, env):
         if self.state_type == 'closest':
             self.observer = KutuluClosestObserver(env)
         elif self.state_type == 'closest_ext':
             self.observer = KutuluClosestExtObserver(env)
+        elif self.state_type == 'conv':
+            self.observer = KutuluConvObserver(env, self.size)
         else:
             ValueError('unknown state_type: {self.state_type}')
 

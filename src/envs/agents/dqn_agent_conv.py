@@ -11,7 +11,7 @@ from src.envs.buffers import (
 from src.envs.agents.dqn_agent import (
     DQNAgentBase,
 )
-from src.envs.models.dqn_model_conv import DQNConv
+from src.envs.models.conv_state_model import ConvStateModel
 
 
 class DQNStateEncoderConv(BaseStateEncoder):
@@ -34,7 +34,7 @@ class DQNStateEncoderConv(BaseStateEncoder):
         if return_tensors:
             data = torch.FloatTensor(np.array(data))
         return data
-    
+
     def state_rotation_augment(self, state, clockwise_dir):
         return {
             k: np.rot90(v, k=-clockwise_dir)
@@ -43,13 +43,13 @@ class DQNStateEncoderConv(BaseStateEncoder):
 
 
 class DQNAgentConv(DQNAgentBase):
-    def __init__(self, state_type, action_space_n, model_params=None, size=3, loss='mse', **kw):  
+    def __init__(self, state_type, action_space_n, model_params=None, size=3, **kw):
         if model_params is None:
             model_params = {}
         super(DQNAgentConv, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
-            model=DQNConv(
+            model=ConvStateModel(
                 num_classes=action_space_n,
                 size=size,
                 **model_params,
@@ -58,12 +58,6 @@ class DQNAgentConv(DQNAgentBase):
             **kw
         )
         self.size = size
-        if loss == 'mse':
-            self.criterion = nn.MSELoss()
-        elif loss == 'huber':
-            self.criterion = nn.HuberLoss()
-        else:
-            raise ValueError(f'wrong loss: {loss}')
 
     def set_env(self, env):
         assert self.state_type == 'conv'

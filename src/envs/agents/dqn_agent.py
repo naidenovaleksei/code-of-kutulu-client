@@ -92,6 +92,7 @@ class DQNAgentBase(NNAgent):
         )
         self.replay_start_size = replay_start_size
         self.sync_target_frames = sync_target_frames
+        self.sync_target_frames_inc = sync_target_frames
         self.batch_size = batch_size
         self.prioritized_replay = prioritized_replay
 
@@ -124,8 +125,9 @@ class DQNAgentBase(NNAgent):
             self._train_model()
 
     def _train_model(self):
-        if self.frame_idx % self.sync_target_frames == 0:
+        if self.frame_idx >= self.sync_target_frames:
             self.tgt_net.load_state_dict(self.model.state_dict())
+            self.sync_target_frames += self.sync_target_frames_inc
 
         self.model.train()
         self.optimizer.zero_grad()
