@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -31,8 +32,14 @@ class DQNStateEncoderConv(BaseStateEncoder):
                 features.append(state[k])
             data.append(features)
         if return_tensors:
-            data = torch.FloatTensor(data)
+            data = torch.FloatTensor(np.array(data))
         return data
+    
+    def state_rotation_augment(self, state, clockwise_dir):
+        return {
+            k: np.rot90(v, k=-clockwise_dir)
+            for k, v in state.items()
+        }
 
 
 class DQNAgentConv(DQNAgent):
