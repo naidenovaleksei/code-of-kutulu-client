@@ -25,7 +25,7 @@ class REINFORCEAgent(ActorAgent):
     def __init__(self, state_type, action_space_n,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params=None,
-                 train=False, verbose=False, entropy_coeff=0, n_step=10):
+                 train=False, verbose=False, entropy_coef=0, n_step=10):
         if model_params is None:
             model_params = {}
         if state_type == 'closest_ext':
@@ -57,7 +57,7 @@ class REINFORCEAgent(ActorAgent):
             model=model,
             state_encoder=state_encoder,
         )
-        self.entropy_coeff = entropy_coeff
+        self.entropy_coef = entropy_coef
         self.n_step = n_step
     
     def _train_model(self):
@@ -77,9 +77,9 @@ class REINFORCEAgent(ActorAgent):
         # Calculate returns
         returns = self._calculate_returns(rewards)
 
-        if self.entropy_coeff > 0:
+        if self.entropy_coef > 0:
             entropy = -(log_probs * log_probs.exp()).sum(dim=1)  # энтропия для каждого шага
-            loss = -(selected_log_probs * returns).mean() - self.entropy_coeff * entropy.mean()
+            loss = -(selected_log_probs * returns).mean() - self.entropy_coef * entropy.mean()
         else:
             # Calculate policy loss (negative because we want to maximize expected return)
             loss = -(selected_log_probs * returns).mean()
