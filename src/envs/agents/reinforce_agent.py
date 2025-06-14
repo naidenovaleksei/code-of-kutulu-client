@@ -51,7 +51,7 @@ class REINFORCEAgent(NNAgent):
                  epsilon_params,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
-                 train=False, verbose=False):
+                 train=False, verbose=False, entropy_coeff=0):
         if state_type == 'closest_ext':
             model = ExtStateModel(
                 num_classes=action_space_n,
@@ -88,6 +88,10 @@ class REINFORCEAgent(NNAgent):
         )
         self.episode_idx = 0
         self.episode_buffer.start_episode()
+        self.entropy_coeff = entropy_coeff
+
+    def get_eps(self):
+        return 1
 
     def generate_random_step(self, actions_masked, player_mask):
         ps = actions_masked.filled(0)
@@ -128,9 +132,13 @@ class REINFORCEAgent(NNAgent):
         # Calculate returns
         returns = self._calculate_returns(rewards)
         
-        # Calculate policy loss (negative because we want to maximize expected return)
-        loss = -(selected_log_probs * returns).mean()
-        
+        if self.entropy_coeff > 0:
+            entropy = -(log_probs * log_probs.exp()).sum(dim=1)  # энтропия для каждого шага
+            loss = -(selected_log_probs * returns).mean() - self.entropy_coeff * entropy.mean()
+        else:
+            # Calculate policy loss (negative because we want to maximize expected return)
+            loss = -(selected_log_probs * returns).mean()
+
         # Backpropagate and update
         loss.backward()
         self.optimizer.step()
