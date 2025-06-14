@@ -52,12 +52,9 @@ def test_reinforce_model_output():
 def test_reinforce_agent_creation():
     """Test that the REINFORCE agent can be created and initialized properly"""
     agent = REINFORCEAgent(
-        state_type='ext',
+        state_type='closest_ext',
         action_space_n=5,
         train=True,
-        epsilon_params={
-            'reset': None,
-        },
     )
     
     # Check that model was initialized
@@ -70,13 +67,10 @@ def test_reinforce_agent_creation():
 def test_reinforce_agent_returns_calculation():
     """Test that returns are calculated correctly"""
     agent = REINFORCEAgent(
-        state_type='ext',
+        state_type='closest_ext',
         action_space_n=5,
         gamma=0.9,
         train=True,
-        epsilon_params={
-            'reset': None,
-        },
     )
     
     # Test with simple rewards sequence

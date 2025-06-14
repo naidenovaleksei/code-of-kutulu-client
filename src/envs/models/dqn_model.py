@@ -22,7 +22,9 @@ class DQN(nn.Module):
         #     nn.Linear(hidden_dim * 2, num_classes),
         # )
         # self.softmax = nn.Softmax(dim=-1)
-        
+    
+    def get_policy(self, x):
+        return self.forward(x)
 
     def forward(self, data):
         assert data['closest_explorer_dir'].shape[-1] == self.num_classes

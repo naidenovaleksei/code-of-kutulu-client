@@ -59,4 +59,3 @@ class BaseAgent:
 
     def load_agent(self, checkpoint_dir):
         raise NotImplementedError
-        

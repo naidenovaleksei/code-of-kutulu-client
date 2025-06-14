@@ -17,6 +17,9 @@ class ExtStateModel(nn.Module):
         self.num_classes = num_classes
         self.num_dirs = num_dirs
         self.return_softmax = return_softmax
+    
+    def get_policy(self, x):
+        return self.forward(x)
 
     def forward(self, data):
         assert data['entity_dir'].shape[-1] == self.num_dirs

@@ -55,7 +55,7 @@ class NNAgent(BaseAgent):
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
         self.model.eval()
-        model_output = self.model(data)[0].detach().cpu().numpy()
+        model_output = self.model.get_policy(data)[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
 
         self.output_std = actions_masked.max() - (actions_masked.sum() - actions_masked.max()) / (np.sum(valid_actions) - 1)

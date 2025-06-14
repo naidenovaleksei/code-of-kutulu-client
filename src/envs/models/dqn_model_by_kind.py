@@ -35,6 +35,9 @@ class DQNExtByKind(nn.Module):
             )
             for kind in self.entity_kinds
         })
+    
+    def get_policy(self, x):
+        return self.forward(x)
 
     def forward(self, data_by_kind):
         output_by_kind = [

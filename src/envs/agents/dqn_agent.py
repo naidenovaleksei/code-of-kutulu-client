@@ -104,7 +104,6 @@ class DQNAgentBase(NNAgent):
         else:
             raise ValueError(f'wrong loss: {loss}')
 
-
     def generate_random_step(self, actions_masked, player_mask):
         ps = np.ma.array(np.ones(self.action_space_n), mask=player_mask).filled(0)
         if ps.sum() == 0:

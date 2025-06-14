@@ -30,6 +30,9 @@ class ConvStateModel(nn.Module):
             x = F.softmax(x, dim=1)
 
         return x
+    
+    def get_policy(self, x):
+        return self.forward(x)
 
     def get_log_probs(self, data):
         """Return log probabilities of actions for policy gradient update"""

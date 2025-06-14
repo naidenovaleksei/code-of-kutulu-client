@@ -58,7 +58,3 @@ class DQNAgentConv(DQNAgentBase):
             **kw
         )
         self.size = size
-
-    def set_env(self, env):
-        assert self.state_type == 'conv'
-        self.observer = KutuluConvObserver(env, self.size)

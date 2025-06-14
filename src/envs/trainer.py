@@ -14,6 +14,8 @@ from src.envs.agents.dqn_agent import DQNAgent
 from src.envs.agents.dqn_agent_ext import DQNAgentExt
 from src.envs.agents.dqn_agent_by_kind import DQNAgentByKind
 from src.envs.agents.reinforce_agent import REINFORCEAgent
+from src.envs.agents.a2c_agent import A2CAgent
+from src.envs.agents.dqn_agent import DQNAgentBase
 from src.envs.agents.dqn_agent_conv import DQNAgentConv
 from src.envs.strategy import RandomStrategy
 
@@ -91,6 +93,8 @@ class Trainer:
                 agent = DQNAgentExt(**agent_info)
             elif _type == 'reinforce':
                 agent = REINFORCEAgent(**agent_info)
+            elif _type == 'a2c':
+                agent = A2CAgent(**agent_info)
             elif _type == 'qdn_by_kind':
                 agent = DQNAgentByKind(**agent_info)
             elif _type == 'qdn_conv':
@@ -151,9 +155,11 @@ class Trainer:
                 if agent.train:
                     if env.is_game_over_for_player(player_id):
                         agent.train_step(reward, True, None)
-                    elif not isinstance(agent, REINFORCEAgent) and player_id in env.active_players():
+                    elif isinstance(agent, DQNAgentBase) and player_id in env.active_players():
                         new_state = agent.get_state(player_id)
                         agent.train_step(reward, game_over, new_state)
+                    elif isinstance(agent, A2CAgent) and player_id in env.active_players() and env.turn % agent.n_step == 0:
+                        agent.train_step(reward, game_over, None)
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 

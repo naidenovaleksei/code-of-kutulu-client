@@ -5,9 +5,6 @@ from tests.utils import calculate_entities
 from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.game.template import (
     calculate_output_np,
-    DEFAULT_KUTULU_ACTIONS,
-    DQNSolver,
-    DQNByKindSolver,
 )
 
 
@@ -29,7 +26,6 @@ def test_calculate_output_np(model_params, explorers, wanderers, mock_env):
         state_type='closest_ext',
         action_space_n=5,
         model_params=model_params,
-        epsilon_params={'start': 1.0, 'final': 0.01, 'decay': 10000},
     )
     player_pos = (3, 3)
     entities = calculate_entities(player_pos, explorers, wanderers)
