@@ -54,6 +54,7 @@ class NNAgent(BaseAgent):
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
+        self.model.eval()
         model_output = self.model(data)[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
 

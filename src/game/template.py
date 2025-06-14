@@ -15,6 +15,7 @@ data1 = b'data1data1data1'
 data2 = b'data2data2data2'
 
 mode = 'mode'
+SIZE = 3
 
 
 MOVE_REL_POS = {
@@ -513,7 +514,7 @@ class DQNSolver(Solver):
 
 
 class DQNConvSolver(Solver):
-    def __init__(self, info, actions, weights: dict, size=3):
+    def __init__(self, info, weights, actions=DEFAULT_KUTULU_ACTIONS, size=3):
         super(DQNConvSolver, self).__init__(info, actions)
         self.weights = weights
         self.size = size
@@ -688,6 +689,8 @@ def main():
         solver = DQNSolver(info, USED_ACTIONS, checkpoint_data)
     elif mode == 'dqn_by_kind':
         solver = DQNByKindSolver(info, checkpoint_data, USED_ACTIONS)
+    elif mode == 'dqn_conv':
+        solver = DQNConvSolver(info, checkpoint_data, USED_ACTIONS, SIZE)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     
