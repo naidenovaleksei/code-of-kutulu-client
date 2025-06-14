@@ -3,7 +3,7 @@ from src.envs.buffers import (
     BaseStateEncoder,
 )
 from src.envs.agents.dqn_agent import (
-    DQNAgent,
+    DQNAgentBase,
 )
 from src.game.template import (
     parse_state_by_kind,
@@ -38,7 +38,7 @@ class DQNStateEncoderByKind(BaseStateEncoder):
         return data_by_kind
 
 
-class DQNAgentByKind(DQNAgent):
+class DQNAgentByKind(DQNAgentBase):
     def __init__(self, state_type, action_space_n, model_params=None, **kw):
         if model_params is None:
             model_params = {}

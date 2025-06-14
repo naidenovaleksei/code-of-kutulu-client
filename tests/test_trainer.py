@@ -12,6 +12,8 @@ def agents_info():
             'type': 'qdn_by_kind',
             'action_space_n': 8,
             'state_type': 'closest_ext',
+            'buffer_params': {'capacity': 100},
+            'epsilon_params': {},
         },
         {
             'train': False,

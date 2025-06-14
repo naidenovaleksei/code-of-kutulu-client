@@ -9,7 +9,7 @@ from src.envs.buffers import (
     BaseStateEncoder,
 )
 from src.envs.agents.dqn_agent import (
-    DQNAgent,
+    DQNAgentBase,
 )
 from src.envs.models.dqn_model_conv import DQNConv
 
@@ -42,7 +42,7 @@ class DQNStateEncoderConv(BaseStateEncoder):
         }
 
 
-class DQNAgentConv(DQNAgent):
+class DQNAgentConv(DQNAgentBase):
     def __init__(self, state_type, action_space_n, model_params=None, size=3, loss='mse', **kw):  
         if model_params is None:
             model_params = {}

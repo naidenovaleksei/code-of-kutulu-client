@@ -72,9 +72,8 @@ class EpisodeBuffer:
 
 class REINFORCEAgent(NNAgent):
     def __init__(self, state_type, action_space_n,
+                 epsilon_params,
                  lr=LEARNING_RATE,
-                 epsilon_start=EPSILON_START, epsilon_final=EPSILON_FINAL,
-                 epsilon_decay_last_frame=EPSILON_DECAY_LAST_FRAME,
                  gamma=GAMMA, model_params={},
                  train=False, verbose=False):
         super(REINFORCEAgent, self).__init__(
@@ -82,9 +81,11 @@ class REINFORCEAgent(NNAgent):
             action_space_n=action_space_n,
             lr=lr,
             gamma=gamma,
-            epsilon_start=epsilon_start,
-            epsilon_final=epsilon_final,
-            epsilon_decay_last_frame=epsilon_decay_last_frame,
+            epsilon_start=epsilon_params.get('start', EPSILON_START),
+            epsilon_final=epsilon_params.get('final', EPSILON_FINAL),
+            epsilon_decay_last_frame=epsilon_params.get('decay', EPSILON_DECAY_LAST_FRAME),
+            epsilon_reset=epsilon_params.get('reset'),
+            epsilon_reset_coef=epsilon_params.get('reset_coef'),
             train=train,
             verbose=verbose,
             model=REINFORCEModel(

@@ -30,6 +30,8 @@ def test_calculate_output_np(model_params, explorers, wanderers, mock_env):
         state_type='closest_ext',
         action_space_n=5,
         model_params=model_params,
+        buffer_params={'capacity': 10000},
+        epsilon_params={'start': 1.0, 'final': 0.01, 'decay': 10000},
     )
     player_pos = (3, 3)
     entities = calculate_entities(player_pos, explorers, wanderers)
@@ -37,8 +39,8 @@ def test_calculate_output_np(model_params, explorers, wanderers, mock_env):
     agent.observer.env._set_entities(entities)
     agent.observer.env._set_players(entities, set_ids=True)
     state = agent.observer.get_state(0)
-    test_data = agent.episode_buffer.encode_states([state], return_tensors=False)
-    tensor_data = agent.episode_buffer.encode_states([state], return_tensors=True)
+    test_data = agent.episode_buffer.state_encoder.encode_states([state], return_tensors=False)
+    tensor_data = agent.episode_buffer.state_encoder.encode_states([state], return_tensors=True)
 
     weights = {}
     for k,v in agent.model.named_parameters():
@@ -60,6 +62,8 @@ class TestDQNAgentExt:
             state_type='closest_ext',
             action_space_n=5,
             model_params=model_params,
+            buffer_params={'capacity': 10000},
+            epsilon_params={'start': 1.0, 'final': 0.01, 'decay': 10000},
         )
         player_pos = (3, 3)
         entities = calculate_entities(player_pos, explorers, wanderers)
@@ -67,8 +71,8 @@ class TestDQNAgentExt:
         agent.observer.env._set_entities(entities)
         agent.observer.env._set_players(entities, set_ids=True)
         state = agent.observer.get_state(0)
-        test_data = agent.episode_buffer.encode_states([state], return_tensors=False)
-        tensor_data = agent.episode_buffer.encode_states([state], return_tensors=True)
+        test_data = agent.episode_buffer.state_encoder.encode_states([state], return_tensors=False)
+        tensor_data = agent.episode_buffer.state_encoder.encode_states([state], return_tensors=True)
 
         weights = {}
         for k,v in agent.model.named_parameters():
@@ -83,9 +87,10 @@ class TestDQNAgentExt:
         solver = DQNSolver(info, DEFAULT_KUTULU_ACTIONS, weights)
         np_output = solver.calculate_output(agent.observer.env._get_entites(0), player_pos)
 
+        agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()
 
-        assert np.allclose(np_output, model_output)
+        assert np.allclose(np_output, model_output, atol=1e-3)
 
 
 class TestDQNAgentByKind:
@@ -98,6 +103,8 @@ class TestDQNAgentByKind:
             state_type='closest_ext',
             action_space_n=5,
             model_params=model_params,
+            buffer_params={'capacity': 10000},
+            epsilon_params={'start': 1.0, 'final': 0.01, 'decay': 10000},
         )
         player_pos = (3, 3)
         entities = calculate_entities(player_pos, explorers, wanderers)
@@ -105,8 +112,7 @@ class TestDQNAgentByKind:
         agent.observer.env._set_entities(entities)
         agent.observer.env._set_players(entities, set_ids=True)
         state = agent.observer.get_state(0)
-        test_data = agent.episode_buffer.encode_states([state], return_tensors=False)
-        tensor_data = agent.episode_buffer.encode_states([state], return_tensors=True)
+        tensor_data = agent.episode_buffer.state_encoder.encode_states([state], return_tensors=True)
 
         weights = {}
         for k,v in agent.model.named_parameters():

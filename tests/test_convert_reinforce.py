@@ -45,6 +45,9 @@ def test_convert_qdn_ext():
         'state_type': 'closest_ext',
         'gamma': 0.9,
         'action_space_n': 8,
+        'epsilon_params': {
+            'reset': None,
+        },
     }
     agent = REINFORCEAgent(**info)
     weights = {}

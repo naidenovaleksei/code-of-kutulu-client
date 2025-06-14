@@ -51,24 +51,19 @@ class DQNStateEncoder(BaseStateEncoder):
         return data
 
 
-class DQNAgent(NNAgent):
+class DQNAgentBase(NNAgent):
     def __init__(self, state_type, action_space_n,
                  buffer_params,
                  epsilon_params,
+                 model,
+                 state_encoder,
                  lr=LEARNING_RATE,
                  replay_start_size=REPLAY_START_SIZE,
                  batch_size=BATCH_SIZE,
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  gamma=GAMMA,
-                 model=None, model_params=None, state_encoder=None,
                  train=False, verbose=False,
-                 prioritized_replay=False):
-        if model is None:
-            if model_params is None:
-                model_params = {}
-            model = DQN(action_space_n, **model_params)
-        if state_encoder is None:
-            state_encoder = DQNStateEncoder()
+                 prioritized_replay=False, loss='mse'):
         if prioritized_replay:
             episode_buffer = PrioritizedExperienceBuffer(
                 state_encoder, **buffer_params,
@@ -80,7 +75,7 @@ class DQNAgent(NNAgent):
         assert len(set(epsilon_params) - set([
             'start', 'final', 'decay', 'reset', 'reset_coef',
         ])) == 0
-        super(DQNAgent, self).__init__(
+        super(DQNAgentBase, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
             lr=lr,
@@ -101,7 +96,13 @@ class DQNAgent(NNAgent):
         self.prioritized_replay = prioritized_replay
 
         self.tgt_net = copy.deepcopy(self.model)
-        self.criterion = nn.MSELoss(reduction='none')  # Use 'none' to get per-sample losses for priority updates
+        if loss == 'mse':
+            self.criterion = nn.MSELoss(reduction='none')
+        elif loss == 'huber':
+            self.criterion = nn.HuberLoss(reduction='none')
+        else:
+            raise ValueError(f'wrong loss: {loss}')
+
 
     def generate_random_step(self, actions_masked, player_mask):
         ps = np.ma.array(np.ones(self.action_space_n), mask=player_mask).filled(0)
@@ -173,3 +174,19 @@ class DQNAgent(NNAgent):
 
         if self.verbose:
             print(f"Loss: {loss.item():.4f}")
+
+
+class DQNAgent(DQNAgentBase):
+    def __init__(self, state_type, action_space_n, model_params=None, loss='mse', **kw):  
+        if model_params is None:
+            model_params = {}
+        super(DQNAgent, self).__init__(
+            state_type=state_type,
+            action_space_n=action_space_n,
+            model=DQN(
+                num_classes=action_space_n,
+                **model_params,
+            ),
+            state_encoder=DQNStateEncoder(),
+            **kw
+        )

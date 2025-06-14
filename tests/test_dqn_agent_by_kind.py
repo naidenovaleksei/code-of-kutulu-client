@@ -6,7 +6,7 @@ from src.game.template import (
     parse_state_by_kind,
     ENTITY_TOKENS,
 )
-from src.envs.agents.dqn_agent_by_kind import ExperienceBufferByKind, DQNAgentByKind
+from src.envs.agents.dqn_agent_by_kind import DQNStateEncoderByKind
 from src.envs.models.dqn_model_by_kind import DQNExtByKind
 
 
@@ -39,12 +39,11 @@ class TestDQNAgentByKind(unittest.TestCase):
             {'kind': 'WANDERER', 'id': 1, 'x': 5, 'y': 5, 'param0': 0, 'param1': 1, 'param2': 0, 
              'rel_x': 4, 'rel_y': 4, 'dist': 8, 'raw_dist': 8, 'on_los': 1, 'dir': (3, 4)},
         ]
-        
-        # Create a buffer
-        buffer = ExperienceBufferByKind(100)
+
+        state_encoder = DQNStateEncoderByKind()
         
         # Encode the state
-        result = buffer.encode_states([state])
+        result = state_encoder.encode_states([state])
         
         # Check the result
         self.assertIn('EXPLORER', result)

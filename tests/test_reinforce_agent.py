@@ -53,7 +53,10 @@ def test_reinforce_agent_creation():
     agent = REINFORCEAgent(
         state_type='ext',
         action_space_n=5,
-        train=True
+        train=True,
+        epsilon_params={
+            'reset': None,
+        },
     )
     
     # Check that model was initialized
@@ -69,7 +72,10 @@ def test_reinforce_agent_returns_calculation():
         state_type='ext',
         action_space_n=5,
         gamma=0.9,
-        train=True
+        train=True,
+        epsilon_params={
+            'reset': None,
+        },
     )
     
     # Test with simple rewards sequence
