@@ -80,6 +80,9 @@ class Trainer:
         self.agents = []
         for i, agent_info in enumerate(agents_info):
             agent_info = dict(agent_info)
+            _name = None
+            if 'name' in agent_info:
+                _name = agent_info.pop('name')
             _type = agent_info.pop('type')
             if _type == 'qlearning':
                 if agent_info['strategy'] == 'random':
@@ -103,7 +106,10 @@ class Trainer:
                 agent = DQNAgentConv(**agent_info)
             else:
                 raise ValueError(f'unknown kind: {_type}')
-            agent_dir = f'agent{i}_{_type}'
+            if _name is not None:
+                agent_dir = f'agent{i}_{_type}_{_name}'
+            else:
+                agent_dir = f'agent{i}_{_type}'
             agent_log_dir = os.path.join(self.log_dir, agent_dir)
             agent.writer = SummaryWriter(log_dir=agent_log_dir)
             if self.verbose:
