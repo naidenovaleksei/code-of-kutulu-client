@@ -72,9 +72,7 @@ class ActorAgent(NNAgent):
         exp = Experience(state, action, reward, game_over, None, observation)
         self.episode_buffer.append(exp)
 
-        # If the episode has ended, train on it
-        if game_over or reward is None:
-            self._train_model()
-            # Start a new episode
-            self.episode_buffer.start_episode()
-            self.episode_idx += 1
+        self._train_model()
+        # Start a new episode
+        self.episode_buffer.start_episode()
+        self.episode_idx += 1

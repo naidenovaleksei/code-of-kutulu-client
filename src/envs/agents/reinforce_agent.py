@@ -37,6 +37,7 @@ class REINFORCEAgent(ActorAgent):
             )
             state_encoder = DQNStateEncoderExt()
         elif state_type == 'conv':
+            model_params = dict(model_params)
             self.size = model_params.pop('size')
             model = ConvStateModel(
                 num_classes=action_space_n,
@@ -59,6 +60,10 @@ class REINFORCEAgent(ActorAgent):
         )
         self.entropy_coef = entropy_coef
         self.n_step = n_step
+    
+    def train_step(self, reward, game_over, new_state):
+        assert game_over
+        super().train_step(reward, game_over, new_state)
     
     def _train_model(self):
         # End the current episode and get the episode data
