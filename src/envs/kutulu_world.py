@@ -55,6 +55,7 @@ class KutuluWorldEnv(gym.Env):
         )
         self.seed = seed
         data = response.json()
+        self.game_id = data['gameId']
         self.constants = data['constants']
         self.reward_manager = KutuluRewardManager(
             spread_madness_per_turn=self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT'],
@@ -88,7 +89,10 @@ class KutuluWorldEnv(gym.Env):
 
         response = requests.post(
             f'{self.host}/turn',
-            json={'playerActions': player_actions}
+            json={
+                'playerActions': player_actions,
+                'gameId': self.game_id
+            }
         )
         data = response.json()
         self.turn = data['turn']

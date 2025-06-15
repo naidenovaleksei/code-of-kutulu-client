@@ -49,7 +49,8 @@ BRONZE_MAZES = [
 
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
-                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None):
+                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
+                 verbose=False):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
@@ -57,6 +58,7 @@ class Trainer:
         self.env_kwargs = env_kwargs or {}
         self.shuffle = shuffle
         self.actions = actions
+        self.verbose = verbose
 
         if exp_name is None:
             exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -104,6 +106,8 @@ class Trainer:
             agent_dir = f'agent{i}_{_type}'
             agent_log_dir = os.path.join(self.log_dir, agent_dir)
             agent.writer = SummaryWriter(log_dir=agent_log_dir)
+            if self.verbose:
+                print(f"agent {agent_dir}, type: {type(agent)}")
             self.agents.append(agent)
 
         self.agent_map = np.arange(len(self.agents))
@@ -128,13 +132,16 @@ class Trainer:
 
         return self.env
     
-    def play_rollout(self, seed=None, verbose=False):
+    def play_rollout(self, seed=None):
         env = self.reset_env(seed)
         rollout_rewards = []
         game_over = False
         if self.shuffle:
             np.random.shuffle(self.agent_map)
+        step = 0
         while not game_over:
+            assert env.turn == step
+            step += 1
             # action = env.sample_valid_action()
             # WAIT
             action = [4 for _ in range(len(self.agents))]
@@ -145,20 +152,31 @@ class Trainer:
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
-            if verbose:
-                self.env.viz_map()
+            if self.verbose:
+                print(f"step: {step}, rewards: {rewards}")
+                # self.env.viz_map()
             rollout_rewards.append(rewards)
 
             for player_id, reward in enumerate(rewards):
                 agent_id = self.agent_map[player_id]
                 agent = self.agents[agent_id]
                 if agent.train:
-                    if env.is_game_over_for_player(player_id):
-                        agent.train_step(reward, True, None)
+                    game_over = env.is_game_over_for_player(player_id)
+                    if game_over:
+                        if self.verbose:
+                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
+                                  f"train_step, reward: {reward}, game_over: {game_over}")
+                        agent.train_step(reward, game_over, None)
                     elif isinstance(agent, DQNAgentBase) and player_id in env.active_players():
+                        if self.verbose:
+                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
+                                  f"train_step, reward: {reward}, game_over: {game_over}")
                         new_state = agent.get_state(player_id)
                         agent.train_step(reward, game_over, new_state)
                     elif isinstance(agent, A2CAgent) and player_id in env.active_players() and env.turn % agent.n_step == 0:
+                        if self.verbose:
+                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
+                                  f"train_step, reward: {reward}, game_over: {game_over}")
                         agent.train_step(reward, game_over, None)
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
@@ -176,11 +194,17 @@ class Trainer:
         reward_list = []
         model_dir_list = []
 
-        for i in tqdm(range(self.num_experiments)):
+        exps = range(self.num_experiments)
+        if not self.verbose:
+            exps = tqdm(exps)
+        for i in exps:
+            step = i + 1
+            if self.verbose:
+                print()
+                print(f"rollout: {step}")
             rollout_rewards = self.play_rollout()
             reward_list.append(rollout_rewards)
 
-            step = i + 1
             # Save models periodically
             if step % save_models_int == 0:
                 model_dir = self.save_models(step)

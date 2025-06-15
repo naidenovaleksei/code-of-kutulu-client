@@ -48,7 +48,7 @@ def trainer(agents_info):
 
 def test_play_rollout_rewards_and_dones(trainer):
     """Test get_state with player and one wanderer."""
-    rollout_rewards = trainer.play_rollout(verbose=False)
+    rollout_rewards = trainer.play_rollout()
 
     agent_id = 0
     buffer = trainer.agents[agent_id].episode_buffer.buffer
