@@ -233,8 +233,12 @@ class Trainer:
                 # output_stds = [agent.get_output_std() for agent in self.agents]
                 eps = [agent.get_eps() for agent in self.agents]
                 av = self.agent_validator
-                check_exp = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
-                check_wan = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
+                check_exp_normal = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
+                check_wan_normal = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
+                check_exp_coridor = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='coridor') for agent in self.agents]
+                check_wan_coridor = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='coridor') for agent in self.agents]
+                check_exp_corner = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
+                check_wan_corner = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
                 frame_ids = [agent.frame_idx if isinstance(agent, DQNAgent) else None for agent in self.agents]
 
                 for i, agent in enumerate(self.agents):
@@ -243,16 +247,20 @@ class Trainer:
                     agent.writer.add_scalar('Play/Winners', winner_list[i], step)
                     agent.writer.add_scalar('Train/Policy', check_policy[i], step)
                     agent.writer.add_scalar('Train/Epsilon', eps[i], step)
-                    agent.writer.add_scalar('Check/Explorer/acc', check_exp[i][0], step)
-                    agent.writer.add_scalar('Check/Wanderer/acc', check_wan[i][0], step)
-                    agent.writer.add_scalar('Check/Explorer/std', check_exp[i][1], step)
-                    agent.writer.add_scalar('Check/Wanderer/std', check_wan[i][1], step)
+                    agent.writer.add_scalar('Check/Explorer/acc', check_exp_normal[i][0], step)
+                    agent.writer.add_scalar('Check/Wanderer/acc', check_wan_normal[i][0], step)
+                    agent.writer.add_scalar('Check/Explorer/acc_coridor', check_exp_coridor[i][0], step)
+                    agent.writer.add_scalar('Check/Wanderer/acc_coridor', check_wan_coridor[i][0], step)
+                    agent.writer.add_scalar('Check/Explorer/acc_corner', check_exp_corner[i][0], step)
+                    agent.writer.add_scalar('Check/Wanderer/acc_corner', check_wan_corner[i][0], step)
+                    agent.writer.add_scalar('Check/Explorer/std', check_exp_normal[i][1], step)
+                    agent.writer.add_scalar('Check/Wanderer/std', check_wan_normal[i][1], step)
                     if frame_ids[i] is not None:
                         agent.writer.add_scalar('Check/frame_id', frame_ids[i], step)
-                    if check_exp[i][2] is not None:
-                        agent.writer.add_scalar('Check/Explorer/top_a', check_exp[i][2], step)
-                    if check_wan[i][2] is not None:
-                        agent.writer.add_scalar('Check/Wanderer/top_a', check_wan[i][2], step)
+                    if check_exp_normal[i][2] is not None:
+                        agent.writer.add_scalar('Check/Explorer/top_a', check_exp_normal[i][2], step)
+                    if check_wan_normal[i][2] is not None:
+                        agent.writer.add_scalar('Check/Wanderer/top_a', check_wan_normal[i][2], step)
 
         for i, agent in enumerate(self.agents):
             agent.writer.close()
