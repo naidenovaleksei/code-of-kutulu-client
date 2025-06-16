@@ -17,6 +17,7 @@ from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.envs.agents.a2c_agent import A2CAgent
 from src.envs.agents.dqn_agent import DQNAgentBase
 from src.envs.agents.dqn_agent_conv import DQNAgentConv
+from src.envs.agents.rule_based_agent import EpsilonConstAgent
 from src.envs.strategy import RandomStrategy
 
 WOOD_MAZES = [
@@ -90,6 +91,8 @@ class Trainer:
                 else:
                     raise ValueError(f'wrong strategy: {agent_info["strategy"]}')
                 agent = QlearningAgent(**agent_info)
+            elif _type == 'epsilon_wait':
+                agent = EpsilonConstAgent(**agent_info)
             elif _type == 'cross_entropy':
                 agent = CrossEntropyAgent(**agent_info)
             elif _type == 'qdn':
@@ -119,6 +122,8 @@ class Trainer:
         self.agent_map = np.arange(len(self.agents))
     
     def reset_env(self, seed=None):
+        if self.env is not None:
+            self.env.close()
         if seed is not None:
             maze_name = np.random.RandomState(seed).choice(self.mazes).item()
         else:
@@ -144,6 +149,8 @@ class Trainer:
         game_over = False
         if self.shuffle:
             np.random.shuffle(self.agent_map)
+        if self.verbose:
+            print(f"game_id: {env.game_id}")
         step = 0
         while not game_over:
             assert env.turn == step
@@ -179,7 +186,7 @@ class Trainer:
                                   f"train_step, reward: {reward}, game_over: {game_over}")
                         new_state = agent.get_state(player_id)
                         agent.train_step(reward, game_over, new_state)
-                    elif isinstance(agent, A2CAgent) and player_id in env.active_players() and env.turn % agent.n_step == 0:
+                    elif isinstance(agent, A2CAgent) and player_id in env.active_players() and env.turn % agent.batch_size == 0:
                         if self.verbose:
                             print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
                                   f"train_step, reward: {reward}, game_over: {game_over}")
