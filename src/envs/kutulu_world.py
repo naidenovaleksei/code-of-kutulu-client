@@ -74,6 +74,16 @@ class KutuluWorldEnv(gym.Env):
 
         return observation, info
 
+    def close(self):
+        response = requests.post(
+            f'{self.host}/close',
+            json={
+                'gameId': self.game_id
+            }
+        )
+        data = response.json()
+        assert data['success']
+
     def step(self, actions):
         player_actions = []
         for i, action in enumerate(actions):

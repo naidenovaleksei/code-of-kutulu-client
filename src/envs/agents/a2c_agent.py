@@ -23,7 +23,7 @@ class A2CAgent(ActorAgent):
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
                  train=False, verbose=False, 
-                 entropy_coef=0.01, value_loss_coef=0.5, n_step=10):
+                 entropy_coef=0.01, value_loss_coef=0.5, n_step=10, batch_size=10):
         """
         A2C (Advantage Actor-Critic) Agent
 
@@ -61,6 +61,7 @@ class A2CAgent(ActorAgent):
         self.entropy_coef = entropy_coef
         self.value_loss_coef = value_loss_coef
         self.n_step = n_step
+        self.batch_size = batch_size
 
     def set_env(self, env):
         assert self.state_type == 'conv'
