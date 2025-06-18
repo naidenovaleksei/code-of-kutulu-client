@@ -17,7 +17,7 @@ class NNAgent(BaseAgent):
                  epsilon_start, epsilon_final, epsilon_decay_last_frame,
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
-                 train, verbose=False):
+                 train, verbose=False, checkpoint_dir=None, drop_layers=None):
         super(NNAgent, self).__init__(
             state_type,
             action_space_n,
@@ -36,6 +36,8 @@ class NNAgent(BaseAgent):
         self.frame_idx = 0
         self.model = model
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        if checkpoint_dir is not None:
+            self.load_agent(checkpoint_dir, drop_layers)
 
     def get_eps(self):
         return max(
@@ -73,8 +75,14 @@ class NNAgent(BaseAgent):
     def save_agent(self, checkpoint_dir):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
 
-    def load_agent(self, checkpoint_dir):
-        self.model.load_state_dict(torch.load(f"{checkpoint_dir}/model.pt"))
+    def load_agent(self, checkpoint_dir, drop_layers=None):
+        if drop_layers:
+            weights = torch.load(f"{checkpoint_dir}/model.pt")
+            for layer in drop_layers:
+                del weights[layer]
+            self.model.load_state_dict(weights, strict=False,)
+        else:
+            self.model.load_state_dict(torch.load(f"{checkpoint_dir}/model.pt"))
 
     def _update_eps(self):
         self.eps -= self.epsilon_start / self.epsilon_decay_last_frame

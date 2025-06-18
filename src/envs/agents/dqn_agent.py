@@ -63,7 +63,7 @@ class DQNAgentBase(NNAgent):
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  gamma=GAMMA,
                  train=False, verbose=False,
-                 prioritized_replay=False, loss='mse'):
+                 prioritized_replay=False, loss='mse', **kw):
         if prioritized_replay:
             episode_buffer = PrioritizedExperienceBuffer(
                 state_encoder, **buffer_params,
@@ -89,6 +89,7 @@ class DQNAgentBase(NNAgent):
             verbose=verbose,
             model=model,
             episode_buffer=episode_buffer,
+            **kw,
         )
         self.replay_start_size = replay_start_size
         self.sync_target_frames = sync_target_frames
