@@ -18,7 +18,7 @@ class NNAgent(BaseAgent):
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
                  train, verbose=False, checkpoint_dir=None, drop_layers=None,
-                 optimizer='adam'):
+                 optimizer='adam', scheduler_params=None):
         super(NNAgent, self).__init__(
             state_type,
             action_space_n,
@@ -36,12 +36,22 @@ class NNAgent(BaseAgent):
         self.last_loss = np.inf
         self.frame_idx = 0
         self.model = model
+        self.lr = lr
         if optimizer == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         if optimizer == 'adamw':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=lr)
         else:
             raise ValueError(f'wrong optimizer: {optimizer}')
+        if scheduler_params is None:
+            self.scheduler = None
+        elif scheduler_params['type'] == 'cosine':
+            T_max = scheduler_params['T_max']
+            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=T_max)
+        else:
+            raise ValueError(f'wrong scheduler_params: {scheduler_params}')
+        
+        
         if checkpoint_dir is not None:
             self.load_agent(checkpoint_dir, drop_layers)
 
@@ -50,6 +60,12 @@ class NNAgent(BaseAgent):
             self.epsilon_final,
             self.eps,
         )
+
+    def get_lr(self):
+        if self.scheduler is None:
+            return self.lr
+        else:
+            return self.scheduler.get_last_lr()[0]
 
     def generate_state_and_step(self, player_id, need_update=True):
         if need_update:

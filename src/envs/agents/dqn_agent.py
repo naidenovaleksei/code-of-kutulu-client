@@ -165,6 +165,8 @@ class DQNAgentBase(NNAgent):
         # Backpropagate
         loss.backward()
         self.optimizer.step()
+        if self.scheduler:
+            self.scheduler.step()
         
         # Update priorities if using prioritized replay
         if self.prioritized_replay:

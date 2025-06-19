@@ -17,6 +17,7 @@ from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.envs.agents.a2c_agent import A2CAgent
 from src.envs.agents.dqn_agent import DQNAgentBase
 from src.envs.agents.dqn_agent_conv import DQNAgentConv
+from src.envs.agents.nn_agent import NNAgent
 from src.envs.agents.rule_based_agent import EpsilonConstAgent
 from src.envs.strategy import RandomStrategy
 
@@ -240,6 +241,7 @@ class Trainer:
                 check_exp_corner = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
                 check_wan_corner = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
                 frame_ids = [agent.frame_idx if isinstance(agent, DQNAgent) else None for agent in self.agents]
+                lr_list = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
 
                 for i, agent in enumerate(self.agents):
                     # Log all metrics in combined plots
@@ -257,6 +259,8 @@ class Trainer:
                     agent.writer.add_scalar('Check/Wanderer/std', check_wan_normal[i][1], step)
                     if frame_ids[i] is not None:
                         agent.writer.add_scalar('Check/frame_id', frame_ids[i], step)
+                    if lr_list[i] is not None:
+                        agent.writer.add_scalar('Train/lr', lr_list[i], step)
                     if check_exp_normal[i][2] is not None:
                         agent.writer.add_scalar('Check/Explorer/top_a', check_exp_normal[i][2], step)
                     if check_wan_normal[i][2] is not None:

@@ -48,6 +48,9 @@ class BaseAgent:
     def get_output_std(self):
         return self.output_std
 
+    def get_lr(self):
+        return None
+
     def train_step(self, reward, game_over, new_state):
         raise NotImplementedError
 
