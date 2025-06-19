@@ -40,14 +40,20 @@ def parse_dist(encoded_dist):
 
 
 class DQNStateEncoder(BaseStateEncoder):
-    def encode_states(self, states, return_tensors=True):
+    def encode_states(self, states, return_tensors=True, device=None):
         data = dict(
             closest_explorer_dir=[parse_dir(state[0]) for state in states],
             closest_explorer_dist=[parse_dist(state[1]) for state in states],
             closest_wanderer_dir=[parse_dir(state[2]) for state in states],
             closest_wanderer_dist=[parse_dist(state[3]) for state in states],
         )
-        data = {k: torch.tensor(v) for k,v in data.items()}
+        if return_tensors:
+            if device is not None:
+                data = {k: torch.tensor(v, device=device) for k, v in data.items()}
+            elif hasattr(self, 'device'):
+                data = {k: torch.tensor(v, device=self.device) for k, v in data.items()}
+            else:
+                data = {k: torch.tensor(v) for k, v in data.items()}
         return data
 
 
@@ -63,7 +69,8 @@ class DQNAgentBase(NNAgent):
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  gamma=GAMMA,
                  train=False, verbose=False,
-                 prioritized_replay=False, loss='mse', **kw):
+                 prioritized_replay=False, loss='mse', 
+                 device=None, **kw):
         if prioritized_replay:
             episode_buffer = PrioritizedExperienceBuffer(
                 state_encoder, **buffer_params,
@@ -97,13 +104,36 @@ class DQNAgentBase(NNAgent):
         self.batch_size = batch_size
         self.prioritized_replay = prioritized_replay
 
-        self.tgt_net = copy.deepcopy(self.model)
+        # Set up device
+        if device is None:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = torch.device(device)
+        
+        # Set device on state encoder for buffer operations
+        if hasattr(state_encoder, '__dict__'):
+            state_encoder.device = self.device
+        
+        # Move models to device
+        self.model = self.model.to(self.device)
+        self.tgt_net = copy.deepcopy(self.model).to(self.device)
+        
         if loss == 'mse':
             self.criterion = nn.MSELoss(reduction='none')
         elif loss == 'huber':
             self.criterion = nn.HuberLoss(reduction='none')
         else:
             raise ValueError(f'wrong loss: {loss}')
+        
+        if self.verbose:
+            print(f"DQN Agent initialized on device: {self.device}")
+
+    def _move_states_to_device(self, states):
+        """Move state dictionary tensors to the specified device"""
+        if isinstance(states, dict):
+            return {k: v.to(self.device) for k, v in states.items()}
+        else:
+            return states.to(self.device)
 
     def generate_random_step(self, actions_masked, player_mask):
         ps = np.ma.array(np.ones(self.action_space_n), mask=player_mask).filled(0)
@@ -135,10 +165,21 @@ class DQNAgentBase(NNAgent):
         # Sample from buffer - different behavior for prioritized vs. regular buffer
         if self.prioritized_replay:
             states, actions, rewards, dones, next_states, indices, weights = self.episode_buffer.sample(self.batch_size)
-            # Convert weights to tensor if not already
-            weights = weights.to(actions.device)
+            # Move tensors to device
+            states = self._move_states_to_device(states)
+            actions = actions.to(self.device)
+            rewards = rewards.to(self.device)
+            dones = dones.to(self.device)
+            next_states = self._move_states_to_device(next_states)
+            weights = weights.to(self.device)
         else:
             states, actions, rewards, dones, next_states = self.episode_buffer.sample(self.batch_size)
+            # Move tensors to device
+            states = self._move_states_to_device(states)
+            actions = actions.to(self.device)
+            rewards = rewards.to(self.device)
+            dones = dones.to(self.device)
+            next_states = self._move_states_to_device(next_states)
             weights = None
         
         # Get current state-action values
@@ -181,7 +222,7 @@ class DQNAgentBase(NNAgent):
 
 
 class DQNAgent(DQNAgentBase):
-    def __init__(self, state_type, action_space_n, model_params=None, loss='mse', **kw):  
+    def __init__(self, state_type, action_space_n, model_params=None, loss='mse', device=None, **kw):  
         if model_params is None:
             model_params = {}
         super(DQNAgent, self).__init__(
@@ -192,5 +233,6 @@ class DQNAgent(DQNAgentBase):
                 **model_params,
             ),
             state_encoder=DQNStateEncoder(),
+            device=device,
             **kw
         )

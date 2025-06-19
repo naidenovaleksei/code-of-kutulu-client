@@ -39,7 +39,7 @@ class NNAgent(BaseAgent):
         self.lr = lr
         if optimizer == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-        if optimizer == 'adamw':
+        elif optimizer == 'adamw':
             self.optimizer = optim.AdamW(self.model.parameters(), lr=lr)
         else:
             raise ValueError(f'wrong optimizer: {optimizer}')
@@ -78,6 +78,11 @@ class NNAgent(BaseAgent):
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
+        
+        # Move data to device if the agent has device attribute (for GPU support)
+        if hasattr(self, 'device') and hasattr(self, '_move_states_to_device'):
+            data = self._move_states_to_device(data)
+        
         self.model.eval()
         model_output = self.model.get_policy(data)[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
@@ -98,13 +103,25 @@ class NNAgent(BaseAgent):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
 
     def load_agent(self, checkpoint_dir, drop_layers=None):
+        # Load to CPU first, then move to device if needed
+        device = getattr(self, 'device', 'cpu')
+        map_location = 'cpu' if device == 'cpu' else None
+        
         if drop_layers:
-            weights = torch.load(f"{checkpoint_dir}/model.pt")
+            weights = torch.load(f"{checkpoint_dir}/model.pt", map_location=map_location)
             for layer in drop_layers:
                 del weights[layer]
-            self.model.load_state_dict(weights, strict=False,)
+            self.model.load_state_dict(weights, strict=False)
         else:
-            self.model.load_state_dict(torch.load(f"{checkpoint_dir}/model.pt"))
+            weights = torch.load(f"{checkpoint_dir}/model.pt", map_location=map_location)
+            self.model.load_state_dict(weights)
+        
+        # Move model to device after loading
+        if hasattr(self, 'device'):
+            self.model = self.model.to(self.device)
+            # Also update target network if it exists
+            if hasattr(self, 'tgt_net'):
+                self.tgt_net = self.tgt_net.to(self.device)
 
     def _update_eps(self):
         self.eps -= self.epsilon_start / self.epsilon_decay_last_frame
@@ -121,4 +138,3 @@ class NNAgent(BaseAgent):
 
     def train_step(self, reward, game_over, new_state):
         raise NotImplementedError
-        
