@@ -82,7 +82,7 @@ class KutuluWorldEnv(gym.Env):
             }
         )
         data = response.json()
-        if data['success']:
+        if not data['success']:
             print('failed env closing: ', data)
 
     def step(self, actions):

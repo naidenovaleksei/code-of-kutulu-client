@@ -17,7 +17,8 @@ class NNAgent(BaseAgent):
                  epsilon_start, epsilon_final, epsilon_decay_last_frame,
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
-                 train, verbose=False, checkpoint_dir=None, drop_layers=None):
+                 train, verbose=False, checkpoint_dir=None, drop_layers=None,
+                 optimizer='adam'):
         super(NNAgent, self).__init__(
             state_type,
             action_space_n,
@@ -35,7 +36,12 @@ class NNAgent(BaseAgent):
         self.last_loss = np.inf
         self.frame_idx = 0
         self.model = model
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        if optimizer == 'adam':
+            self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        if optimizer == 'adamw':
+            self.optimizer = optim.AdamW(self.model.parameters(), lr=lr)
+        else:
+            raise ValueError(f'wrong optimizer: {optimizer}')
         if checkpoint_dir is not None:
             self.load_agent(checkpoint_dir, drop_layers)
 
