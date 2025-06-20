@@ -259,10 +259,12 @@ class Trainer:
                         agent.writer.add_scalar('Check/frame_id', frame_ids[i], step)
                     if lr_list[i] is not None:
                         agent.writer.add_scalar('Train/lr', lr_list[i], step)
-                    if check_exp_normal[i][2] is not None:
-                        agent.writer.add_scalar('Check/Explorer/top_a', check_exp_normal[i][2], step)
-                    if check_wan_normal[i][2] is not None:
-                        agent.writer.add_scalar('Check/Wanderer/top_a', check_wan_normal[i][2], step)
+                    agent.writer.add_scalar('Check/Explorer/top_a', check_exp_normal[i][2], step)
+                    agent.writer.add_scalar('Check/Wanderer/top_a', check_wan_normal[i][2], step)
+                    agent.writer.add_scalar('Check/Explorer/max', check_exp_normal[i][3], step)
+                    agent.writer.add_scalar('Check/Wanderer/max', check_wan_normal[i][3], step)
+                    agent.writer.add_scalar('Check/Explorer/mean', check_exp_normal[i][4], step)
+                    agent.writer.add_scalar('Check/Wanderer/mean', check_wan_normal[i][4], step)
 
         for i, agent in enumerate(self.agents):
             agent.writer.close()

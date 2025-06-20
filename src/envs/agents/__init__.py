@@ -13,7 +13,7 @@ class BaseAgent:
         self.train = train
         self.observer = None
         self.state_actions = None
-        self.output_std = np.inf
+        self.last_action = np.zeros(action_space_n)
 
     def set_env(self, env):
         if self.state_type == 'closest':
@@ -47,8 +47,8 @@ class BaseAgent:
     def get_eps(self):
         raise NotImplementedError
     
-    def get_output_std(self):
-        return self.output_std
+    def get_last_action(self):
+        return self.last_action
 
     def get_lr(self):
         return None

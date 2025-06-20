@@ -87,7 +87,8 @@ class NNAgent(BaseAgent):
         model_output = self.model.get_policy(data)[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
 
-        self.output_std = actions_masked.max() - (actions_masked.sum() - actions_masked.max()) / (np.sum(valid_actions) - 1)
+        # self.last_action = actions_masked.max() - (actions_masked.sum() - actions_masked.max()) / (np.sum(valid_actions) - 1)
+        self.last_action = actions_masked
         if self.train and np.random.random() < self.get_eps():
             action = self.generate_random_step(actions_masked, player_mask)
         else:

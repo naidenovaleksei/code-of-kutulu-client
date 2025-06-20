@@ -77,6 +77,8 @@ class AgentValidator:
     def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3, env_type='normal', verbose=False):
         result = []
         output_stds = []
+        output_maxs = []
+        output_means = []
         actions = []
         train = agent.train
         agent.train = False
@@ -115,7 +117,10 @@ class AgentValidator:
             for answer, explorers, wanderers in params:
                 self._set_env(env, agent, explorers, wanderers)
                 _, action = agent.generate_state_and_step(0, need_update=False)
-                output_stds.append(agent.get_output_std())
+                last_action = agent.get_last_action()
+                output_stds.append(last_action.std())
+                output_maxs.append(last_action.max())
+                output_means.append(last_action.mean())
                 result.append(action in answer)
                 actions.append(action.item())
                 if verbose:
@@ -131,7 +136,7 @@ class AgentValidator:
         max_v = max(ad.values())
         max_ad = {k for k,v in ad.items() if v == max_v}
         top_action = len(max_ad)
-        return np.mean(result), np.mean(output_stds), top_action
+        return np.mean(result), np.mean(output_stds), top_action, np.max(output_maxs), np.mean(output_means)
     
     def _get_params(self, entity_kind, n_min, n_max, actions):
         params = []
