@@ -25,7 +25,7 @@ class REINFORCEAgent(ActorAgent):
     def __init__(self, state_type, action_space_n,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params=None,
-                 train=False, verbose=False, entropy_coef=0, n_step=10):
+                 train=False, verbose=False, entropy_coef=0, n_step=10, **kw):
         if model_params is None:
             model_params = {}
         if state_type == 'closest_ext':
@@ -57,13 +57,10 @@ class REINFORCEAgent(ActorAgent):
             verbose=verbose,
             model=model,
             state_encoder=state_encoder,
+            **kw,
         )
         self.entropy_coef = entropy_coef
         self.n_step = n_step
-    
-    def train_step(self, reward, game_over, new_state):
-        assert game_over
-        super().train_step(reward, game_over, new_state)
     
     def _train_model(self):
         # End the current episode and get the episode data
@@ -92,8 +89,13 @@ class REINFORCEAgent(ActorAgent):
         # Backpropagate and update
         loss.backward()
         self.optimizer.step()
+        if self.scheduler:
+            self.scheduler.step()
 
-        self.last_loss = loss.item()
+        if self.last_loss == np.inf:
+            self.last_loss = loss.item()
+        else:
+            self.last_loss = 0.05 * loss.item() + (1 - 0.05) * self.last_loss
 
         if self.verbose:
             print(f"Episode {self.episode_idx}, Loss: {loss.item():.4f}, Return: {np.sum(rewards):.4f}")

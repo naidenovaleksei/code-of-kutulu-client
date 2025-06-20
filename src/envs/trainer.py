@@ -176,22 +176,20 @@ class Trainer:
                 agent = self.agents[agent_id]
                 if agent.train:
                     game_over = env.is_game_over_for_player(player_id)
-                    if game_over:
+                    agent.append_observation(player_id, reward, game_over)
+                    need_train_step = False
+                    if isinstance(agent, DQNAgentBase):
+                        need_train_step = game_over or (player_id in env.active_players())
+                    elif isinstance(agent, A2CAgent):
+                        need_train_step = game_over or (
+                            player_id in env.active_players() and env.turn % agent.batch_size == 0)
+                    elif isinstance(agent, REINFORCEAgent):
+                        need_train_step = game_over
+                    if need_train_step:
                         if self.verbose:
-                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
-                                  f"train_step, reward: {reward}, game_over: {game_over}")
-                        agent.train_step(reward, game_over, None)
-                    elif isinstance(agent, DQNAgentBase) and player_id in env.active_players():
-                        if self.verbose:
-                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
-                                  f"train_step, reward: {reward}, game_over: {game_over}")
-                        new_state = agent.get_state(player_id)
-                        agent.train_step(reward, game_over, new_state)
-                    elif isinstance(agent, A2CAgent) and player_id in env.active_players() and env.turn % agent.batch_size == 0:
-                        if self.verbose:
-                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1]}, "
-                                  f"train_step, reward: {reward}, game_over: {game_over}")
-                        agent.train_step(reward, game_over, None)
+                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1][:-2]}, "
+                                f"train_step, reward: {reward}, game_over: {game_over}")
+                        agent.train_step()
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 

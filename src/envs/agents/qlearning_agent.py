@@ -57,7 +57,7 @@ class QlearningAgent(BaseAgent):
         self.state_actions = (state, action)
         return state, action
 
-    def train_step(self, reward, game_over, new_state):
+    def train_step(self):
         if reward is None or not self.train:
             return
         state, At = self.state_actions

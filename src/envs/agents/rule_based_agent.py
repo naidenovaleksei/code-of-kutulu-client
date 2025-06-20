@@ -70,7 +70,7 @@ class EpsilonConstAgent(BaseAgent):
                 self.eps = min(self.epsilon_start, self.eps * 2)
                 self.epsilon_reset *= self.epsilon_reset_coef
 
-    def train_step(self, reward, game_over, new_state):
+    def train_step(self):
         pass
     
     def check_policy(self):

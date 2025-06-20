@@ -140,18 +140,20 @@ class DQNAgentBase(NNAgent):
         if ps.sum() == 0:
             return np.random.randint(self.action_space_n)
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
-
-    def train_step(self, reward, game_over, new_state):
+    
+    def append_observation(self, player_id, reward, game_over):
         if reward is None or not self.train:
             return
-
         state, action, observation = self.state_actions
-        if new_state is None:
+        if not game_over:
+            new_state = self.get_state(player_id)
+        else:
             new_state = state
         exp = Experience(state, action, reward, game_over, new_state, observation)
         self.episode_buffer.append(exp)
 
-        if len(self.episode_buffer) >= self.replay_start_size:
+    def train_step(self):
+        if self.train and len(self.episode_buffer) >= self.replay_start_size:
             self._train_model()
 
     def _train_model(self):
@@ -215,7 +217,10 @@ class DQNAgentBase(NNAgent):
             priorities = losses.detach().cpu().numpy()
             self.episode_buffer.update_priorities(indices, priorities)
         
-        self.last_loss = loss.item()
+        if self.last_loss == np.inf:
+            self.last_loss = loss.item()
+        else:
+            self.last_loss = 0.05 * loss.item() + (1 - 0.05) * self.last_loss
 
         if self.verbose:
             print(f"Loss: {loss.item():.4f}")

@@ -67,6 +67,9 @@ class A2CAgent(ActorAgent):
         assert self.state_type == 'conv'
         self.observer = KutuluConvObserver(env, self.size)
 
+    def train_step(self):
+        if self.train and len(self.episode_buffer.buffer) > 0:
+            super().train_step()
     
     def _train_model(self):
         """Train the A2C model on the collected episode"""
@@ -110,7 +113,10 @@ class A2CAgent(ActorAgent):
         loss.backward()
         self.optimizer.step()
 
-        self.last_loss = loss.item()
+        if self.last_loss == np.inf:
+            self.last_loss = loss.item()
+        else:
+            self.last_loss = 0.05 * loss.item() + (1 - 0.05) * self.last_loss
 
         if self.verbose:
             print(f"Episode {self.episode_idx}, Loss: {loss.item():.4f}, "
