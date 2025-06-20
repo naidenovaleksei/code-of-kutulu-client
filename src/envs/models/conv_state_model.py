@@ -3,14 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ConvStateModel(nn.Module):
-    def __init__(self, size, in_channels=12, num_classes=5, fc_dim=64, return_softmax=False):
+    def __init__(self, size, in_channels=12, num_classes=5, conv_dim=32, fc_dim=64, return_softmax=False):
         super(ConvStateModel, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(in_channels, conv_dim, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(conv_dim)
+        self.conv2 = nn.Conv2d(conv_dim, conv_dim, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(conv_dim)
         self.pool = nn.MaxPool2d(2, 2)  # уменьшает размер в 2 раза
-        self.fc1 = nn.Linear(32 * size * size, fc_dim)  # предполагаем вход размером 10x10
+        self.fc1 = nn.Linear(conv_dim * size * size, fc_dim)  # предполагаем вход размером 10x10
         self.fc2 = nn.Linear(fc_dim, num_classes)
         self.return_softmax = return_softmax
 

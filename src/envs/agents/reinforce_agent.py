@@ -19,6 +19,7 @@ from src.game.template import (
 )
 from src.envs.models.ext_state_model import ExtStateModel
 from src.envs.models.conv_state_model import ConvStateModel
+from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel
 
 
 class REINFORCEAgent(ActorAgent):
@@ -45,8 +46,17 @@ class REINFORCEAgent(ActorAgent):
                 return_softmax=True,
                 **model_params)
             state_encoder = DQNStateEncoderConv()
+        elif state_type == 'conv_by_kind':
+            model_params = dict(model_params)
+            self.size = model_params.pop('size')
+            model = ConvStateByKindModel(
+                num_classes=action_space_n,
+                size=self.size,
+                return_softmax=True,
+                **model_params)
+            state_encoder = DQNStateEncoderConv()
         else:
-            ValueError('unknown state_type for reinforce agent: {self.state_type}')
+            raise ValueError(f'unknown state_type for reinforce agent: {state_type}')
 
         super(REINFORCEAgent, self).__init__(
             state_type=state_type,

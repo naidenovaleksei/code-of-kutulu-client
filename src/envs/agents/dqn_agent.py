@@ -145,10 +145,12 @@ class DQNAgentBase(NNAgent):
         if reward is None or not self.train:
             return
         state, action, observation = self.state_actions
-        if not game_over:
-            new_state = self.get_state(player_id)
-        else:
+        if game_over:
             new_state = state
+            if self.scheduler:
+                self.scheduler.step()
+        else:
+            new_state = self.get_state(player_id)
         exp = Experience(state, action, reward, game_over, new_state, observation)
         self.episode_buffer.append(exp)
 
@@ -208,8 +210,6 @@ class DQNAgentBase(NNAgent):
         # Backpropagate
         loss.backward()
         self.optimizer.step()
-        if self.scheduler:
-            self.scheduler.step()
         
         # Update priorities if using prioritized replay
         if self.prioritized_replay:

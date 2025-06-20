@@ -22,6 +22,8 @@ class BaseAgent:
             self.observer = KutuluClosestExtObserver(env)
         elif self.state_type == 'conv':
             self.observer = KutuluConvObserver(env, self.size)
+        elif self.state_type == 'conv_by_kind':
+            self.observer = KutuluConvObserver(env, self.size)
         else:
             ValueError('unknown state_type: {self.state_type}')
 

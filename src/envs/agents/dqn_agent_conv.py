@@ -12,6 +12,7 @@ from src.envs.agents.dqn_agent import (
     DQNAgentBase,
 )
 from src.envs.models.conv_state_model import ConvStateModel
+from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel
 
 
 class DQNStateEncoderConv(BaseStateEncoder):
@@ -46,14 +47,27 @@ class DQNAgentConv(DQNAgentBase):
     def __init__(self, state_type, action_space_n, model_params=None, size=3, **kw):
         if model_params is None:
             model_params = {}
-        super(DQNAgentConv, self).__init__(
-            state_type=state_type,
-            action_space_n=action_space_n,
-            model=ConvStateModel(
+        
+        # Choose model based on state_type
+        if state_type == 'conv_by_kind':
+            model = ConvStateByKindModel(
                 num_classes=action_space_n,
                 size=size,
                 **model_params,
-            ),
+            )
+        elif state_type == 'conv':
+            model = ConvStateModel(
+                num_classes=action_space_n,
+                size=size,
+                **model_params,
+            )
+        else:
+            raise ValueError(f'unknown state_type for DQNAgentConv: {state_type}')
+        
+        super(DQNAgentConv, self).__init__(
+            state_type=state_type,
+            action_space_n=action_space_n,
+            model=model,
             state_encoder=DQNStateEncoderConv(),
             **kw
         )
