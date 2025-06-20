@@ -238,7 +238,7 @@ class Trainer:
                 check_wan_coridor = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='coridor') for agent in self.agents]
                 check_exp_corner = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
                 check_wan_corner = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
-                frame_ids = [agent.frame_idx if isinstance(agent, DQNAgent) else None for agent in self.agents]
+                frame_ids = [agent.frame_idx if isinstance(agent, DQNAgentBase) else None for agent in self.agents]
                 lr_list = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
 
                 for i, agent in enumerate(self.agents):
