@@ -52,7 +52,7 @@ BRONZE_MAZES = [
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
-                 verbose=False):
+                 verbose=False, silent=False):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
@@ -61,20 +61,22 @@ class Trainer:
         self.shuffle = shuffle
         self.actions = actions
         self.verbose = verbose
+        self.silent = silent
 
-        if exp_name is None:
-            exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.log_dir = os.path.join(log_dir, exp_name)
-        
-        date, time = str(datetime.now()).split()
-        date_dir = f'../output/{date}'
-        os.makedirs(date_dir, exist_ok=True)
-        
-        self.checkpoints_dir = os.path.join(date_dir, exp_name)
-        os.makedirs(self.checkpoints_dir, exist_ok=True)
+        if not self.silent:
+            if exp_name is None:
+                exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
+            self.log_dir = os.path.join(log_dir, exp_name)
+            
+            date, time = str(datetime.now()).split()
+            date_dir = f'../output/{date}'
+            os.makedirs(date_dir, exist_ok=True)
+            
+            self.checkpoints_dir = os.path.join(date_dir, exp_name)
+            os.makedirs(self.checkpoints_dir, exist_ok=True)
 
-        with open(f'{self.checkpoints_dir}/agents_info.json', 'w') as f:
-            json.dump(agents_info, f)
+            with open(f'{self.checkpoints_dir}/agents_info.json', 'w') as f:
+                json.dump(agents_info, f)
         
         self.env = None
         self.agent_validator = AgentValidator(self.actions)
@@ -114,8 +116,9 @@ class Trainer:
                 agent_dir = f'agent{i}_{_type}_{_name}'
             else:
                 agent_dir = f'agent{i}_{_type}'
-            agent_log_dir = os.path.join(self.log_dir, agent_dir)
-            agent.writer = SummaryWriter(log_dir=agent_log_dir)
+            if not self.silent:
+                agent_log_dir = os.path.join(self.log_dir, agent_dir)
+                agent.writer = SummaryWriter(log_dir=agent_log_dir)
             if self.verbose:
                 print(f"agent {agent_dir}, type: {type(agent)}")
             self.agents.append(agent)
@@ -205,6 +208,7 @@ class Trainer:
     def train(self, metrics_int=10, save_models_int=100):
         reward_list = []
         model_dir_list = []
+        metrics_list = []
 
         exps = range(self.num_experiments)
         if not self.verbose:
@@ -218,57 +222,66 @@ class Trainer:
             reward_list.append(rollout_rewards)
 
             # Save models periodically
-            if step % save_models_int == 0:
+            if not self.silent and step % save_models_int == 0:
                 model_dir = self.save_models(step)
                 model_dir_list.append(model_dir)
-                
+
             # Log metrics periodically
             if step % metrics_int == 0:
-                total_reward_list = np.array([np.nansum(rewards, axis=0) for rewards in reward_list])
-                rewards = np.mean(total_reward_list, axis=0)
-                winner_list = np.argmax(total_reward_list, 1)
-                winner_list = [np.sum(winner_list == i) / len(winner_list) for i, agent in enumerate(self.agents)]
-                check_policy = [agent.check_policy() for agent in self.agents]
-                # output_stds = [agent.get_output_std() for agent in self.agents]
-                eps = [agent.get_eps() for agent in self.agents]
-                av = self.agent_validator
-                check_exp_normal = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
-                check_wan_normal = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
-                check_exp_coridor = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='coridor') for agent in self.agents]
-                check_wan_coridor = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='coridor') for agent in self.agents]
-                check_exp_corner = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
-                check_wan_corner = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
-                frame_ids = [agent.frame_idx if isinstance(agent, DQNAgentBase) else None for agent in self.agents]
-                lr_list = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
+                metrics = self._calculate_metrics(reward_list)
+                metrics_list.append(metrics)
+                if not self.silent:
+                    self._log_metrics(step, metrics)
 
-                for i, agent in enumerate(self.agents):
-                    # Log all metrics in combined plots
-                    agent.writer.add_scalar('Play/Rewards', rewards[i], step)
-                    agent.writer.add_scalar('Play/Winners', winner_list[i], step)
-                    agent.writer.add_scalar('Train/Policy', check_policy[i], step)
-                    agent.writer.add_scalar('Train/Epsilon', eps[i], step)
-                    agent.writer.add_scalar('Check/Explorer/acc', check_exp_normal[i][0], step)
-                    agent.writer.add_scalar('Check/Wanderer/acc', check_wan_normal[i][0], step)
-                    agent.writer.add_scalar('Check/Explorer/acc_coridor', check_exp_coridor[i][0], step)
-                    agent.writer.add_scalar('Check/Wanderer/acc_coridor', check_wan_coridor[i][0], step)
-                    agent.writer.add_scalar('Check/Explorer/acc_corner', check_exp_corner[i][0], step)
-                    agent.writer.add_scalar('Check/Wanderer/acc_corner', check_wan_corner[i][0], step)
-                    agent.writer.add_scalar('Check/Explorer/std', check_exp_normal[i][1], step)
-                    agent.writer.add_scalar('Check/Wanderer/std', check_wan_normal[i][1], step)
-                    if frame_ids[i] is not None:
-                        agent.writer.add_scalar('Check/frame_id', frame_ids[i], step)
-                    if lr_list[i] is not None:
-                        agent.writer.add_scalar('Train/lr', lr_list[i], step)
-                    agent.writer.add_scalar('Check/Explorer/top_a', check_exp_normal[i][2], step)
-                    agent.writer.add_scalar('Check/Wanderer/top_a', check_wan_normal[i][2], step)
-                    agent.writer.add_scalar('Check/Explorer/max', check_exp_normal[i][3], step)
-                    agent.writer.add_scalar('Check/Wanderer/max', check_wan_normal[i][3], step)
-                    agent.writer.add_scalar('Check/Explorer/mean', check_exp_normal[i][4], step)
-                    agent.writer.add_scalar('Check/Wanderer/mean', check_wan_normal[i][4], step)
+        if not self.silent:
+            for i, agent in enumerate(self.agents):
+                agent.writer.close()
+        return reward_list, model_dir_list, metrics_list
+    
+    def _calculate_metrics(self, reward_list):
+        metrics = {}
+        av = self.agent_validator
+        total_reward_list = np.array([np.nansum(rewards, axis=0) for rewards in reward_list])
+        metrics['rewards'] = np.mean(total_reward_list, axis=0)
+        winner_list = np.argmax(total_reward_list, 1)
+        metrics['winner_list'] = [np.sum(winner_list == i) / len(winner_list) for i, agent in enumerate(self.agents)]
+        metrics['check_policy'] = [agent.check_policy() for agent in self.agents]
+        metrics['eps'] = [agent.get_eps() for agent in self.agents]
+        metrics['check_exp_normal'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
+        metrics['check_wan_normal'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
+        metrics['check_exp_coridor'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='coridor') for agent in self.agents]
+        metrics['check_wan_coridor'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='coridor') for agent in self.agents]
+        metrics['check_exp_corner'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
+        metrics['check_wan_corner'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
+        metrics['frame_ids'] = [agent.frame_idx if isinstance(agent, DQNAgentBase) else None for agent in self.agents]
+        metrics['lr_list'] = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
+        return metrics
 
+    def _log_metrics(self, step, metrics):
         for i, agent in enumerate(self.agents):
-            agent.writer.close()
-        return reward_list, model_dir_list
+            # Log all metrics in combined plots
+            agent.writer.add_scalar('Play/Rewards', metrics['rewards'][i], step)
+            agent.writer.add_scalar('Play/Winners', metrics['winner_list'][i], step)
+            agent.writer.add_scalar('Train/Policy', metrics['check_policy'][i], step)
+            agent.writer.add_scalar('Train/Epsilon', metrics['eps'][i], step)
+            agent.writer.add_scalar('Check/Explorer/acc', metrics['check_exp_normal'][i][0], step)
+            agent.writer.add_scalar('Check/Wanderer/acc', metrics['check_wan_normal'][i][0], step)
+            agent.writer.add_scalar('Check/Explorer/acc_coridor', metrics['check_exp_coridor'][i][0], step)
+            agent.writer.add_scalar('Check/Wanderer/acc_coridor', metrics['check_wan_coridor'][i][0], step)
+            agent.writer.add_scalar('Check/Explorer/acc_corner', metrics['check_exp_corner'][i][0], step)
+            agent.writer.add_scalar('Check/Wanderer/acc_corner', metrics['check_wan_corner'][i][0], step)
+            agent.writer.add_scalar('Check/Explorer/std', metrics['check_exp_normal'][i][1], step)
+            agent.writer.add_scalar('Check/Wanderer/std', metrics['check_wan_normal'][i][1], step)
+            if metrics['frame_ids'][i] is not None:
+                agent.writer.add_scalar('Check/frame_id', metrics['frame_ids'][i], step)
+            if metrics['lr_list'][i] is not None:
+                agent.writer.add_scalar('Train/lr', metrics['lr_list'][i], step)
+            agent.writer.add_scalar('Check/Explorer/top_a', metrics['check_exp_normal'][i][2], step)
+            agent.writer.add_scalar('Check/Wanderer/top_a', metrics['check_wan_normal'][i][2], step)
+            agent.writer.add_scalar('Check/Explorer/max', metrics['check_exp_normal'][i][3], step)
+            agent.writer.add_scalar('Check/Wanderer/max', metrics['check_wan_normal'][i][3], step)
+            agent.writer.add_scalar('Check/Explorer/mean', metrics['check_exp_normal'][i][4], step)
+            agent.writer.add_scalar('Check/Wanderer/mean', metrics['check_wan_normal'][i][4], step)
         
     def close(self):
         """Close resources used by the trainer"""
