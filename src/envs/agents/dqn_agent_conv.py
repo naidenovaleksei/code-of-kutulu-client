@@ -11,8 +11,8 @@ from src.envs.buffers import (
 from src.envs.agents.dqn_agent import (
     DQNAgentBase,
 )
-from src.envs.models.conv_state_model import ConvStateModel
-from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel
+from src.envs.models.conv_state_model import ConvStateModel, DuelingConvStateModel
+from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel, DuelingConvStateByKindModel
 
 
 class DQNStateEncoderConv(BaseStateEncoder):
@@ -44,23 +44,37 @@ class DQNStateEncoderConv(BaseStateEncoder):
 
 
 class DQNAgentConv(DQNAgentBase):
-    def __init__(self, state_type, action_space_n, model_params=None, size=3, **kw):
+    def __init__(self, state_type, action_space_n, model_params=None, size=3, dueling=False, **kw):
         if model_params is None:
             model_params = {}
         
-        # Choose model based on state_type
+        # Choose model based on state_type and dueling parameter
         if state_type == 'conv_by_kind':
-            model = ConvStateByKindModel(
-                num_classes=action_space_n,
-                size=size,
-                **model_params,
-            )
+            if dueling:
+                model = DuelingConvStateByKindModel(
+                    num_classes=action_space_n,
+                    size=size,
+                    **model_params,
+                )
+            else:
+                model = ConvStateByKindModel(
+                    num_classes=action_space_n,
+                    size=size,
+                    **model_params,
+                )
         elif state_type == 'conv':
-            model = ConvStateModel(
-                num_classes=action_space_n,
-                size=size,
-                **model_params,
-            )
+            if dueling:
+                model = DuelingConvStateModel(
+                    num_classes=action_space_n,
+                    size=size,
+                    **model_params,
+                )
+            else:
+                model = ConvStateModel(
+                    num_classes=action_space_n,
+                    size=size,
+                    **model_params,
+                )
         else:
             raise ValueError(f'unknown state_type for DQNAgentConv: {state_type}')
         
@@ -72,3 +86,10 @@ class DQNAgentConv(DQNAgentBase):
             **kw
         )
         self.size = size
+        self.dueling = dueling
+        
+        # Add verbose logging if enabled
+        if getattr(self, 'verbose', False):
+            model_type = "Dueling " if dueling else "Standard "
+            model_arch = "ConvStateByKindModel" if state_type == 'conv_by_kind' else "ConvStateModel"
+            print(f"Initialized {model_type}{model_arch} agent")

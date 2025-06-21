@@ -11,7 +11,7 @@ from src.envs.agents.nn_agent import(
     EPSILON_FINAL,
     EPSILON_DECAY_LAST_FRAME,
 )
-from src.envs.models.dqn_model import DQN
+from src.envs.models.dqn_model import DQN, DuelingDQN
 from src.envs.buffers import (
     Experience,
     ExperienceBuffer,
@@ -131,7 +131,7 @@ class DQNAgentBase(NNAgent):
     def _move_states_to_device(self, states):
         """Move state dictionary tensors to the specified device"""
         if isinstance(states, dict):
-            return {k: v.to(self.device) for k, v in states.items()}
+            return {k: v.to(self.device) if hasattr(v, 'to') else v for k, v in states.items()}
         else:
             return states.to(self.device)
 
@@ -227,17 +227,32 @@ class DQNAgentBase(NNAgent):
 
 
 class DQNAgent(DQNAgentBase):
-    def __init__(self, state_type, action_space_n, model_params=None, loss='mse', device=None, **kw):  
+    def __init__(self, state_type, action_space_n, model_params=None, loss='mse', device=None, dueling=False, **kw):  
         if model_params is None:
             model_params = {}
+        
+        # Choose model based on dueling parameter
+        if dueling:
+            model = DuelingDQN(
+                num_classes=action_space_n,
+                **model_params,
+            )
+        else:
+            model = DQN(
+                num_classes=action_space_n,
+                **model_params,
+            )
+        
         super(DQNAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
-            model=DQN(
-                num_classes=action_space_n,
-                **model_params,
-            ),
+            model=model,
             state_encoder=DQNStateEncoder(),
             device=device,
             **kw
         )
+        
+        self.dueling = dueling
+        if self.verbose:
+            model_type = "Dueling DQN" if dueling else "Standard DQN"
+            print(f"Initialized {model_type} agent")
