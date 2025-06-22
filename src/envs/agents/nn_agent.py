@@ -67,7 +67,8 @@ class NNAgent(BaseAgent):
         else:
             return self.scheduler.get_last_lr()[0]
 
-    def generate_state_and_step(self, player_id, need_update=True):
+    def generate_state_and_step(self, player_id, need_update=True,
+                                return_value=False):
         if need_update:
             self.frame_idx += 1
             self._update_eps()
@@ -84,7 +85,12 @@ class NNAgent(BaseAgent):
             data = self._move_states_to_device(data)
         
         self.model.eval()
-        model_output = self.model.get_policy(data)[0].detach().cpu().numpy()
+        with torch.no_grad():
+            if return_value:
+                policy, value = self.model(data)
+            else:
+                policy = self.model.get_policy(data)
+        model_output = policy[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
 
         # self.last_action = actions_masked.max() - (actions_masked.sum() - actions_masked.max()) / (np.sum(valid_actions) - 1)
@@ -95,6 +101,9 @@ class NNAgent(BaseAgent):
             action = actions_masked.argmax()
 
         self.state_actions = (state, action, self.get_raw_observation(player_id))
+        
+        if return_value:
+            return state, action, policy, value
         return state, action
 
     def check_policy(self):

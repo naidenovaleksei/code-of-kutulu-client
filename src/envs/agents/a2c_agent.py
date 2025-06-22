@@ -80,7 +80,6 @@ class A2CAgent(ActorAgent):
             return
     
         self.model.train()
-        self.optimizer.zero_grad()
 
         # Encode states
         states_tensor = self.episode_buffer.encode_states(states)
@@ -110,6 +109,8 @@ class A2CAgent(ActorAgent):
         loss = policy_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
 
         # Backpropagate and update
+        
+        self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 

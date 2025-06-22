@@ -2,31 +2,26 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class ConvA2CModel(nn.Module):
-    def __init__(self, size, in_channels=12, num_classes=5, fc_dim=64):
-        super(ConvA2CModel, self).__init__()
-        # Shared feature extractor
-        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.pool = nn.MaxPool2d(2, 2)  # reduces size by half
-        self.shared_fc = nn.Linear(32 * size * size, fc_dim)
+from src.envs.models.conv_state_model import ConvStateEncoderModel
 
+
+class ConvA2CModel(ConvStateEncoderModel):
+    def __init__(self, size, in_channels=12, num_classes=5, conv_dim=32, fc_dim=64, return_softmax=False):
+        super(ConvA2CModel, self).__init__(
+            size,
+            in_channels,
+            conv_dim,
+            fc_dim,
+        )
         # Actor (policy) head
         self.actor = nn.Linear(fc_dim, num_classes)
-
         # Critic (value) head
         self.critic = nn.Linear(fc_dim, 1)
 
     def forward(self, x):
         # Shared feature extraction
-        x = self.bn1(self.conv1(x))
-        x = F.relu(x)
-        x = self.pool(self.bn2(self.conv2(x)))
-        x = F.relu(x)
-        x = torch.flatten(x, 1)
-        shared_features = F.relu(self.shared_fc(x))
+        x = super().forward(x)
+        shared_features = F.relu(x)
 
         # Actor: output action probabilities
         policy_logits = self.actor(shared_features)

@@ -8,3 +8,4 @@ scipy
 tensorboard
 jupyter
 seaborn
+optuna

@@ -17,7 +17,9 @@ from src.envs.agents.reinforce_agent import REINFORCEAgent
 from src.envs.agents.a2c_agent import A2CAgent
 from src.envs.agents.dqn_agent import DQNAgentBase
 from src.envs.agents.dqn_agent_conv import DQNAgentConv
+from src.envs.agents.ppo_agent import PPOAgent
 from src.envs.agents.nn_agent import NNAgent
+from src.envs.agents.actor_agent import ActorAgent
 from src.envs.agents.rule_based_agent import EpsilonConstAgent
 from src.envs.strategy import RandomStrategy
 
@@ -52,7 +54,7 @@ BRONZE_MAZES = [
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
-                 verbose=False, silent=False):
+                 verbose=False, silent=False, only_train=True):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
@@ -80,6 +82,7 @@ class Trainer:
         
         self.env = None
         self.agent_validator = AgentValidator(self.actions)
+        self.only_train = only_train
 
         self.agents = []
         for i, agent_info in enumerate(agents_info):
@@ -106,6 +109,8 @@ class Trainer:
                 agent = REINFORCEAgent(**agent_info)
             elif _type == 'a2c':
                 agent = A2CAgent(**agent_info)
+            elif _type == 'ppo':
+                agent = PPOAgent(**agent_info)
             elif _type == 'qdn_by_kind':
                 agent = DQNAgentByKind(**agent_info)
             elif _type == 'qdn_conv':
@@ -174,25 +179,26 @@ class Trainer:
                 # self.env.viz_map()
             rollout_rewards.append(rewards)
 
+            train_agents_game_over = True
             for player_id, reward in enumerate(rewards):
                 agent_id = self.agent_map[player_id]
                 agent = self.agents[agent_id]
                 if agent.train:
-                    game_over = env.is_game_over_for_player(player_id)
-                    agent.append_observation(player_id, reward, game_over)
+                    agent_game_over = env.is_game_over_for_player(player_id)
+                    agent.append_observation(player_id, reward, agent_game_over)
                     need_train_step = False
+                    train_agents_game_over = train_agents_game_over and agent_game_over
                     if isinstance(agent, DQNAgentBase):
-                        need_train_step = game_over or (player_id in env.active_players())
-                    elif isinstance(agent, A2CAgent):
-                        need_train_step = game_over or (
-                            player_id in env.active_players() and env.turn % agent.batch_size == 0)
-                    elif isinstance(agent, REINFORCEAgent):
-                        need_train_step = game_over
+                        need_train_step = agent_game_over or (player_id in env.active_players())
+                    elif isinstance(agent, ActorAgent):
+                        need_train_step = agent_game_over
                     if need_train_step:
                         if self.verbose:
                             print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1][:-2]}, "
-                                f"train_step, reward: {reward}, game_over: {game_over}")
+                                f"train_step, reward: {reward}, game_over: {agent_game_over}")
                         agent.train_step()
+            if self.only_train:
+                game_over = train_agents_game_over
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 
