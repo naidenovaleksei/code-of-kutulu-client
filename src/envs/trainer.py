@@ -54,7 +54,8 @@ BRONZE_MAZES = [
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
-                 verbose=False, silent=False, only_train=True):
+                 verbose=False, silent=False, only_train=True,
+                 num_envs=1):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
@@ -64,6 +65,8 @@ class Trainer:
         self.actions = actions
         self.verbose = verbose
         self.silent = silent
+
+        self.num_envs = num_envs
 
         if not self.silent:
             if exp_name is None:
@@ -79,8 +82,7 @@ class Trainer:
 
             with open(f'{self.checkpoints_dir}/agents_info.json', 'w') as f:
                 json.dump(agents_info, f)
-        
-        self.env = None
+
         self.agent_validator = AgentValidator(self.actions)
         self.only_train = only_train
 
@@ -129,30 +131,62 @@ class Trainer:
             self.agents.append(agent)
 
         self.agent_map = np.arange(len(self.agents))
+        
+        # Initialize multi-environment support for PPO agents
+        if self.num_envs > 1:
+            for agent in self.agents:
+                if isinstance(agent, PPOAgent):
+                    agent.init_multi_env(self.num_envs)
     
-    def reset_env(self, seed=None):
-        if self.env is not None:
-            self.env.close()
-        if seed is not None:
-            maze_name = np.random.RandomState(seed).choice(self.mazes).item()
-        else:
-            maze_name = np.random.choice(self.mazes).item()
-        self.env = KutuluWorldEnv(
-            server_host='localhost:8080',
+    def reset_env(self, seed=None, maze_name=None, port=8080):
+        if maze_name is None:
+            if seed is not None:
+                maze_name = np.random.RandomState(seed).choice(self.mazes).item()
+            else:
+                maze_name = np.random.choice(self.mazes).item()
+        env = KutuluWorldEnv(
+            server_host=f'localhost:{port}',
             maze_name=maze_name,
             league_level=self.league_level,
             players_count=self.players_count,
             actions=self.actions,
             **self.env_kwargs
         )
-        observation, info = self.env.reset(seed=seed)
+        observation, info = env.reset(seed=seed)
 
         for agent in self.agents:
-            agent.set_env(self.env)
+            agent.set_env(env)
 
-        return self.env
+        return env
+    
+    def reset_envs(self, seed=None):
+        """Reset multiple environments with different mazes"""
+        if self.num_envs == 1:
+            return self.reset_env(seed)
+        
+        self.envs = []
+        # Select different mazes for diversity
+        selected_mazes = self.mazes[:self.num_envs] if self.num_envs <= len(self.mazes) else \
+                        (self.mazes * ((self.num_envs // len(self.mazes)) + 1))[:self.num_envs]
+        
+        for i in range(self.num_envs):
+            maze_name = selected_mazes[i]
+            env_seed = seed + i if seed is not None else None
+            env = self.reset_env(seed=env_seed, maze_name=maze_name)
+            self.envs.append(env)
+            
+            if self.verbose:
+                print(f"Environment {i}: {maze_name} (seed: {env_seed})")
+        
+        return self.envs
     
     def play_rollout(self, seed=None):
+        if self.num_envs == 1:
+            return self.play_single_rollout(seed)
+        else:
+            return self.play_multi_rollout(seed)
+    
+    def play_single_rollout(self, seed=None):
         env = self.reset_env(seed)
         rollout_rewards = []
         game_over = False
@@ -174,10 +208,11 @@ class Trainer:
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
+            rollout_rewards.append(rewards)
+
             if self.verbose:
                 print(f"step: {step}, rewards: {rewards}")
-                # self.env.viz_map()
-            rollout_rewards.append(rewards)
+                # env.viz_map()
 
             train_agents_game_over = True
             for player_id, reward in enumerate(rewards):
@@ -201,6 +236,108 @@ class Trainer:
                 game_over = train_agents_game_over
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
+    
+    def play_multi_rollout(self, seed=None):
+        """Play rollout across multiple environments simultaneously"""
+        # Track rewards for each environment
+        env_rollout_rewards = [[] for _ in range(self.num_envs)]
+        active_envs = list(range(self.num_envs))
+
+        if self.shuffle:
+            np.random.shuffle(self.agent_map)
+
+        # Select different mazes for diversity
+        selected_mazes = self.mazes[:self.num_envs] if self.num_envs <= len(self.mazes) else \
+                        (self.mazes * ((self.num_envs // len(self.mazes)) + 1))[:self.num_envs]
+
+        for env_idx in range(self.num_envs):
+            maze_name = selected_mazes[env_idx]
+            env_seed = seed + env_idx if seed is not None else None
+            env = self.reset_env(seed=env_seed, maze_name=maze_name)
+            if self.verbose:
+                print(f"Environment {env_idx}: {maze_name} (seed: {env_seed})")
+            
+            for player_id in env.active_players():
+                agent_id = self.agent_map[player_id]
+                self.agents[agent_id].set_env(env)
+
+            step = 0
+            game_over = False
+            while not game_over:
+                assert env.turn == step
+                step += 1
+
+                if self.verbose and env_idx == 0:  # Only print for first env to avoid spam
+                    print(f"Step {step}, Env {env_idx}, game_id: {env.game_id}")
+                
+                # Generate actions for this environment
+                action = [4 for _ in range(len(self.agents))]
+                
+                for player_id in env.active_players():
+                    agent_id = self.agent_map[player_id]
+                    _, At = self.agents[agent_id].generate_state_and_step(player_id)
+                    action[player_id] = At
+
+                # Step the environment
+                entities, rewards, game_over, info = env.step(action)
+                env_rollout_rewards[env_idx].append(rewards)
+
+                if self.verbose:
+                    print(f"Env {env_idx}, step: {step}, rewards: {rewards}")
+                
+                # Handle agent training for this environment
+                train_agents_game_over = True
+                for player_id, reward in enumerate(rewards):
+                    agent_id = self.agent_map[player_id]
+                    agent = self.agents[agent_id]
+                    if agent.train:
+                        agent_game_over = env.is_game_over_for_player(player_id)
+                        # Store environment index for multi-env agents
+                        if hasattr(agent, 'current_env_idx'):
+                            agent.current_env_idx = env_idx
+                        agent.append_observation(player_id, reward, agent_game_over)
+                        train_agents_game_over = train_agents_game_over and agent_game_over
+                
+                # Check if this environment is finished
+                if self.only_train:
+                    env_game_over = train_agents_game_over
+                else:
+                    env_game_over = game_over
+                    
+                if env_game_over:
+                    if self.verbose:
+                        print(f"Environment {env_idx} finished after {step} steps")
+                    continue
+        
+        # Trigger training for multi-environment agents after all environments complete
+        for agent in self.agents:
+            if agent.train and hasattr(agent, 'train_multi_env_step'):
+                if self.verbose:
+                    print(f"Training agent {self.agents.index(agent)} with multi-env data")
+                agent.train_multi_env_step()
+        
+        # Combine rewards from all environments
+        # For compatibility, return the average rewards across environments
+        max_steps = max(len(rewards) for rewards in env_rollout_rewards)
+        combined_rewards = []
+        
+        for step_idx in range(max_steps):
+            step_rewards = []
+            for env_idx in range(self.num_envs):
+                if step_idx < len(env_rollout_rewards[env_idx]):
+                    rewards = env_rollout_rewards[env_idx][step_idx]
+                    if rewards is not None:
+                        step_rewards.append(rewards)
+            
+            if step_rewards:
+                # Average rewards across environments for this step
+                step_rewards = np.array(step_rewards)
+                step_rewards[step_rewards == None] = 0
+                avg_rewards = np.mean(step_rewards, axis=0)
+                combined_rewards.append(avg_rewards)
+        
+        combined_rewards = np.array(combined_rewards, dtype=float)[:,np.argsort(self.agent_map)]
+        return combined_rewards
 
     def save_models(self, step):
         for i,agent in enumerate(self.agents):

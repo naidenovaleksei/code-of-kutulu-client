@@ -153,6 +153,22 @@ class PPOAgent(ActorAgent):
         self.max_grad_norm = max_grad_norm
         self.gae_lambda = gae_lambda
         self.n_step = n_step
+        
+        # Multi-environment support
+        self.num_envs = 1
+        self.env_buffers = None
+        self.current_env_idx = 0
+
+    def init_multi_env(self, num_envs):
+        """Initialize multi-environment support"""
+        self.num_envs = num_envs
+        if num_envs > 1:
+            # Create separate buffers for each environment
+            self.env_buffers = [PPOBuffer(DQNStateEncoderConv()) for _ in range(num_envs)]
+            for buffer in self.env_buffers:
+                buffer.start_episode()
+            if self.verbose:
+                print(f"PPO Agent initialized with {num_envs} environments")
 
     def set_env(self, env):
         assert self.state_type == 'conv'
@@ -181,8 +197,16 @@ class PPOAgent(ActorAgent):
             state, action, observation = self.state_actions
             exp = Experience(state, action, reward, game_over, None, observation)
             
+            # Choose the appropriate buffer
+            if self.env_buffers is not None:
+                # Multi-environment mode
+                buffer = self.env_buffers[self.current_env_idx]
+            else:
+                # Single environment mode
+                buffer = self.episode_buffer
+            
             # Append with log probability and value
-            self.episode_buffer.append(
+            buffer.append(
                 exp, 
                 self.current_log_prob, 
                 self.current_value
@@ -192,6 +216,153 @@ class PPOAgent(ActorAgent):
         if self.train and len(self.episode_buffer.buffer) > 0:
             super().train_step()
     
+    def train_multi_env_step(self):
+        """Train using data from all environments"""
+        if not self.train or self.env_buffers is None:
+            return self.train_step()  # Fall back to single-env
+        
+        # Collect data from all environment buffers
+        all_states, all_actions, all_rewards = [], [], []
+        all_log_probs, all_values = [], []
+        
+        for env_buffer in self.env_buffers:
+            if len(env_buffer.buffer) > 0:
+                states, actions, rewards, log_probs, values = env_buffer.end_episode()
+                all_states.extend(states)
+                all_actions.extend(actions)
+                all_rewards.extend(rewards)
+                all_log_probs.extend(log_probs)
+                all_values.extend(values)
+                env_buffer.start_episode()  # Reset for next episode
+        
+        if len(all_states) == 0:
+            return
+        
+        # Use the combined data for training
+        self._train_model_with_data(all_states, all_actions, all_rewards, 
+                                   all_log_probs, all_values)
+    
+    def _train_model_with_data(self, states, actions, rewards, old_log_probs, values):
+        """Train the PPO model with provided data"""
+        if len(states) == 0:
+            return
+    
+        self.model.train()
+
+        # Encode states
+        states_tensor = self.episode_buffer.encode_states(states)
+        actions_tensor = torch.tensor(actions, dtype=torch.long)
+        old_log_probs_tensor = torch.tensor(old_log_probs, dtype=torch.float32)
+        values_tensor = torch.tensor(values, dtype=torch.float32)
+
+        # Calculate returns and advantages using GAE
+        returns, advantages = self._calculate_gae(rewards, values_tensor)
+
+        # Convert to tensors
+        returns_tensor = torch.tensor(returns, dtype=torch.float32)
+        advantages_tensor = torch.tensor(advantages, dtype=torch.float32)
+
+        # Normalize advantages
+        if len(advantages_tensor) > 1:
+            advantages_tensor = (advantages_tensor - advantages_tensor.mean()) / (advantages_tensor.std() + 1e-8)
+
+        # PPO training loop
+        dataset_size = len(states)
+        
+        for epoch in range(self.ppo_epochs):
+            # Create mini-batches
+            indices = torch.randperm(dataset_size)
+            
+            total_policy_loss = 0
+            total_value_loss = 0
+            total_entropy = 0
+            total_kl_div = 0
+            num_batches = 0
+            
+            for start_idx in range(0, dataset_size, self.mini_batch_size):
+                end_idx = min(start_idx + self.mini_batch_size, dataset_size)
+                batch_indices = indices[start_idx:end_idx]
+                
+                # Get mini-batch data
+                batch_states = states_tensor[batch_indices]
+                batch_actions = actions_tensor[batch_indices]
+                batch_old_log_probs = old_log_probs_tensor[batch_indices]
+                batch_returns = returns_tensor[batch_indices]
+                batch_advantages = advantages_tensor[batch_indices]
+                
+                # Forward pass
+                policy, current_values = self.model(batch_states)
+                current_values = current_values.view(-1)
+                
+                # Get current log probabilities
+                log_probs = torch.log(policy + 1e-8)
+                current_log_probs = log_probs[range(len(batch_actions)), batch_actions]
+                
+                # Calculate probability ratio
+                ratio = torch.exp(current_log_probs - batch_old_log_probs)
+                
+                # Calculate surrogate losses
+                surr1 = ratio * batch_advantages
+                surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * batch_advantages
+                
+                # PPO clipped objective (we want to maximize, so minimize negative)
+                policy_loss = -torch.min(surr1, surr2).mean()
+                
+                # Value loss
+                value_loss = F.mse_loss(current_values, batch_returns)
+                
+                # Entropy for exploration
+                entropy = -(log_probs * policy).sum(dim=1).mean()
+                
+                # Total loss
+                loss = policy_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
+                
+                # Backpropagation
+                self.optimizer.zero_grad()
+                loss.backward()
+                
+                # Gradient clipping
+                if self.max_grad_norm > 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+                
+                self.optimizer.step()
+                
+                # Accumulate metrics
+                total_policy_loss += policy_loss.item()
+                total_value_loss += value_loss.item()
+                total_entropy += entropy.item()
+                num_batches += 1
+                
+                # Calculate KL divergence for early stopping
+                with torch.no_grad():
+                    kl_div = (batch_old_log_probs - current_log_probs).mean().item()
+                    total_kl_div += kl_div
+            
+            # Average KL divergence for this epoch
+            avg_kl_div = total_kl_div / num_batches
+            
+            # Early stopping if KL divergence is too high
+            if avg_kl_div > self.target_kl:
+                if self.verbose:
+                    print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {avg_kl_div:.6f}")
+                break
+
+        # Update loss tracking
+        final_loss = total_policy_loss + total_value_loss - total_entropy
+        if self.last_loss == np.inf:
+            self.last_loss = final_loss / num_batches
+        else:
+            self.last_loss = 0.05 * (final_loss / num_batches) + (1 - 0.05) * self.last_loss
+
+        if self.verbose:
+            print(f"Multi-Env Episode {self.episode_idx}, "
+                  f"Samples: {dataset_size}, "
+                  f"Policy Loss: {total_policy_loss/num_batches:.4f}, "
+                  f"Value Loss: {total_value_loss/num_batches:.4f}, "
+                  f"Entropy: {total_entropy/num_batches:.4f}, "
+                  f"KL Div: {avg_kl_div:.6f}, "
+                  f"Total Return: {np.sum(rewards):.4f}")
+
     def _train_model(self):
         """Train the PPO model with clipped objective"""
         # End the current episode and get the episode data

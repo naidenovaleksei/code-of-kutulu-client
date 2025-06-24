@@ -74,17 +74,6 @@ class KutuluWorldEnv(gym.Env):
 
         return observation, info
 
-    def close(self):
-        response = requests.post(
-            f'{self.host}/close',
-            json={
-                'gameId': self.game_id
-            }
-        )
-        data = response.json()
-        if not data['success']:
-            print('failed env closing: ', data)
-
     def step(self, actions):
         player_actions = []
         for i, action in enumerate(actions):
