@@ -157,7 +157,6 @@ class PPOAgent(ActorAgent):
         # Multi-environment support
         self.num_envs = 1
         self.env_buffers = None
-        self.current_env_idx = 0
 
     def init_multi_env(self, num_envs):
         """Initialize multi-environment support"""
@@ -188,7 +187,7 @@ class PPOAgent(ActorAgent):
 
         return state, action
 
-    def append_observation(self, player_id, reward, game_over):
+    def append_observation(self, player_id, reward, game_over, env_idx=None):
         """Append observation with PPO-specific data"""
         if not self.train:
             return
@@ -200,7 +199,7 @@ class PPOAgent(ActorAgent):
             # Choose the appropriate buffer
             if self.env_buffers is not None:
                 # Multi-environment mode
-                buffer = self.env_buffers[self.current_env_idx]
+                buffer = self.env_buffers[env_idx]
             else:
                 # Single environment mode
                 buffer = self.episode_buffer

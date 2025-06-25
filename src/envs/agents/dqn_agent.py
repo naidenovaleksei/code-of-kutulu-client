@@ -141,7 +141,7 @@ class DQNAgentBase(NNAgent):
             return np.random.randint(self.action_space_n)
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
     
-    def append_observation(self, player_id, reward, game_over):
+    def append_observation(self, player_id, reward, game_over, env_idx=None):
         if reward is None or not self.train:
             return
         state, action, observation = self.state_actions

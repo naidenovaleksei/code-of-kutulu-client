@@ -82,7 +82,7 @@ class ActorAgent(NNAgent):
             return np.random.randint(self.action_space_n)
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
     
-    def append_observation(self, player_id, reward, game_over):
+    def append_observation(self, player_id, reward, game_over, env_idx=None):
         if not self.train:
             return
         if reward is not None:
