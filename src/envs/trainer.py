@@ -325,7 +325,7 @@ class Trainer:
         metrics['check_wan_corner'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
         metrics['frame_ids'] = [agent.frame_idx if isinstance(agent, DQNAgentBase) else None for agent in self.agents]
         metrics['lr_list'] = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
-        for loss in ['policy_loss', 'value_loss', 'entropy']:
+        for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
             metrics[loss] = [getattr(agent, loss, None) for agent in self.agents]
         return metrics
 
@@ -354,7 +354,7 @@ class Trainer:
             agent.writer.add_scalar('Check/Wanderer/max', metrics['check_wan_normal'][i][3], step)
             agent.writer.add_scalar('Check/Explorer/mean', metrics['check_exp_normal'][i][4], step)
             agent.writer.add_scalar('Check/Wanderer/mean', metrics['check_wan_normal'][i][4], step)
-            for loss in ['policy_loss', 'value_loss', 'entropy']:
+            for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
                 if metrics[loss][i] is not None:
                     agent.writer.add_scalar(f'Train/{loss}', metrics[loss][i], step)
 

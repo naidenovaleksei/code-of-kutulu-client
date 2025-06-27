@@ -20,6 +20,8 @@ from src.envs.kutulu_observer import (
 )
 from src.envs.models.conv_a2c_model import ConvA2CModel
 
+METRICS_SMOOTH_COEF = 0.9
+
 
 class PPOBuffer:
     """Enhanced buffer for PPO that stores additional information needed for clipped objective"""
@@ -350,11 +352,13 @@ class PPOAgent(ActorAgent):
             self.policy_loss = total_policy_loss / num_batches
             self.value_loss = total_value_loss / num_batches
             self.entropy = total_entropy / num_batches
+            self.kl_div = avg_kl_div
         else:
-            self.last_loss = 0.05 * (final_loss / num_batches) + (1 - 0.05) * self.last_loss
-            self.policy_loss = 0.05 * (total_policy_loss / num_batches) + (1 - 0.05) * self.policy_loss
-            self.value_loss = 0.05 * (total_value_loss / num_batches) + (1 - 0.05) * self.value_loss
-            self.entropy = 0.05 * (total_entropy / num_batches) + (1 - 0.05) * self.entropy
+            self.last_loss = METRICS_SMOOTH_COEF * (final_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.last_loss
+            self.policy_loss = METRICS_SMOOTH_COEF * (total_policy_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.policy_loss
+            self.value_loss = METRICS_SMOOTH_COEF * (total_value_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.value_loss
+            self.entropy = METRICS_SMOOTH_COEF * (total_entropy / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.entropy
+            self.kl_div = METRICS_SMOOTH_COEF * kl_div + (1 - METRICS_SMOOTH_COEF) * self.kl_div
 
         if self.verbose:
             print(f"Multi-Env Episode {self.episode_idx}, "
@@ -475,11 +479,13 @@ class PPOAgent(ActorAgent):
             self.policy_loss = total_policy_loss / num_batches
             self.value_loss = total_value_loss / num_batches
             self.entropy = total_entropy / num_batches
+            self.kl_div = avg_kl_div
         else:
-            self.last_loss = 0.05 * (final_loss / num_batches) + (1 - 0.05) * self.last_loss
-            self.policy_loss = 0.05 * (total_policy_loss / num_batches) + (1 - 0.05) * self.policy_loss
-            self.value_loss = 0.05 * (total_value_loss / num_batches) + (1 - 0.05) * self.value_loss
-            self.entropy = 0.05 * (total_entropy / num_batches) + (1 - 0.05) * self.entropy
+            self.last_loss = METRICS_SMOOTH_COEF * (final_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.last_loss
+            self.policy_loss = METRICS_SMOOTH_COEF * (total_policy_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.policy_loss
+            self.value_loss = METRICS_SMOOTH_COEF * (total_value_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.value_loss
+            self.entropy = METRICS_SMOOTH_COEF * (total_entropy / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.entropy
+            self.kl_div = METRICS_SMOOTH_COEF * kl_div + (1 - METRICS_SMOOTH_COEF) * self.kl_div
 
         if self.verbose:
             print(f"Episode {self.episode_idx}, "
