@@ -20,7 +20,7 @@ from src.envs.kutulu_observer import (
 )
 from src.envs.models.conv_a2c_model import ConvA2CModel
 
-METRICS_SMOOTH_COEF = 0.9
+METRICS_SMOOTH_COEF = 0.05
 
 
 class PPOBuffer:
@@ -191,25 +191,25 @@ class PPOAgent(ActorAgent):
         """Append observation with PPO-specific data"""
         if not self.train:
             return
-            
-        if reward is not None:
-            state, action, observation = self.state_actions
-            exp = Experience(state, action, reward, game_over, None, observation)
-            
-            # Choose the appropriate buffer
-            if self.env_buffers is not None:
-                # Multi-environment mode
-                buffer = self.env_buffers[env_idx]
-            else:
-                # Single environment mode
-                buffer = self.episode_buffer
-            
-            # Append with log probability and value
-            buffer.append(
-                exp, 
-                self.current_log_prob, 
-                self.current_value
-            )
+
+        state, action, observation = self.state_actions
+        assert reward is not None
+        exp = Experience(state, action, reward, game_over, None, observation)
+
+        # Choose the appropriate buffer
+        if self.env_buffers is not None:
+            # Multi-environment mode
+            buffer = self.env_buffers[env_idx]
+        else:
+            # Single environment mode
+            buffer = self.episode_buffer
+        
+        # Append with log probability and value
+        buffer.append(
+            exp, 
+            self.current_log_prob, 
+            self.current_value
+        )
 
     def train_step(self):
         if self.train and len(self.episode_buffer.buffer) > 0:
@@ -223,7 +223,7 @@ class PPOAgent(ActorAgent):
         # Collect data from all environment buffers
         all_states, all_actions, all_rewards, all_dones = [], [], [], []
         all_log_probs, all_values = [], []
-        
+
         for env_buffer in self.env_buffers:
             if len(env_buffer.buffer) > 0:
                 states, actions, rewards, dones, log_probs, values = env_buffer.end_episode()
@@ -340,7 +340,7 @@ class PPOAgent(ActorAgent):
             avg_kl_div = total_kl_div / num_batches
             
             # Early stopping if KL divergence is too high
-            if avg_kl_div > self.target_kl:
+            if abs(avg_kl_div) > self.target_kl:
                 if self.verbose:
                     print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {avg_kl_div:.6f}")
                 break
@@ -467,7 +467,7 @@ class PPOAgent(ActorAgent):
             avg_kl_div = total_kl_div / num_batches
             
             # Early stopping if KL divergence is too high
-            if avg_kl_div > self.target_kl:
+            if abs(avg_kl_div) > self.target_kl:
                 if self.verbose:
                     print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {avg_kl_div:.6f}")
                 break
