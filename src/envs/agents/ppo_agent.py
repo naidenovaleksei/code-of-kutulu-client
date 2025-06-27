@@ -266,8 +266,11 @@ class PPOAgent(ActorAgent):
 
         # PPO training loop
         dataset_size = len(states)
+        early_stop = False
         
         for epoch in range(self.ppo_epochs):
+            if early_stop:
+                break
             # Create mini-batches
             indices = torch.randperm(dataset_size)
             
@@ -333,17 +336,15 @@ class PPOAgent(ActorAgent):
                 
                 # Calculate KL divergence for early stopping
                 with torch.no_grad():
-                    kl_div = (batch_old_log_probs - current_log_probs).mean().item()
-                    total_kl_div += kl_div
-            
-            # Average KL divergence for this epoch
-            avg_kl_div = total_kl_div / num_batches
-            
-            # Early stopping if KL divergence is too high
-            if abs(avg_kl_div) > self.target_kl:
-                if self.verbose:
-                    print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {avg_kl_div:.6f}")
-                break
+                    kl_div = (batch_old_log_probs - current_log_probs).mean()
+                    total_kl_div += kl_div.item()
+                
+                # Early stopping if KL divergence is too high
+                if abs(kl_div) > self.target_kl:
+                    if self.verbose:
+                        print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {kl_div:.6f}")
+                    early_stop = True
+                    break
 
         # Update loss tracking
         final_loss = total_policy_loss + total_value_loss - total_entropy
@@ -352,13 +353,13 @@ class PPOAgent(ActorAgent):
             self.policy_loss = total_policy_loss / num_batches
             self.value_loss = total_value_loss / num_batches
             self.entropy = total_entropy / num_batches
-            self.kl_div = avg_kl_div
+            self.kl_div = total_kl_div / num_batches
         else:
             self.last_loss = METRICS_SMOOTH_COEF * (final_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.last_loss
             self.policy_loss = METRICS_SMOOTH_COEF * (total_policy_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.policy_loss
             self.value_loss = METRICS_SMOOTH_COEF * (total_value_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.value_loss
             self.entropy = METRICS_SMOOTH_COEF * (total_entropy / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.entropy
-            self.kl_div = METRICS_SMOOTH_COEF * kl_div + (1 - METRICS_SMOOTH_COEF) * self.kl_div
+            self.kl_div = METRICS_SMOOTH_COEF * (total_kl_div / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.kl_div
 
         if self.verbose:
             print(f"Multi-Env Episode {self.episode_idx}, "
@@ -366,7 +367,7 @@ class PPOAgent(ActorAgent):
                   f"Policy Loss: {total_policy_loss/num_batches:.4f}, "
                   f"Value Loss: {total_value_loss/num_batches:.4f}, "
                   f"Entropy: {total_entropy/num_batches:.4f}, "
-                  f"KL Div: {avg_kl_div:.6f}, "
+                  f"KL Div: {total_kl_div/num_batches:.6f}, "
                   f"Total Return: {np.sum(rewards):.4f}")
 
     def _train_model(self):
@@ -393,8 +394,11 @@ class PPOAgent(ActorAgent):
 
         # PPO training loop
         dataset_size = len(states)
+        early_stop = False
         
         for epoch in range(self.ppo_epochs):
+            if early_stop:
+                break
             # Create mini-batches
             indices = torch.randperm(dataset_size)
             
@@ -460,17 +464,15 @@ class PPOAgent(ActorAgent):
                 
                 # Calculate KL divergence for early stopping
                 with torch.no_grad():
-                    kl_div = (batch_old_log_probs - current_log_probs).mean().item()
-                    total_kl_div += kl_div
-            
-            # Average KL divergence for this epoch
-            avg_kl_div = total_kl_div / num_batches
-            
-            # Early stopping if KL divergence is too high
-            if abs(avg_kl_div) > self.target_kl:
-                if self.verbose:
-                    print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {avg_kl_div:.6f}")
-                break
+                    kl_div = (batch_old_log_probs - current_log_probs).mean()
+                    total_kl_div += kl_div.item()
+                
+                # Early stopping if KL divergence is too high
+                if abs(kl_div) > self.target_kl:
+                    if self.verbose:
+                        print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {kl_div:.6f}")
+                    early_stop = True
+                    break
 
         # Update loss tracking
         final_loss = total_policy_loss + total_value_loss - total_entropy
@@ -479,7 +481,7 @@ class PPOAgent(ActorAgent):
             self.policy_loss = total_policy_loss / num_batches
             self.value_loss = total_value_loss / num_batches
             self.entropy = total_entropy / num_batches
-            self.kl_div = avg_kl_div
+            self.kl_div = total_kl_div / num_batches
         else:
             self.last_loss = METRICS_SMOOTH_COEF * (final_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.last_loss
             self.policy_loss = METRICS_SMOOTH_COEF * (total_policy_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.policy_loss
@@ -492,7 +494,7 @@ class PPOAgent(ActorAgent):
                   f"Policy Loss: {total_policy_loss/num_batches:.4f}, "
                   f"Value Loss: {total_value_loss/num_batches:.4f}, "
                   f"Entropy: {total_entropy/num_batches:.4f}, "
-                  f"KL Div: {avg_kl_div:.6f}, "
+                  f"KL Div: {total_kl_div/num_batches:.6f}, "
                   f"Return: {np.sum(rewards):.4f}")
 
     def _calculate_gae(self, rewards, values, dones):
