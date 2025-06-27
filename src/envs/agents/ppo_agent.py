@@ -57,9 +57,9 @@ class PPOBuffer:
         log_probs = [item['log_prob'] for item in augmented_data]
         values = [item['value'] for item in augmented_data]
         
-        states, actions, rewards, _, _, _ = zip(*experiences)
+        states, actions, rewards, dones, _, _ = zip(*experiences)
         
-        return states, actions, rewards, log_probs, values
+        return states, actions, rewards, dones, log_probs, values
 
     def encode_states(self, states):
         return self.state_encoder.encode_states(states)
@@ -221,15 +221,16 @@ class PPOAgent(ActorAgent):
             return self.train_step()  # Fall back to single-env
         
         # Collect data from all environment buffers
-        all_states, all_actions, all_rewards = [], [], []
+        all_states, all_actions, all_rewards, all_dones = [], [], [], []
         all_log_probs, all_values = [], []
         
         for env_buffer in self.env_buffers:
             if len(env_buffer.buffer) > 0:
-                states, actions, rewards, log_probs, values = env_buffer.end_episode()
+                states, actions, rewards, dones, log_probs, values = env_buffer.end_episode()
                 all_states.extend(states)
                 all_actions.extend(actions)
                 all_rewards.extend(rewards)
+                all_dones.extend(dones)
                 all_log_probs.extend(log_probs)
                 all_values.extend(values)
                 env_buffer.start_episode()  # Reset for next episode
@@ -238,10 +239,13 @@ class PPOAgent(ActorAgent):
             return
         
         # Use the combined data for training
-        self._train_model_with_data(all_states, all_actions, all_rewards, 
+        self._train_model_with_data(all_states, all_actions, all_rewards, all_dones,
                                    all_log_probs, all_values)
+        
+        if self.scheduler:
+            self.scheduler.step()
     
-    def _train_model_with_data(self, states, actions, rewards, old_log_probs, values):
+    def _train_model_with_data(self, states, actions, rewards, dones, old_log_probs, values):
         """Train the PPO model with provided data"""
         if len(states) == 0:
             return
@@ -252,14 +256,9 @@ class PPOAgent(ActorAgent):
         states_tensor = self.episode_buffer.encode_states(states)
         actions_tensor = torch.tensor(actions, dtype=torch.long)
         old_log_probs_tensor = torch.tensor(old_log_probs, dtype=torch.float32)
-        values_tensor = torch.tensor(values, dtype=torch.float32)
 
         # Calculate returns and advantages using GAE
-        returns, advantages = self._calculate_gae(rewards, values_tensor)
-
-        # Convert to tensors
-        returns_tensor = torch.tensor(returns, dtype=torch.float32)
-        advantages_tensor = torch.tensor(advantages, dtype=torch.float32)
+        returns_tensor, advantages_tensor = self._calculate_gae(rewards, values, dones)
 
         # Normalize advantages
         if len(advantages_tensor) > 1:
@@ -350,8 +349,14 @@ class PPOAgent(ActorAgent):
         final_loss = total_policy_loss + total_value_loss - total_entropy
         if self.last_loss == np.inf:
             self.last_loss = final_loss / num_batches
+            self.policy_loss = total_policy_loss / num_batches
+            self.value_loss = total_value_loss / num_batches
+            self.entropy = total_entropy / num_batches
         else:
             self.last_loss = 0.05 * (final_loss / num_batches) + (1 - 0.05) * self.last_loss
+            self.policy_loss = 0.05 * (total_policy_loss / num_batches) + (1 - 0.05) * self.policy_loss
+            self.value_loss = 0.05 * (total_value_loss / num_batches) + (1 - 0.05) * self.value_loss
+            self.entropy = 0.05 * (total_entropy / num_batches) + (1 - 0.05) * self.entropy
 
         if self.verbose:
             print(f"Multi-Env Episode {self.episode_idx}, "
@@ -365,7 +370,7 @@ class PPOAgent(ActorAgent):
     def _train_model(self):
         """Train the PPO model with clipped objective"""
         # End the current episode and get the episode data
-        states, actions, rewards, old_log_probs, values = self.episode_buffer.end_episode()
+        states, actions, rewards, dones, old_log_probs, values = self.episode_buffer.end_episode()
 
         if len(states) == 0:
             return
@@ -376,14 +381,9 @@ class PPOAgent(ActorAgent):
         states_tensor = self.episode_buffer.encode_states(states)
         actions_tensor = torch.tensor(actions, dtype=torch.long)
         old_log_probs_tensor = torch.tensor(old_log_probs, dtype=torch.float32)
-        values_tensor = torch.tensor(values, dtype=torch.float32)
 
         # Calculate returns and advantages using GAE
-        returns, advantages = self._calculate_gae(rewards, values_tensor)
-
-        # Convert to tensors
-        returns_tensor = torch.tensor(returns, dtype=torch.float32)
-        advantages_tensor = torch.tensor(advantages, dtype=torch.float32)
+        returns_tensor, advantages_tensor = self._calculate_gae(rewards, values, dones)
 
         # Normalize advantages
         if len(advantages_tensor) > 1:
@@ -474,8 +474,14 @@ class PPOAgent(ActorAgent):
         final_loss = total_policy_loss + total_value_loss - total_entropy
         if self.last_loss == np.inf:
             self.last_loss = final_loss / num_batches
+            self.policy_loss = total_policy_loss / num_batches
+            self.value_loss = total_value_loss / num_batches
+            self.entropy = total_entropy / num_batches
         else:
             self.last_loss = 0.05 * (final_loss / num_batches) + (1 - 0.05) * self.last_loss
+            self.policy_loss = 0.05 * (total_policy_loss / num_batches) + (1 - 0.05) * self.policy_loss
+            self.value_loss = 0.05 * (total_value_loss / num_batches) + (1 - 0.05) * self.value_loss
+            self.entropy = 0.05 * (total_entropy / num_batches) + (1 - 0.05) * self.entropy
 
         if self.verbose:
             print(f"Episode {self.episode_idx}, "
@@ -485,28 +491,39 @@ class PPOAgent(ActorAgent):
                   f"KL Div: {avg_kl_div:.6f}, "
                   f"Return: {np.sum(rewards):.4f}")
 
-    def _calculate_gae(self, rewards, values):
-        """Calculate returns and advantages using Generalized Advantage Estimation (GAE)"""
+    def _calculate_gae(self, rewards, values, dones):
+        """
+        Generalized Advantage Estimation (GAE)
+        
+        Args:
+            rewards: list of rewards (length T)
+            values: list of state values, shape [T+1] or [T]
+            dones: list of done flags (length T) — 1 if episode ends at step t
+            gamma: discount factor
+            lam: GAE lambda
+
+        Returns:
+            returns: discounted return (target for value function)
+            advantages: advantage estimates
+        """
         T = len(rewards)
-        advantages = np.zeros(T)
-        returns = np.zeros(T)
+        values = torch.tensor(values, dtype=torch.float32)
+        rewards = torch.tensor(rewards, dtype=torch.float32)
+        dones = torch.tensor(dones, dtype=torch.float32)
         
-        # Calculate advantages using GAE
-        gae = 0
+        # Если values не включает последний state (T+1), добавим его как 0
+        if len(values) == T:
+            values = torch.cat([values, torch.zeros(1)])
+
+        advantages = torch.zeros(T)
+        last_gae = 0
+
         for t in reversed(range(T)):
-            if t == T - 1:
-                next_value = 0  # Terminal state
-            else:
-                next_value = values[t + 1].item()
-                
-            # TD error
-            delta = rewards[t] + self.gamma * next_value - values[t].item()
-            
-            # GAE calculation
-            gae = delta + self.gamma * self.gae_lambda * gae
-            advantages[t] = gae
-            
-        # Calculate returns as advantages + values
-        returns = advantages + values.numpy()
-        
-        return returns, advantages
+            non_terminal = 1.0 - dones[t]
+            delta = rewards[t] + self.gamma * values[t + 1] * non_terminal - values[t]
+            last_gae = delta + self.gamma * self.gae_lambda * non_terminal * last_gae
+            advantages[t] = last_gae
+
+        returns = advantages + values[:-1]
+        return returns.detach(), advantages.detach()
+

@@ -124,6 +124,10 @@ class NNAgent(BaseAgent):
             self.model.load_state_dict(weights, strict=False)
         else:
             weights = torch.load(f"{checkpoint_dir}/model.pt", map_location=map_location)
+            if 'fc1.weight' in weights and hasattr(self.model, 'fc'):
+                weights['fc.weight'] = weights.pop('fc1.weight')
+            if 'fc1.bias' in weights and hasattr(self.model, 'fc'):
+                weights['fc.bias'] = weights.pop('fc1.bias')
             self.model.load_state_dict(weights)
         
         # Move model to device after loading
