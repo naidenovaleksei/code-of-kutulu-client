@@ -93,7 +93,7 @@ class PPOAgent(ActorAgent):
                  entropy_coef=0.01, value_loss_coef=0.5, 
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5,
-                 gae_lambda=0.95, n_step=10, **kw):
+                 gae_lambda=0.95, **kw):
         """
         PPO (Proximal Policy Optimization) Agent with Clipped Objective
 
@@ -113,7 +113,6 @@ class PPOAgent(ActorAgent):
             target_kl: Target KL divergence for early stopping
             max_grad_norm: Maximum gradient norm for clipping
             gae_lambda: Lambda parameter for GAE (Generalized Advantage Estimation)
-            n_step: Number of steps for n-step returns
         """
         assert state_type == 'conv', "PPO agent only supports 'conv' state type"
 
@@ -152,7 +151,6 @@ class PPOAgent(ActorAgent):
         self.target_kl = target_kl
         self.max_grad_norm = max_grad_norm
         self.gae_lambda = gae_lambda
-        self.n_step = n_step
         
         # Multi-environment support
         self.num_envs = 1
