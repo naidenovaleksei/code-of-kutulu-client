@@ -7,7 +7,7 @@ from tensorboard.backend.event_processing import event_accumulator
 from src.envs.trainer import Trainer
 
 
-def get_score(result):
+def get_score(result, is_ppo=True):
     agent_id = 0
     metrics_list = result[2]
     acc = [
@@ -37,7 +37,14 @@ def get_score(result):
             ]
         ] for metrics in metrics_list[-10:]
     ]
-    score = np.mean(acc) + 0.25 * np.mean(top_action_cnt) - 0.1 * np.max(np.max(mean_q, axis=0) - np.min(mean_q, axis=0))
+    if is_ppo:
+        value_loss = [
+            metrics['value_loss'][agent_id]
+            for metrics in metrics_list[-10:]
+        ]
+        score = np.mean(acc) + 0.25 * np.mean(top_action_cnt) - 0.5 * np.mean(value_loss)
+    else:
+        score = np.mean(acc) + 0.25 * np.mean(top_action_cnt) - 0.1 * np.max(np.max(mean_q, axis=0) - np.min(mean_q, axis=0))
     return score
 
 
@@ -108,4 +115,4 @@ def get_top_k(agents_info, num_experiments, league_level, mazes, actions, k=2):
                 winner_stats[i] = winner_stats.get(i, 0) + 1
     top_k = heapq.nlargest(2, winner_stats, key=winner_stats.get)
     best_agents_info = [agents_info[k] for k in top_k]
-    return best_agents_info, winner_stats
+    return best_agents_info, top_k, winner_stats
