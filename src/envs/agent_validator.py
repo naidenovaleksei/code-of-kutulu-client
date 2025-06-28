@@ -2,7 +2,7 @@ from collections import Counter
 import numpy as np
 
 from src.envs.kutulu_world import KutuluWorldEnv
-from src.game.template import MOVE_REL_POS, REL_POSITIONS
+from src.game.template import MOVE_REL_POS, REL_POSITIONS, EXTENDED_KUTULU_ACTIONS
 
 def get_normal_env(actions):
         env = KutuluWorldEnv('', '', 1, actions=actions)
@@ -73,6 +73,7 @@ class AgentValidator:
         self.player_params = player_params
         self.explorers_params = explorers_params
         self.wanderers_params = wanderers_params
+        self.plan_action = EXTENDED_KUTULU_ACTIONS.index('PLAN')
     
     def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3, env_type='normal', verbose=False):
         result = []
@@ -182,8 +183,10 @@ class AgentValidator:
 
     def _generate_exporer_nearby(self, n_step, moves):
         moves = set([MOVE_REL_POS[move] for move in moves])
+        has_plan = self.player_params[1] > 0
+        plan_actions = [self.plan_action] if has_plan and n_step <= 2 else []
         return [
-            (set([answer]), [(tuple(x * n_step for x in rel_pos))], [])
+            (set([answer] + plan_actions), [(tuple(x * n_step for x in rel_pos))], [])
             for answer, rel_pos in enumerate(REL_POSITIONS)
             if rel_pos in moves
         ]

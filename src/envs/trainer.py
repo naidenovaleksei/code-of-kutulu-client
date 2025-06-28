@@ -84,6 +84,7 @@ class Trainer:
                 json.dump(agents_info, f)
 
         self.agent_validator = AgentValidator(self.actions)
+        self.agent_validator_plan = AgentValidator(self.actions, player_params=(100, 1, 0))
         self.only_train = only_train
 
         self.agents = []
@@ -311,6 +312,7 @@ class Trainer:
     def _calculate_metrics(self, reward_list):
         metrics = {}
         av = self.agent_validator
+        av_plan = self.agent_validator_plan
         total_reward_list = np.array([np.nansum(rewards, axis=0) for rewards in reward_list])
         metrics['rewards'] = np.mean(total_reward_list, axis=0)
         winner_list = np.argmax(total_reward_list, 1)
@@ -319,6 +321,8 @@ class Trainer:
         metrics['eps'] = [agent.get_eps() for agent in self.agents]
         metrics['check_exp_normal'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
         metrics['check_wan_normal'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
+        metrics['check_exp_normal_plan1'] = [av_plan.check_entity_nearby(agent, 'EXPLORER', n_min=1, n_max=2) for agent in self.agents]
+        metrics['check_exp_normal_plan0'] = [av_plan.check_entity_nearby(agent, 'EXPLORER', n_min=3, n_max=3) for agent in self.agents]
         metrics['check_exp_coridor'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='coridor') for agent in self.agents]
         metrics['check_wan_coridor'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='coridor') for agent in self.agents]
         metrics['check_exp_corner'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
@@ -338,6 +342,8 @@ class Trainer:
             agent.writer.add_scalar('Train/Epsilon', metrics['eps'][i], step)
             agent.writer.add_scalar('Check/Explorer/acc', metrics['check_exp_normal'][i][0], step)
             agent.writer.add_scalar('Check/Wanderer/acc', metrics['check_wan_normal'][i][0], step)
+            agent.writer.add_scalar('Check/Explorer/acc_plan0', metrics['check_exp_normal_plan0'][i][0], step)
+            agent.writer.add_scalar('Check/Explorer/acc_plan1', metrics['check_exp_normal_plan1'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_coridor', metrics['check_exp_coridor'][i][0], step)
             agent.writer.add_scalar('Check/Wanderer/acc_coridor', metrics['check_wan_coridor'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_corner', metrics['check_exp_corner'][i][0], step)
