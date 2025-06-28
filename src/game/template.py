@@ -488,13 +488,31 @@ class QlearningSolver(Solver):
         return action_id
 
 
-class DQNSolver(Solver):
+class NNSolver(Solver):
     def __init__(self, info, actions, weights: dict):
-        super(DQNSolver, self).__init__(info, actions)
+        super(NNSolver, self).__init__(info, actions)
         self.weights = weights
+        self._assert_weights(actions)
+
+    def _assert_weights(self, actions):
+        raise NotImplementedError
+
+    def _calculate_output(self, entities, player_pos):
+        raise NotImplementedError
+
+    def calculate_action(self, entities, player_pos, player_mask):
+        model_output = self._calculate_output(entities, player_pos)
+        player_mask = player_mask[:len(self.actions)]
+        q_vals_v = np.ma.array(model_output, mask=player_mask)
+        action_id = q_vals_v.argmax()
+        return action_id
+
+
+class DQNSolver(NNSolver):
+    def _assert_weights(self, actions):
         assert self.weights['entity_impact.weight'].shape[0] == len(actions)
 
-    def calculate_output(self, entities, player_pos):
+    def _calculate_output(self, entities, player_pos):
         state = get_state_ext(player_pos, entities, self.info['lines'])
         kind_list, features_list, dir_list = parse_state(state)
         data = {
@@ -505,82 +523,14 @@ class DQNSolver(Solver):
         model_output = calculate_output_np(data, self.weights, len(self.actions))[0]
         return model_output
 
-    def calculate_action(self, entities, player_pos, player_mask):
-        model_output = self.calculate_output(entities, player_pos)
-        player_mask = player_mask[:len(self.actions)]
-        q_vals_v = np.ma.array(model_output, mask=player_mask)
-        action_id = q_vals_v.argmax()
-        return action_id
 
-
-class DQNConvSolver(Solver):
-    def __init__(self, info, weights, actions=DEFAULT_KUTULU_ACTIONS, size=3):
-        super(DQNConvSolver, self).__init__(info, actions)
-        self.weights = weights
-        self.size = size
-        assert self.weights['fc2.weight'].shape[0] == len(actions)
-        
-    def calculate_output(self, entities, player_pos):
-        # player_pos is already provided as a parameter, so we don't need to extract it from entities
-        player_id = entities[0]['id']
-        state = get_state_conv(player_id, entities, self.info['lines'], self.size)
-        
-        features = []
-        for k in [
-            'map',
-            'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
-            'WANDERER_param0', 'WANDERER_param1',
-            'SLASHER_param0', 'SLASHER_param1',
-            'EFFECT_PLAN_param0',
-            'EFFECT_LIGHT_param0',
-            'EFFECT_SHELTER_param0',
-            'EFFECT_YELL_param0'
-            ]:
-            features.append(state[k])
-
-        data = np.array([features])
-        
-        weights = self.weights
-        conv1 = weights['conv1.weight']
-        conv1_b = weights['conv1.bias']
-        conv2 = weights['conv2.weight']
-        conv2_b = weights['conv2.bias']
-        fc1 = weights['fc.weight']
-        fc1_b = weights['fc.bias']
-        fc2 = weights['fc2.weight']
-        fc2_b = weights['fc2.bias']
-        bn1 = weights['bn1.weight']
-        bn1_b = weights['bn1.bias']
-        bn1_mean = weights['bn1.running_mean']
-        bn1_var = weights['bn1.running_var']
-        bn2 = weights['bn2.weight']
-        bn2_b = weights['bn2.bias']
-        bn2_mean = weights['bn2.running_mean']
-        bn2_var = weights['bn2.running_var']
-
-        x = data
-        x = self._conv2d(x, conv1, conv1_b)
-        x = self._batchnorm2d(x, bn1_mean, bn1_var, bn1, bn1_b)
-        x = self._relu(x)
-        x = self._conv2d(x, conv2, conv2_b)
-        x = self._batchnorm2d(x, bn2_mean, bn2_var, bn2, bn2_b)
-        x = self._relu(x)
-        x = self._maxpool2d(x)
-
-        # # Flatten
-        N = x.shape[0]
-        x = x.reshape(N, -1)
-
-        # # FC layers
-        x = self._relu(np.dot(x, fc1.T) + fc1_b)
-        x = np.dot(x, fc2.T) + fc2_b
-        
-        return x[0]
-    
-    def _relu(self, x):
+class InferenceHelper:
+    @staticmethod
+    def _relu(x):
         return np.maximum(0, x)
 
-    def _maxpool2d(self, x, kernel_size=2, stride=2):
+    @staticmethod
+    def _maxpool2d(x, kernel_size=2, stride=2):
         N, C, H, W = x.shape
         out_H = H // stride
         out_W = W // stride
@@ -596,7 +546,8 @@ class DQNConvSolver(Solver):
                         )
         return pooled
 
-    def _conv2d(self, x, weight, bias, padding=1):
+    @staticmethod
+    def _conv2d(x, weight, bias, padding=1):
         N, C_in, H, W = x.shape
         C_out, _, kH, kW = weight.shape
         x_padded = np.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)), mode='constant')
@@ -611,30 +562,92 @@ class DQNConvSolver(Solver):
                 out[n, cout] += bias[cout]
         return out
 
-    def _batchnorm2d(self, x, mean, var, weight, bias, eps=1e-5):
+    @staticmethod
+    def _batchnorm2d(x, mean, var, weight, bias, eps=1e-5):
         # x: [N, C, H, W]
         return weight[None, :, None, None] * ((x - mean[None, :, None, None]) / np.sqrt(var[None, :, None, None] + eps)) + bias[None, :, None, None]
 
-    
-    def calculate_action(self, entities, player_pos, player_mask):
-        model_output = self.calculate_output(entities, player_pos)
-        player_mask = player_mask[:len(self.actions)]
-        q_vals_v = np.ma.array(model_output, mask=player_mask)
-        action_id = q_vals_v.argmax()
-        return action_id
+class ConvEncoder:
+    def __init__(self):
+        self.inference_helper = InferenceHelper()
 
+    def _encode(self, state, weights):
+        features = []
+        for k in [
+            'map',
+            'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
+            'WANDERER_param0', 'WANDERER_param1',
+            'SLASHER_param0', 'SLASHER_param1',
+            'EFFECT_PLAN_param0',
+            'EFFECT_LIGHT_param0',
+            'EFFECT_SHELTER_param0',
+            'EFFECT_YELL_param0'
+            ]:
+            features.append(state[k])
+        data = np.array([features])
 
-class DQNByKindSolver(Solver):
-    def __init__(self, info, weights, actions=DEFAULT_KUTULU_ACTIONS):
-        super(DQNByKindSolver, self).__init__(info, actions)
-        assert weights['model_by_kind.WANDERER.entity_impact.weight'].shape[0] == len(actions)
-        for key, val in weights.items():
-            if key.endswith('entity_impact.weight'):
-                assert val.shape[0] == len(actions), f'wrong shape for {key} layers'
+        conv1 = weights['conv1.weight']
+        conv1_b = weights['conv1.bias']
+        conv2 = weights['conv2.weight']
+        conv2_b = weights['conv2.bias']
+        fc1 = weights['fc.weight']
+        fc1_b = weights['fc.bias']
+        bn1 = weights['bn1.weight']
+        bn1_b = weights['bn1.bias']
+        bn1_mean = weights['bn1.running_mean']
+        bn1_var = weights['bn1.running_var']
+        bn2 = weights['bn2.weight']
+        bn2_b = weights['bn2.bias']
+        bn2_mean = weights['bn2.running_mean']
+        bn2_var = weights['bn2.running_var']
 
-        # self.weights_dict = weights
-        self.entity_kinds = set([key.split('.')[1] for key in weights.keys()])
+        x = data
+        x = self.inference_helper._conv2d(x, conv1, conv1_b)
+        x = self.inference_helper._batchnorm2d(x, bn1_mean, bn1_var, bn1, bn1_b)
+        x = self.inference_helper._relu(x)
+        x = self.inference_helper._conv2d(x, conv2, conv2_b)
+        x = self.inference_helper._batchnorm2d(x, bn2_mean, bn2_var, bn2, bn2_b)
+        x = self.inference_helper._relu(x)
+        x = self.inference_helper._maxpool2d(x)
+
+        # # Flatten
+        N = x.shape[0]
+        x = x.reshape(N, -1)
+
+        # # FC layers
+        x = self.inference_helper._relu(np.dot(x, fc1.T) + fc1_b)
         
+        return x
+
+
+class DQNConvSolver(NNSolver):
+    def __init__(self, info, actions, weights, size=3):
+        super(DQNConvSolver, self).__init__(info, actions, weights)
+        self.size = size
+        self.conv_encoder = ConvEncoder()
+
+    def _assert_weights(self, actions):
+        assert self.weights['fc2.weight'].shape[0] == len(actions)
+
+    def _calculate_output(self, entities, player_pos):
+        # player_pos is already provided as a parameter, so we don't need to extract it from entities
+        player_id = entities[0]['id']
+        state = get_state_conv(player_id, entities, self.info['lines'], self.size)
+
+        fc2 = self.weights['fc2.weight']
+        fc2_b = self.weights['fc2.bias']
+
+        x = self.conv_encoder._encode(state, self.weights)
+        x = self.conv_encoder.inference_helper._relu(x)
+        x = np.dot(x, fc2.T) + fc2_b
+
+        return x[0]
+
+
+class DQNByKindSolver(NNSolver):
+    def __init__(self, info, actions, weights):
+        super(DQNByKindSolver, self).__init__(info, actions, weights)
+        self.entity_kinds = set([key.split('.')[1] for key in weights.keys()])
         self.weights_dict = {
             kind: {
                 k[len(f"model_by_kind.{kind}."):]: v
@@ -644,7 +657,13 @@ class DQNByKindSolver(Solver):
             for kind in self.entity_kinds
         }
 
-    def calculate_output(self, entities, player_pos):
+    def _assert_weights(self, actions):
+        assert self.weights['model_by_kind.WANDERER.entity_impact.weight'].shape[0] == len(actions)
+        for key, val in self.weights.items():
+            if key.endswith('entity_impact.weight'):
+                assert val.shape[0] == len(actions), f'wrong shape for {key} layers'
+
+    def _calculate_output(self, entities, player_pos):
         state = get_state_ext(player_pos, entities, self.info['lines'])
         data_by_kind = {}
         state_by_kind = parse_state_by_kind(state)
@@ -669,12 +688,29 @@ class DQNByKindSolver(Solver):
         all_model_output = np.array(model_outputs).sum(axis=0)
         return all_model_output
 
-    def calculate_action(self, entities, player_pos, player_mask):
-        model_output = self.calculate_output(entities, player_pos)
-        player_mask = player_mask[:len(self.actions)]
-        q_vals_v = np.ma.array(model_output, mask=player_mask)
-        action_id = q_vals_v.argmax()
-        return action_id
+
+class PPOConvSolver(NNSolver):
+    def __init__(self, info, actions, weights, size=3):
+        super(PPOConvSolver, self).__init__(info, actions, weights)
+        self.size = size
+        self.conv_encoder = ConvEncoder()
+
+    def _assert_weights(self, actions):
+        assert self.weights['actor.weight'].shape[0] == len(actions)
+
+    def _calculate_output(self, entities, player_pos):
+        # player_pos is already provided as a parameter, so we don't need to extract it from entities
+        player_id = entities[0]['id']
+        state = get_state_conv(player_id, entities, self.info['lines'], self.size)
+
+        a = self.weights['actor.weight']
+        a_b = self.weights['actor.bias']
+
+        x = self.conv_encoder._encode(state, self.weights)
+        x = self.conv_encoder.inference_helper._relu(x)
+        x = np.dot(x, a.T) + a_b
+        x = sp.softmax(x)
+        return x[0]
 
 
 def main():
@@ -688,9 +724,11 @@ def main():
     elif mode == 'dqn_ext':
         solver = DQNSolver(info, USED_ACTIONS, checkpoint_data)
     elif mode == 'dqn_by_kind':
-        solver = DQNByKindSolver(info, checkpoint_data, USED_ACTIONS)
+        solver = DQNByKindSolver(info, USED_ACTIONS, checkpoint_data)
     elif mode == 'dqn_conv':
-        solver = DQNConvSolver(info, checkpoint_data, USED_ACTIONS, SIZE)
+        solver = DQNConvSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
+    elif mode == 'ppo_conv':
+        solver = PPOConvSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     

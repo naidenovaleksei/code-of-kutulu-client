@@ -86,7 +86,7 @@ class TestDQNAgentExt:
         }
 
         solver = DQNSolver(info, DEFAULT_KUTULU_ACTIONS, weights)
-        np_output = solver.calculate_output(agent.observer.env._get_entites(0), player_pos)
+        np_output = solver._calculate_output(agent.observer.env._get_entites(0), player_pos)
 
         agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()
@@ -125,8 +125,8 @@ class TestDQNAgentByKind:
             'lines': agent.observer.env.map,
         }
 
-        solver = DQNByKindSolver(info, weights)
-        np_output = solver.calculate_output(agent.observer.env._get_entites(0), player_pos)
+        solver = DQNByKindSolver(info, DEFAULT_KUTULU_ACTIONS, weights)
+        np_output = solver._calculate_output(agent.observer.env._get_entites(0), player_pos)
 
         agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()

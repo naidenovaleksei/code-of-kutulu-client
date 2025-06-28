@@ -82,8 +82,8 @@ class TestDQNAgentConv:
             'lines': agent.observer.env.map,
         }
 
-        solver = DQNConvSolver(info, weights, DEFAULT_KUTULU_ACTIONS, size=agent.size)
-        np_output = solver.calculate_output(agent.observer.env._get_entites(0), player_pos)
+        solver = DQNConvSolver(info, DEFAULT_KUTULU_ACTIONS, weights, size=agent.size)
+        np_output = solver._calculate_output(agent.observer.env._get_entites(0), player_pos)
 
         agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()
