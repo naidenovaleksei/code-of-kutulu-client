@@ -1,4 +1,7 @@
-from src.game.template import find_path as find_path
+from src.game.template import (
+    find_path as find_path,
+    distance as distance,
+)
 
 if __name__ == '__main__':
     lines, start_point, finish_point = ['#####', '#...#', '#####'], (1, 1), (1, 2)

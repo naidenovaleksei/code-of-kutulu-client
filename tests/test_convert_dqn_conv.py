@@ -83,7 +83,8 @@ class TestDQNAgentConv:
         }
 
         solver = DQNConvSolver(info, DEFAULT_KUTULU_ACTIONS, weights, size=agent.size)
-        np_output = solver._calculate_output(agent.observer.env._get_entites(0), player_pos)
+        entities = [e.to_dict() for e in agent.observer.env._get_entites(0)]
+        np_output = solver._calculate_output(entities, player_pos)
 
         agent.model.eval()
         model_output = agent.model(tensor_data)[0].detach().cpu().numpy()

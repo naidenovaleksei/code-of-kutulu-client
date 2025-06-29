@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import Dict
+
 import numpy as np
 
 from src.envs.kutulu_observer import (
@@ -5,6 +8,19 @@ from src.envs.kutulu_observer import (
     KutuluClosestExtObserver,
     KutuluConvObserver,
 )
+from src.envs.kutulu_world import (
+    KutuluObservation,
+    KutuluEnvInfo,
+)
+
+
+@dataclass
+class AgentObservation:
+    const: Dict
+    info: KutuluEnvInfo
+    obs: KutuluObservation
+    player_id: int
+
 
 class BaseAgent:
     def __init__(self, state_type, action_space_n, train):
@@ -30,13 +46,15 @@ class BaseAgent:
     def get_state(self, player_id):
         return self.observer.get_state(player_id)
     
-    def get_raw_observation(self, player_id):
-        return {
-            'const': self.observer.env.constants,
-            'info': self.observer.env._get_info(),
-            'obs': self.observer.env._get_obs(),
-            'player_id': player_id,
-        }
+    def get_raw_observation(self, player_id) -> AgentObservation:
+        env_obs: KutuluObservation = self.observer.env.get_obs(player_id)
+        assert env_obs.entities[0].id == player_id
+        return AgentObservation(
+            self.observer.env.constants,
+            self.observer.env.get_info(),
+            env_obs,
+            player_id,
+        )
     
     def get_valid_actions(self, player_id):
         return self.observer.env.get_valid_action_mask()[player_id]

@@ -4,16 +4,36 @@ from gym import spaces
 # from numba import int32, float32    # import the types
 # from numba.experimental import jitclass
 
+from dataclasses import dataclass
+from typing import Dict, List, Set, Any
 import numpy as np
 import requests
 from functools import lru_cache
 
 from src.envs.distance import find_path
 from src.envs.kutulu_reward_manager import KutuluRewardManager
+from src.envs.kutulu_entities import (
+    KutuluEntity, KutuluPlayer, KutuluWanderer, KutuluSlasher, 
+    EffectType, EntityKind, KutuluObservation,
+)
 from src.game.template import (
     get_valid_action_mask_by_coords,
     REL_POSITIONS,
 )
+
+
+@dataclass
+class KutuluObservation:
+    active_player_count: int
+    entities: List[KutuluEntity]
+
+
+@dataclass
+class KutuluEnvInfo:
+    lines: List[List[str]]
+    width: int
+    height: int
+    maze_name: str
 
 
 class KutuluWorldEnv(gym.Env):
@@ -29,10 +49,10 @@ class KutuluWorldEnv(gym.Env):
 
         self._actions = actions
         self.map = []
-        self.entities = []
-        self.players = dict()
-        self.players_ids = []
-        self.turn = 0
+        self.entities: List[KutuluEntity] = []
+        self.players: Dict[int, KutuluPlayer] = dict()
+        self.players_ids: List[int] = []
+        self.turn: int = 0
         
         self.seed = None
         self.constants = {}
@@ -67,7 +87,7 @@ class KutuluWorldEnv(gym.Env):
 
         self._set_entities(data['state'])
         self._set_players(data['state'], set_ids=True)
-        self.reward_manager.update_players(self.players)
+        self.reward_manager.update_players(self._get_players_dict_format())
 
         observation = self._get_obs()
         info = self._get_info()
@@ -82,10 +102,14 @@ class KutuluWorldEnv(gym.Env):
                 'action': self._convert_player_action(action)
             }
             player_actions.append(action_state)
-            if self._actions[action] == 'PLAN':
-                self.players[i]['effect_left'] = 4
-            elif self._actions[action] == 'LIGHT':
-                self.players[i]['effect_left'] = 2
+            
+            # Apply effects using KutuluPlayer methods
+            if i in self.players:
+                player = self.players[i]
+                if self._actions[action] == 'PLAN':
+                    player.apply_effect(EffectType.PLAN, 4)
+                elif self._actions[action] == 'LIGHT':
+                    player.apply_effect(EffectType.LIGHT, 2)
 
         response = requests.post(
             f'{self.host}/turn',
@@ -99,10 +123,12 @@ class KutuluWorldEnv(gym.Env):
         game_over = data['gameOver']
         self._set_entities(data['state'])
 
-        reward = self.reward_manager.calculate_rewards(self.entities, self.turn, game_over)
+        reward = self.reward_manager.calculate_rewards(
+            [e.to_dict() for e in self.entities], self.turn, game_over
+        )
 
         self._set_players(data['state'])
-        self.reward_manager.update_players(self.players)
+        self.reward_manager.update_players(self._get_players_dict_format())
 
         observation = self._get_obs()
         info = self._get_info()
@@ -112,11 +138,11 @@ class KutuluWorldEnv(gym.Env):
     def viz_map(self, action=None, agent_id=None):
         curr_map = [list(line) for line in self.map]
         for e in self.entities:
-            curr_map[e['y']][e['x']] = e['kind'][0]
-            if e['kind'] == 'EXPLORER':
-                curr_map[e['y']][e['x']] = str(e['id'])
-                if e['id'] == agent_id:
-                    agent_pos = (e['x'], e['y'])
+            curr_map[e.y][e.x] = e.kind[0]
+            if e.kind == 'EXPLORER':
+                curr_map[e.y][e.x] = str(e.id)
+                if e.id == agent_id:
+                    agent_pos = (e.x, e.y)
         if action is not None:
             rel_pos = REL_POSITIONS[action]
             x = agent_pos[0] + rel_pos[0]
@@ -126,7 +152,7 @@ class KutuluWorldEnv(gym.Env):
             print(''.join(line))
         print()
 
-    def _get_info(self):
+    def _get_info(self) -> Dict[str, Any]:
         return {
             # 'map': self.map,
             # 'constants': self.constants,
@@ -136,96 +162,89 @@ class KutuluWorldEnv(gym.Env):
             'maze_name': self.maze_name,
         }
 
-    def _get_obs(self, player_id=None):
-        return {
-            'active_player_count': len(self.players),
-            'entities': self._get_entites(player_id)
-        }
+    def _get_obs(self, player_id: int = None) -> KutuluObservation:
+        return KutuluObservation(
+            len(self.players),
+            self._get_entites(player_id)
+        )
     
-    def _get_entites(self, player_id=None):
+    def _get_entites(self, player_id: int = None) -> List[KutuluEntity]:
         if player_id is None:
             return self.entities
         else:
-            return [
-                next(e for e in self.entities if e['kind'] == 'EXPLORER' and e['id'] == player_id)
-            ] + [
-               e for e in self.entities if not (e['kind'] == 'EXPLORER' and e['id'] == player_id)
-            ]
+            player_entity = None
+            for e in self.entities:
+                if e.kind == 'EXPLORER' and e.id == player_id:
+                    player_entity = e
+                    break
+            assert player_entity is not None
+            # Put specific player first, then other entities
+            other_entities = [e for e in self.entities if not (e.kind == 'EXPLORER' and e.id == player_id)]
+            return [player_entity] + other_entities
 
-    def _convert_player_action(self, action):
+    def _convert_player_action(self, action) -> str:
         action_name = self._actions[action]
         return f"{action_name} {action_name}"
 
-    def _parse_entity(self, line):
-        ekind, eid, ex, ey, eparam0, eparam1, eparam2 = line.split()
-        result = {
-            'kind': ekind,
-            'id': int(eid),
-            'x': int(ex),
-            'y': int(ey),
-            "param0": int(eparam0),
-            "param1": int(eparam1),
-            "param2": int(eparam2),
-        }
-
-        if ekind == 'EXPLORER':
-            result['sanity'] = int(eparam0)
-        elif ekind == 'WANDERER':
-            result['wandering'] = int(eparam1)
-            result['target'] = int(eparam2)
-            if result['wandering']:
-                # time before being recalled
-                result['recall_time_left'] = int(eparam0)
-            else:
-                # time before spawn
-                result['spawn_time_left'] = int(eparam0)
-        elif ekind == 'SLASHER':
-            # time before changing state
-            result['change_time_left'] = int(eparam0)
-        elif ekind in ('EFFECT_PLAN', 'EFFECT_LIGHT', 'EFFECT_YELL', ):
-            # time before changing state
-            result['out_time_left'] = int(eparam0)
-        elif ekind == 'EFFECT_SHELTER':
-            # time before changing state
-            result['energy_left'] = int(eparam0)
+    def _parse_entity(self, line: str) -> KutuluEntity:
+        """Parse entity string and return appropriate KutuluEntity object."""
+        entity = KutuluEntity.from_string(line)
+        
+        # Create specialized entity types
+        if entity.kind == EntityKind.EXPLORER.value:
+            return KutuluPlayer.from_entity_string(line)
+        elif entity.kind == EntityKind.WANDERER.value:
+            return KutuluWanderer(
+                entity.id, entity.x, entity.y,
+                entity.param0, entity.param1, entity.param2
+            )
+        elif entity.kind == EntityKind.SLASHER.value:
+            return KutuluSlasher(
+                entity.id, entity.x, entity.y,
+                entity.param0, entity.param1, entity.param2
+            )
         else:
-            raise ValueError(f'unknown kind: {ekind}')
-        return result
+            # Other entity types (effects, etc.) - return base KutuluEntity
+            return entity
 
-    def _parse_player(self, line):
-        player = self._parse_entity(line)
-        player['active'] = True
-        player['effect_left'] = 0
-        return player
 
-    def _set_entities(self, state):
+    def _set_entities(self, state) -> None:
         self.entities = [
             self._parse_entity(e) for e in state[1:]
         ]
 
-    def _set_players(self, state, set_ids=False):
+    def _set_players(self, state, set_ids=False) -> None:
         if set_ids:
             self.players_ids = []
+        
+        # Mark existing players as inactive
         for player in self.players.values():
-            player['active'] = False
+            player.active = False
+        
         for e in state[1:]:
             if e.startswith('EXPLORER'):
-                player = self._parse_player(e)
-                if player['id'] in self.players:
-                    player['effect_left'] = max(0, self.players[player['id']]['effect_left'] - 1)
-                self.players[player['id']] = player
+                # Create KutuluPlayer object from entity string
+                kutulu_player = KutuluPlayer.from_entity_string(e)
+                
+                # Preserve effect_left from previous state if player exists
+                if kutulu_player.id in self.players:
+                    existing_player = self.players[kutulu_player.id]
+                    kutulu_player.effect_left = max(0, existing_player.effect_left - 1)
+                
+                self.players[kutulu_player.id] = kutulu_player
+                
                 if set_ids:
-                    self.players_ids.append(player['id'])
+                    self.players_ids.append(kutulu_player.id)
 
-    def get_valid_action_mask(self):
+    def get_valid_action_mask(self) -> Dict[int, List[bool]]:
         return {
             player_id: get_valid_action_mask_by_coords(
-                player, self._get_info(),
+                player.to_dict(), self._get_info(),
             )[:len(self._actions)]
             for player_id, player in self.players.items()
         }
 
-    def sample_valid_action(self, seed=None):
+    def sample_valid_action(self, seed=None) -> List[int]:
         mask_dict = self.get_valid_action_mask()
         mask = [mask_dict[player_id] for player_id in self.players_ids]
         if seed is not None:
@@ -239,13 +258,29 @@ class KutuluWorldEnv(gym.Env):
             for player_mask in mask
         ]
 
+    def get_obs(self, player_id: int = None) -> KutuluObservation:
+        return KutuluObservation(
+            len(self.players),
+            self._get_entites(player_id)
+        )
+
+    def get_info(self) -> KutuluEnvInfo:
+        return KutuluEnvInfo(
+            self.map,
+            self.width,
+            self.height,
+            self.maze_name,
+        )
+
     @lru_cache(maxsize=10000)
     def find_path_cached(self, start_point, finish_point):
         return find_path(start_point, finish_point, self.map)
 
-    def active_players(self):
-        # return [player for player in self.players.values() if player['active']]
-        return {player_id for player_id, player in self.players.items() if player['active']}
+    def active_players(self) -> Set[int]:
+        return {player_id for player_id, player in self.players.items() if player.active}
 
-    def is_game_over_for_player(self, player_id):
+    def _get_players_dict_format(self) -> Dict[int, Dict]:
+        return {player_id: player.to_dict() for player_id, player in self.players.items()}
+
+    def is_game_over_for_player(self, player_id) -> bool:
         return self.reward_manager.death_turns.get(player_id) == self.turn

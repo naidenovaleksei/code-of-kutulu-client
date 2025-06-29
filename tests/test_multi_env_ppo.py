@@ -5,6 +5,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.envs.trainer import Trainer
 from src.envs.agents.ppo_agent import PPOAgent
+from src.game.template import DEFAULT_KUTULU_ACTIONS
 
 
 def test_single_env_backward_compatibility():
@@ -16,6 +17,7 @@ def test_single_env_backward_compatibility():
             'type': 'ppo',
             'state_type': 'conv',
             'action_space_n': len(actions),
+            'actions': actions,
             'train': True,
             'verbose': False,
             'model_params': {'size': 3}
@@ -62,6 +64,7 @@ def test_multi_env_initialization():
             'type': 'ppo',
             'state_type': 'conv',
             'action_space_n': len(actions),
+            'actions': actions,
             'train': True,
             'verbose': False,
             'model_params': {'size': 3}
@@ -109,7 +112,7 @@ def test_ppo_buffer_functionality():
     from src.envs.agents.actor_agent import Experience
     
     # Create buffer
-    buffer = PPOBuffer(DQNStateEncoderConv())
+    buffer = PPOBuffer(DQNStateEncoderConv(), DEFAULT_KUTULU_ACTIONS)
     buffer.start_episode()
     
     # Test empty buffer
@@ -117,15 +120,14 @@ def test_ppo_buffer_functionality():
     
     # Add some mock experiences
     mock_state = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]  # Simple 3x3 state
-    mock_exp = Experience(mock_state, 0, 1.0, False, None, None)
     
-    buffer.append(mock_exp, 0.5, 0.8)  # log_prob=0.5, value=0.8
-    buffer.append(mock_exp, 0.3, 0.6)  # log_prob=0.3, value=0.6
+    buffer.append(Experience(mock_state, 0, 1.0, False, None, None), 0.5, 0.8)  # log_prob=0.5, value=0.8
+    buffer.append(Experience(mock_state, 0, 1.0, True, None, None), 0.3, 0.6)  # log_prob=0.3, value=0.6
     
     assert len(buffer.buffer) == 2
     
     # Test end_episode
-    states, actions, rewards, log_probs, values = buffer.end_episode()
+    states, actions, rewards, dones, log_probs, values = buffer.end_episode()
     
     assert len(states) == 2
     assert len(actions) == 2

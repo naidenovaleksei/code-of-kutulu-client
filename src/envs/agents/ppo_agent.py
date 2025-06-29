@@ -1,8 +1,16 @@
+from typing import List, Tuple
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 from collections import deque
 
+from src.envs.kutulu_entities import (
+    EntityKind,
+    EffectType,
+    KutuluEntity,
+)
+from src.envs.agents import AgentObservation
 from src.envs.agents.nn_agent import(
     GAMMA,
     LEARNING_RATE,
@@ -19,17 +27,144 @@ from src.envs.kutulu_observer import (
     KutuluConvObserver,
 )
 from src.envs.models.conv_a2c_model import ConvA2CModel
+from src.envs.distance import find_path, distance
 
 METRICS_SMOOTH_COEF = 0.05
+PLAN_DISTANCE = 2
+LIGHT_DISTANCE = 5
+
+
+class RewardShaper:
+    def __init__(self, actions, verbose,
+            good_plan_bonus=0.3,
+            bad_plan_bonus=-0.2,
+            good_light_bonus=0.3,
+            bad_light_bonus=-0.3,
+            ):
+        self.actions = actions
+        self.verbose = verbose
+        self.good_plan_bonus = good_plan_bonus
+        self.bad_plan_bonus = bad_plan_bonus
+        self.good_light_bonus = good_light_bonus
+        self.bad_light_bonus = bad_light_bonus
+    
+    def _get_wanderers(self, observation):
+        return [
+            e for e in observation.obs.entities
+            if e.kind in (EntityKind.WANDERER.value, EntityKind.SLASHER.value)
+        ]
+    
+    def _get_explorers(self, observation, player_id):
+        return [
+            e for e in observation.obs.entities
+            if e.kind == EntityKind.EXPLORER.value and e.id != player_id
+        ]
+    
+    def _get_nearby_count(self,
+                          player_pos: Tuple[int],
+                          entities: List[KutuluEntity],
+                          lines: List[List[str]],
+                          limit: int):
+        e_nearby_count = 0
+        for e in entities:
+            e_pos = (e.x, e.y)
+            if distance(player_pos, e_pos) <= limit:
+                path = find_path(player_pos, e_pos, lines)
+                if len(path) <= limit:
+                    e_nearby_count += 1
+        return e_nearby_count
+    
+    def _get_min_dist(self,
+                      player_pos: Tuple[int],
+                      entities: List[KutuluEntity],
+                      lines: List[List[str]],
+                      limit: int):
+        min_dist = 1000
+        for e in entities:
+            e_pos = (e.x, e.y)
+            if distance(player_pos, e_pos) <= limit:
+                path = find_path(player_pos, e_pos, lines)
+                min_dist = min(min_dist, len(path))
+        return min_dist
+
+    def _compute_shaped_reward(self,
+                               observation: AgentObservation,
+                               action: int,
+                               next_observations: AgentObservation):
+        reward = 0
+        if self.actions[action] == EffectType.PLAN.value:
+            player = next_observations.obs.entities[0]
+            assert player.id == next_observations.player_id
+            player_pos = (player.x, player.y)
+            explorers = self._get_explorers(next_observations, player.id)
+            players_nearby_count = self._get_nearby_count(
+                player_pos,
+                explorers,
+                next_observations.info.lines,
+                PLAN_DISTANCE,
+            )
+            if players_nearby_count > 0:
+                plan_bonus = self.good_plan_bonus * (players_nearby_count + 1)
+            else:
+                plan_bonus = self.bad_plan_bonus
+            reward += plan_bonus
+            if self.verbose:
+                print(f"plan_bonus: {plan_bonus}")
+        elif self.actions[action] == EffectType.LIGHT.value:
+            player = observation.obs.entities[0]
+            assert player.id == observation.player_id
+            player_pos = (player.x, player.y)
+            wanderers = self._get_wanderers(observation)
+            is_bad_light = min([distance(player_pos, (w.x, w.y)) for w in wanderers], default=0) <= 1
+            if is_bad_light:
+                light_bonus = self.bad_light_bonus
+            else:
+                cur_enemies_min_dist = self._get_min_dist(
+                    player_pos,
+                    wanderers,
+                    observation.info.lines,
+                    LIGHT_DISTANCE,
+                )
+                next_enemies_min_dist = self._get_min_dist(
+                    player_pos,
+                    self._get_wanderers(next_observations),
+                    next_observations.info.lines,
+                    LIGHT_DISTANCE,
+                )
+                if cur_enemies_min_dist < next_enemies_min_dist:
+                    light_bonus = self.good_light_bonus
+                else:
+                    light_bonus = self.bad_light_bonus
+            reward += light_bonus
+            if self.verbose:
+                print(f"light_bonus: {light_bonus}")
+        return reward
+
+    def recalculate_rewards(self,
+                            rewards: List[float],
+                            actions: List[int],
+                            states: List,
+                            dones: List[bool],
+                            observations: List):
+        assert dones[-1]
+        assert sum(dones[:-1]) == 0
+        rewards = list(rewards)
+        T = len(rewards)
+        for t in range(0, T - 1):
+            rewards[t] += self._compute_shaped_reward(observations[t], actions[t], observations[t+1])
+        return rewards
 
 
 class PPOBuffer:
     """Enhanced buffer for PPO that stores additional information needed for clipped objective"""
     
-    def __init__(self, state_encoder: BaseStateEncoder, need_aug=False):
+    def __init__(self, state_encoder: BaseStateEncoder, actions, reward_params=None, need_aug=False, verbose=False):
         self.buffer = []
         self.state_encoder = state_encoder
         self.need_aug = need_aug
+        if reward_params is None:
+            reward_params = {}
+        self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
         
     def start_episode(self):
         self.buffer = []
@@ -59,7 +194,11 @@ class PPOBuffer:
         log_probs = [item['log_prob'] for item in augmented_data]
         values = [item['value'] for item in augmented_data]
         
-        states, actions, rewards, dones, _, _ = zip(*experiences)
+        states, actions, rewards, dones, _, observations = zip(*experiences)
+        
+        rewards = self.reward_shaper.recalculate_rewards(
+            rewards, actions, states, dones, observations
+        )
         
         return states, actions, rewards, dones, log_probs, values
 
@@ -88,14 +227,14 @@ class PPOBuffer:
 
 
 class PPOAgent(ActorAgent):
-    def __init__(self, state_type, action_space_n,
+    def __init__(self, state_type, action_space_n, actions,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
                  train=False, verbose=False, 
                  entropy_coef=0.01, value_loss_coef=0.5, 
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5,
-                 gae_lambda=0.95, **kw):
+                 gae_lambda=0.95, reward_params=None, **kw):
         """
         PPO (Proximal Policy Optimization) Agent with Clipped Objective
 
@@ -124,9 +263,6 @@ class PPOAgent(ActorAgent):
             size=self.size,
             **model_params
         )
-
-        # Initialize with PPO-specific buffer
-        ppo_buffer = PPOBuffer(DQNStateEncoderConv())
         
         super(PPOAgent, self).__init__(
             state_type=state_type,
@@ -140,6 +276,13 @@ class PPOAgent(ActorAgent):
             **kw,
         )
         
+        self.actions = actions
+        if reward_params is None:
+            reward_params = {}
+        self.reward_params = reward_params
+        # Initialize with PPO-specific buffer
+        ppo_buffer = PPOBuffer(DQNStateEncoderConv(), self.actions,
+                               verbose=self.verbose, reward_params=self.reward_params)
         # Replace the episode buffer with PPO buffer
         self.episode_buffer = ppo_buffer
         self.episode_buffer.start_episode()
@@ -163,7 +306,11 @@ class PPOAgent(ActorAgent):
         self.num_envs = num_envs
         if num_envs > 1:
             # Create separate buffers for each environment
-            self.env_buffers = [PPOBuffer(DQNStateEncoderConv()) for _ in range(num_envs)]
+            self.env_buffers = [
+                PPOBuffer(DQNStateEncoderConv(), self.actions,
+                          verbose=self.verbose, reward_params=self.reward_params)
+                for _ in range(num_envs)
+            ]
             for buffer in self.env_buffers:
                 buffer.start_episode()
             if self.verbose:
@@ -497,7 +644,7 @@ class PPOAgent(ActorAgent):
                   f"KL Div: {total_kl_div/num_batches:.6f}, "
                   f"Return: {np.sum(rewards):.4f}")
 
-    def _calculate_gae(self, rewards, values, dones):
+    def _calculate_gae(self, rewards: List[float], values: List[float], dones: List[bool]):
         """
         Generalized Advantage Estimation (GAE)
         

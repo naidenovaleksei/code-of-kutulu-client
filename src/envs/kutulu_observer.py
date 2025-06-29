@@ -61,11 +61,11 @@ class KutuluClosestObserver(BaseKutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluClosestObserver, self).__init__(env)
 
-    def get_state(self, player_id):
-        _obs = self.env._get_obs(player_id)
-        entities = _obs['entities']
-        player_pos = (entities[0]['x'], entities[0]['y'])
-        
+    def get_state(self, player_id: int):
+        entities = self.env.get_obs(player_id).entities
+        assert entities[0].id == player_id
+        player_pos = (entities[0].x, entities[0].x)
+        entities = [e.to_dict() for e in entities]
         state = get_state(player_pos, entities, self.env.map,
                           get_distances_func=self.get_distances_cached())
         return state
@@ -90,11 +90,11 @@ class KutuluClosestExtObserver(KutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluClosestExtObserver, self).__init__(env)
 
-    def get_state(self, player_id):
-        _obs = self.env._get_obs(player_id)
-        entities = _obs['entities']
-        player_pos = (entities[0]['x'], entities[0]['y'])
-        
+    def get_state(self, player_id: int):
+        entities = self.env.get_obs(player_id).entities
+        assert entities[0].id == player_id
+        player_pos = (entities[0].x, entities[0].x)
+        entities = [e.to_dict() for e in entities]
         state = get_state_ext(player_pos, entities, self.env.map,
                           get_distances_func=self.get_distances_cached())
         return state
@@ -105,10 +105,9 @@ class KutuluConvObserver(BaseKutuluClosestObserver):
         super(KutuluConvObserver, self).__init__(env)
         self.size = size
 
-    def get_state(self, player_id):
-        _obs = self.env._get_obs(player_id)
-        entities = _obs['entities']
-        info = self.env._get_info()
-        
+    def get_state(self, player_id: int):
+        entities = self.env.get_obs(player_id).entities
+        assert entities[0].id == player_id
+        entities = [e.to_dict() for e in entities]
         state = get_state_conv(player_id, entities, self.env.map, self.size)
         return state

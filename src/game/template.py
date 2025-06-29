@@ -270,7 +270,7 @@ def get_state(player_pos, entities, lines, get_distances_func=get_distances):
     explorers = [unit for unit in entities[1:] if unit["kind"] == "EXPLORER"]
     wanderers = [
         unit for unit in entities[1:]
-        if (unit["kind"] == "WANDERER" and unit["wandering"] == 1) or
+        if (unit["kind"] == "WANDERER" and unit["param1"] == 1) or
            (unit["kind"] == "SLASHER")
     ]
     

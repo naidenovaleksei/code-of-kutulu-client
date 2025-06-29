@@ -6,12 +6,13 @@ from src.envs.agents.ppo_agent import PPOAgent, PPOBuffer
 from src.envs.models.conv_a2c_model import ConvA2CModel
 from src.envs.agents.dqn_agent_conv import DQNStateEncoderConv
 from src.envs.buffers import Experience
+from src.game.template import DEFAULT_KUTULU_ACTIONS
 
 
 def test_ppo_buffer_creation():
     """Test that PPOBuffer can be created and initialized properly"""
     state_encoder = DQNStateEncoderConv()
-    buffer = PPOBuffer(state_encoder)
+    buffer = PPOBuffer(state_encoder, DEFAULT_KUTULU_ACTIONS)
     
     assert buffer.state_encoder == state_encoder
     assert buffer.need_aug == False
@@ -21,7 +22,7 @@ def test_ppo_buffer_creation():
 def test_ppo_buffer_append_and_end_episode():
     """Test PPOBuffer append and end_episode functionality"""
     state_encoder = DQNStateEncoderConv()
-    buffer = PPOBuffer(state_encoder)
+    buffer = PPOBuffer(state_encoder, DEFAULT_KUTULU_ACTIONS)
     buffer.start_episode()
     
     # Create dummy experience
@@ -30,7 +31,7 @@ def test_ppo_buffer_append_and_end_episode():
         state=dummy_state,
         action=1,
         reward=1.0,
-        done=False,
+        done=True,
         new_state=None,
         observation=None
     )
@@ -43,7 +44,7 @@ def test_ppo_buffer_append_and_end_episode():
     assert len(buffer.buffer) == 1
     
     # End episode and check returned data
-    states, actions, rewards, log_probs, values = buffer.end_episode()
+    states, actions, rewards, dones, log_probs, values = buffer.end_episode()
     
     assert len(states) == 1
     assert len(actions) == 1
@@ -63,6 +64,7 @@ def test_ppo_agent_creation():
         state_type='conv',
         action_space_n=5,
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     # Check that model was initialized
@@ -94,6 +96,7 @@ def test_ppo_agent_custom_parameters():
         max_grad_norm=1.0,
         gae_lambda=0.9,
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     assert agent.clip_ratio == 0.3
@@ -112,25 +115,27 @@ def test_ppo_agent_gae_calculation():
         gamma=0.9,
         gae_lambda=0.95,
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     # Test with simple rewards sequence
     rewards = [1, 0, 2, 1, 0]
-    values = torch.tensor([0.5, 0.6, 0.7, 0.8, 0.9])
+    values = [0.5, 0.6, 0.7, 0.8, 0.9]
+    dones = [0, 0, 0, 0, 0]
     
-    returns, advantages = agent._calculate_gae(rewards, values)
+    returns, advantages = agent._calculate_gae(rewards, values, dones)
     
     # Check that returns and advantages have correct length
     assert len(returns) == len(rewards)
     assert len(advantages) == len(rewards)
     
     # Check that returns are reasonable (should be >= rewards in most cases due to future rewards)
-    assert isinstance(returns, np.ndarray)
-    assert isinstance(advantages, np.ndarray)
+    assert isinstance(returns, torch.Tensor)
+    assert isinstance(advantages, torch.Tensor)
     
     # Verify that returns = advantages + values (approximately)
-    expected_returns = advantages + values.numpy()
-    np.testing.assert_allclose(returns, expected_returns, rtol=1e-5)
+    expected_returns = advantages.numpy() + np.array(values)
+    np.testing.assert_allclose(returns, expected_returns, atol=1e-5)
 
 
 def test_ppo_agent_gae_vs_different_lambda():
@@ -141,6 +146,7 @@ def test_ppo_agent_gae_vs_different_lambda():
         gamma=0.9,
         gae_lambda=0.0,  # No GAE, just TD error
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     agent2 = PPOAgent(
@@ -149,14 +155,16 @@ def test_ppo_agent_gae_vs_different_lambda():
         gamma=0.9,
         gae_lambda=1.0,  # Full Monte Carlo
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     # Test with the same rewards sequence
     rewards = [1, 0, 2, 1, 0]
-    values = torch.tensor([0.5, 0.6, 0.7, 0.8, 0.9])
+    values = [0.5, 0.6, 0.7, 0.8, 0.9]
+    dones = [0, 0, 0, 0, 1]
     
-    returns1, advantages1 = agent1._calculate_gae(rewards, values)
-    returns2, advantages2 = agent2._calculate_gae(rewards, values)
+    returns1, advantages1 = agent1._calculate_gae(rewards, values, dones)
+    returns2, advantages2 = agent2._calculate_gae(rewards, values, dones)
     
     # Verify that different lambda values produce different results
     assert not np.allclose(advantages1, advantages2)
@@ -170,6 +178,7 @@ def test_ppo_clipped_objective_components():
         action_space_n=5,
         clip_ratio=0.2,
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     # Test clipping behavior
@@ -206,6 +215,7 @@ def test_ppo_agent_state_type_assertion():
         state_type='conv',
         action_space_n=5,
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     assert agent.state_type == 'conv'
     
@@ -215,6 +225,7 @@ def test_ppo_agent_state_type_assertion():
             state_type='closest',
             action_space_n=5,
             train=True,
+            actions=DEFAULT_KUTULU_ACTIONS,
         )
 
 
@@ -225,6 +236,7 @@ def test_ppo_agent_model_compatibility():
         action_space_n=5,
         model_params={'size': 3, 'fc_dim': 128},
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     # Check that the model is ConvA2CModel with correct parameters
@@ -253,7 +265,7 @@ def test_ppo_agent_model_compatibility():
 def test_ppo_buffer_with_augmentation():
     """Test PPOBuffer with data augmentation enabled"""
     state_encoder = DQNStateEncoderConv()
-    buffer = PPOBuffer(state_encoder, need_aug=True)
+    buffer = PPOBuffer(state_encoder, DEFAULT_KUTULU_ACTIONS, need_aug=True)
     buffer.start_episode()
     
     # Create dummy experience with a proper state dictionary format
@@ -278,7 +290,7 @@ def test_ppo_buffer_with_augmentation():
         state=dummy_state,
         action=0,  # UP action
         reward=1.0,
-        done=False,
+        done=True,
         new_state=None,
         observation=None
     )
@@ -286,7 +298,7 @@ def test_ppo_buffer_with_augmentation():
     buffer.append(exp, -1.5, 0.8)
     
     # End episode with augmentation
-    states, actions, rewards, log_probs, values = buffer.end_episode()
+    states, actions, rewards, dones, log_probs, values = buffer.end_episode()
     
     # The action might be rotated (0->1, 1->2, 2->3, 3->0 for clockwise rotations)
     # But log_probs and values should remain the same
@@ -304,6 +316,7 @@ def test_ppo_agent_training_components():
         action_space_n=5,
         train=True,
         verbose=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     # Check that agent has optimizer
@@ -330,6 +343,7 @@ def test_ppo_mini_batch_size_handling():
         action_space_n=5,
         mini_batch_size=100,  # Larger than typical episode
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     assert agent.mini_batch_size == 100
@@ -340,6 +354,7 @@ def test_ppo_mini_batch_size_handling():
         action_space_n=5,
         mini_batch_size=1,
         train=True,
+        actions=DEFAULT_KUTULU_ACTIONS,
     )
     
     assert agent_small.mini_batch_size == 1
