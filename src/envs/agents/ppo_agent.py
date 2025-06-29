@@ -10,6 +10,9 @@ from src.envs.kutulu_entities import (
     EffectType,
     KutuluEntity,
 )
+from src.game.template import (
+    EXTENDED_KUTULU_ACTIONS
+)
 from src.envs.agents import AgentObservation
 from src.envs.agents.nn_agent import(
     GAMMA,
@@ -227,7 +230,7 @@ class PPOBuffer:
 
 
 class PPOAgent(ActorAgent):
-    def __init__(self, state_type, action_space_n, actions,
+    def __init__(self, state_type, action_space_n, actions=EXTENDED_KUTULU_ACTIONS,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
                  train=False, verbose=False, 

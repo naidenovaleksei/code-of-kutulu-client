@@ -4,7 +4,89 @@ import heapq
 import numpy as np
 from tensorboard.backend.event_processing import event_accumulator
 
-from src.envs.trainer import Trainer
+from src.envs.trainer import (
+    Trainer,
+    BRONZE_MAZES,
+    WOOD_MAZES,
+)
+from src.game.template import (
+    DEFAULT_KUTULU_ACTIONS,
+    EXTENDED_KUTULU_ACTIONS,
+)
+
+
+def get_trainer(
+    num_experiments,
+    league_level,
+    gamma, size, lr,
+    fc_dim, conv_dim, 
+    random_epsilon,
+    sanity_coef, reward_for_win, reward_for_lose,
+    entropy_coef, value_loss_coef,
+    clip_ratio,
+    ppo_epochs, mini_batch_size,
+    target_kl, max_grad_norm,
+    gae_lambda, num_envs,
+    good_plan_bonus, bad_plan_bonus, good_light_bonus, bad_light_bonus,
+    verbose=False, silent=False,
+):
+    mazes = BRONZE_MAZES if league_level >= 3 else WOOD_MAZES
+    actions = EXTENDED_KUTULU_ACTIONS if league_level >= 3 else DEFAULT_KUTULU_ACTIONS
+    action_space_n = len(actions)
+    
+    env_kwargs = {
+        'reward_params': {
+            'sanity_coef': sanity_coef, 'reward_for_win': reward_for_win, 'reward_for_lose': reward_for_lose
+        }
+    }
+    random_agent_info = {
+        'train': False,
+        'type': 'epsilon_wait',
+        'action_space_n': action_space_n,
+        'epsilon_params': {'start': random_epsilon, 'final': random_epsilon, 'decay': int(4 * 10**5)},
+        'state_type': 'closest',
+        'action': 'WAIT',
+    }
+    research_agent_info = {
+        'train': True,
+        'type': 'ppo',
+        'action_space_n': action_space_n,
+        'actions': actions,
+        'state_type': 'conv',
+        'model_params': {
+            'fc_dim': fc_dim,
+            'conv_dim': conv_dim,
+            'size': size,
+        },
+        'gamma': gamma,
+        'lr': lr,
+        'optimizer': 'adamw',
+        'scheduler_params': {'type': 'cosine', 'T_max': num_experiments},
+        'entropy_coef': entropy_coef,
+        'value_loss_coef': value_loss_coef,
+        'clip_ratio': clip_ratio,
+        'ppo_epochs': ppo_epochs,
+        'mini_batch_size': mini_batch_size,
+        'target_kl': target_kl,
+        'max_grad_norm': max_grad_norm,
+        'gae_lambda': gae_lambda,
+        'reward_params': {
+            'good_plan_bonus': good_plan_bonus,
+            'bad_plan_bonus': bad_plan_bonus,
+            'good_light_bonus': good_light_bonus,
+            'bad_light_bonus': bad_light_bonus,
+        }
+    }
+    agents_info = [research_agent_info]
+    for i in range(len(agents_info), 4):
+        agents_info.append(dict(random_agent_info))
+    assert len(agents_info) == 4
+    trainer = Trainer(
+        num_experiments=num_experiments, agents_info=agents_info, shuffle=True,
+        league_level=league_level, mazes=mazes, actions=actions, log_dir='../runs', verbose=verbose,
+        env_kwargs=env_kwargs, silent=silent, num_envs=num_envs,
+    )
+    return trainer
 
 
 def get_score(result, is_ppo=True):
