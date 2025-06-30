@@ -13,11 +13,11 @@ from src.game.template import (
 
 
 class EpsilonConstAgent(BaseAgent):
-    def __init__(self, state_type, action_space_n, epsilon_params, action, train=False):
+    def __init__(self, state_type, action_space_n, epsilon_params, action):
         super(EpsilonConstAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
-            train=train,
+            train=False,
         )
         
         assert len(set(epsilon_params) - set([

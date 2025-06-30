@@ -1,5 +1,6 @@
 import os
 import heapq
+import json
 
 import numpy as np
 from tensorboard.backend.event_processing import event_accumulator
@@ -28,7 +29,7 @@ def get_trainer(
     target_kl, max_grad_norm,
     gae_lambda, num_envs,
     good_plan_bonus, bad_plan_bonus, good_light_bonus, bad_light_bonus,
-    verbose=False, silent=False, asc_difficulty=False,
+    verbose=False, silent=False, asc_difficulty=False, random_agent_info=None,
 ):
     mazes = BRONZE_MAZES if league_level >= 3 else WOOD_MAZES
     actions = EXTENDED_KUTULU_ACTIONS if league_level >= 3 else DEFAULT_KUTULU_ACTIONS
@@ -39,14 +40,20 @@ def get_trainer(
             'sanity_coef': sanity_coef, 'reward_for_win': reward_for_win, 'reward_for_lose': reward_for_lose
         }
     }
-    random_agent_info = {
-        'train': False,
-        'type': 'epsilon_wait',
-        'action_space_n': action_space_n,
-        'epsilon_params': {'start': random_epsilon, 'final': random_epsilon, 'decay': int(4 * 10**5)},
-        'state_type': 'closest',
-        'action': 'WAIT',
-    }
+    if random_agent_info is None:
+        random_agent_info = {
+            'train': False,
+            'type': 'epsilon_wait',
+            'action_space_n': action_space_n,
+            'epsilon_params': {'start': random_epsilon, 'final': random_epsilon, 'decay': int(4 * 10**5)},
+            'state_type': 'closest',
+            'action': 'WAIT',
+        }
+    else:
+        random_agent_info = dict(random_agent_info)
+        random_agent_info['epsilon_params'] = {
+            'start': random_epsilon, 'final': random_epsilon, 'decay': int(4 * 10**5)
+        }
     research_agent_info = {
         'train': True,
         'type': 'ppo',
@@ -198,3 +205,16 @@ def get_top_k(agents_info, num_experiments, league_level, mazes, actions, k=2):
     top_k = heapq.nlargest(2, winner_stats, key=winner_stats.get)
     best_agents_info = [agents_info[k] for k in top_k]
     return best_agents_info, top_k, winner_stats
+
+def get_agent_info(iter_data, agent_id=0):
+    exp_name = iter_data['exp_name']
+    best_iter = iter_data['best_iter']
+    exp_date = f'{exp_name[0:4]}-{exp_name[4:6]}-{exp_name[6:8]}'
+    agents_dir = f'../output/{exp_date}/{exp_name}'
+    checkpoint_dir = f'{agents_dir}/agent{agent_id}/{best_iter}'
+    with open(f'{agents_dir}/agents_info.json') as f:
+        agents_info = json.load(f)
+        info = agents_info[agent_id]
+        info['train'] = False
+        info['checkpoint_dir'] = checkpoint_dir
+    return info

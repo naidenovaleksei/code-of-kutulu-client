@@ -18,7 +18,7 @@ class NNAgent(BaseAgent):
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
                  train, verbose=False, checkpoint_dir=None, drop_layers=None,
-                 optimizer='adam', scheduler_params=None):
+                 optimizer='adam', scheduler_params=None, explicit_random=False):
         super(NNAgent, self).__init__(
             state_type,
             action_space_n,
@@ -37,6 +37,7 @@ class NNAgent(BaseAgent):
         self.frame_idx = 0
         self.model = model
         self.lr = lr
+        self.explicit_random = explicit_random
         if optimizer == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         elif optimizer == 'adamw':
@@ -95,7 +96,7 @@ class NNAgent(BaseAgent):
 
         # self.last_action = actions_masked.max() - (actions_masked.sum() - actions_masked.max()) / (np.sum(valid_actions) - 1)
         self.last_action = actions_masked
-        if self.train and np.random.random() < self.get_eps():
+        if (self.train or self.explicit_random) and np.random.random() < self.get_eps():
             action = self.generate_random_step(actions_masked, player_mask)
         else:
             action = actions_masked.argmax()
