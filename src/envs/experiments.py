@@ -28,7 +28,7 @@ def get_trainer(
     target_kl, max_grad_norm,
     gae_lambda, num_envs,
     good_plan_bonus, bad_plan_bonus, good_light_bonus, bad_light_bonus,
-    verbose=False, silent=False,
+    verbose=False, silent=False, asc_difficulty=False,
 ):
     mazes = BRONZE_MAZES if league_level >= 3 else WOOD_MAZES
     actions = EXTENDED_KUTULU_ACTIONS if league_level >= 3 else DEFAULT_KUTULU_ACTIONS
@@ -84,7 +84,7 @@ def get_trainer(
     trainer = Trainer(
         num_experiments=num_experiments, agents_info=agents_info, shuffle=True,
         league_level=league_level, mazes=mazes, actions=actions, log_dir='../runs', verbose=verbose,
-        env_kwargs=env_kwargs, silent=silent, num_envs=num_envs,
+        env_kwargs=env_kwargs, silent=silent, num_envs=num_envs, asc_difficulty=asc_difficulty,
     )
     return trainer
 

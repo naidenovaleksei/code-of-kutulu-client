@@ -22,6 +22,7 @@ from src.envs.agents.nn_agent import NNAgent
 from src.envs.agents.actor_agent import ActorAgent
 from src.envs.agents.rule_based_agent import EpsilonConstAgent
 from src.envs.strategy import RandomStrategy
+from src.envs.agents.agent_factory import get_agent
 
 WOOD_MAZES = [
     "PacMan",
@@ -54,7 +55,7 @@ BRONZE_MAZES = [
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
-                 verbose=False, silent=False, only_train=True,
+                 verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1):
         self.num_experiments = num_experiments
         self.mazes = mazes
@@ -65,6 +66,7 @@ class Trainer:
         self.actions = actions
         self.verbose = verbose
         self.silent = silent
+        self.asc_difficulty = asc_difficulty
 
         self.num_envs = num_envs
 
@@ -93,33 +95,8 @@ class Trainer:
             _name = None
             if 'name' in agent_info:
                 _name = agent_info.pop('name')
-            _type = agent_info.pop('type')
-            if _type == 'qlearning':
-                if agent_info['strategy'] == 'random':
-                    agent_info['strategy'] = RandomStrategy()
-                else:
-                    raise ValueError(f'wrong strategy: {agent_info["strategy"]}')
-                agent = QlearningAgent(**agent_info)
-            elif _type == 'epsilon_wait':
-                agent = EpsilonConstAgent(**agent_info)
-            elif _type == 'cross_entropy':
-                agent = CrossEntropyAgent(**agent_info)
-            elif _type == 'qdn':
-                agent = DQNAgent(**agent_info)
-            elif _type == 'qdn_ext':
-                agent = DQNAgentExt(**agent_info)
-            elif _type == 'reinforce':
-                agent = REINFORCEAgent(**agent_info)
-            elif _type == 'a2c':
-                agent = A2CAgent(**agent_info)
-            elif _type == 'ppo':
-                agent = PPOAgent(**agent_info)
-            elif _type == 'qdn_by_kind':
-                agent = DQNAgentByKind(**agent_info)
-            elif _type == 'qdn_conv':
-                agent = DQNAgentConv(**agent_info)
-            else:
-                raise ValueError(f'unknown kind: {_type}')
+            _type = agent_info['type']
+            agent = get_agent(agent_info)
             if _name is not None:
                 agent_dir = f'agent{i}_{_type}_{_name}'
             else:
@@ -139,16 +116,22 @@ class Trainer:
                 if isinstance(agent, PPOAgent):
                     agent.init_multi_env(self.num_envs)
     
-    def reset_env(self, seed=None, maze_name=None, port=8080):
+    def reset_env(self, seed=None, maze_name=None, step=None, port=8080):
         if maze_name is None:
             if seed is not None:
                 maze_name = np.random.RandomState(seed).choice(self.mazes).item()
             else:
                 maze_name = np.random.choice(self.mazes).item()
+        if self.asc_difficulty and step is not None:
+            league_level = self.league_level * (step - 1) // self.num_experiments + 1
+            if self.verbose:
+                print(f'current league_level: {league_level}')
+        else:
+            league_level = self.league_level
         env = KutuluWorldEnv(
             server_host=f'localhost:{port}',
             maze_name=maze_name,
-            league_level=self.league_level,
+            league_level=league_level,
             players_count=self.players_count,
             actions=self.actions,
             **self.env_kwargs
@@ -160,14 +143,14 @@ class Trainer:
 
         return env
     
-    def play_rollout(self, seed=None):
+    def play_rollout(self, seed=None, step=None):
         if self.num_envs == 1:
-            return self.play_single_rollout(seed)
+            return self.play_single_rollout(seed, step=step)
         else:
-            return self.play_multi_rollout(seed)
+            return self.play_multi_rollout(seed, step=step)
 
-    def play_single_rollout(self, seed=None, maze_name=None, env_idx=None):
-        env = self.reset_env(seed, maze_name)
+    def play_single_rollout(self, seed=None, maze_name=None, env_idx=None, step=None):
+        env = self.reset_env(seed, maze_name, step)
         if self.verbose:
             if env_idx is not None:
                 print(f"Environment {env_idx}: {maze_name} (seed: {seed})")
@@ -232,7 +215,7 @@ class Trainer:
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 
-    def play_multi_rollout(self, seed=None):
+    def play_multi_rollout(self, seed=None, step=None):
         """Play rollout across multiple environments simultaneously"""
         # Track rewards for each environment
         env_rollout_rewards = [[] for _ in range(self.num_envs)]
@@ -244,7 +227,7 @@ class Trainer:
         for env_idx in range(self.num_envs):
             maze_name = selected_mazes[env_idx]
             env_seed = seed + env_idx if seed is not None else None
-            rollout_rewards = self.play_single_rollout(env_seed, maze_name, env_idx)
+            rollout_rewards = self.play_single_rollout(env_seed, maze_name, env_idx, step)
             env_rollout_rewards[env_idx] = rollout_rewards
 
         # Trigger training for multi-environment agents after all environments complete
@@ -289,7 +272,7 @@ class Trainer:
             if self.verbose:
                 print()
                 print(f"rollout: {step}")
-            rollout_rewards = self.play_rollout()
+            rollout_rewards = self.play_rollout(step=step)
             reward_list.append(rollout_rewards)
 
             # Save models periodically
