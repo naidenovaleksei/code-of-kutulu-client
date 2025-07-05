@@ -50,10 +50,11 @@ def get_trainer(
             'action': 'WAIT',
         }
     else:
-        random_agent_info = dict(random_agent_info)
-        random_agent_info['epsilon_params'] = {
-            'start': random_epsilon, 'final': random_epsilon, 'decay': int(4 * 10**5)
-        }
+        if 'epsilon_params' not in random_agent_info:
+            random_agent_info = dict(random_agent_info)
+            random_agent_info['epsilon_params'] = {
+                'start': random_epsilon, 'final': random_epsilon, 'decay': int(4 * 10**5)
+            }
     research_agent_info = {
         'train': True,
         'type': 'ppo',

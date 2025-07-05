@@ -191,15 +191,17 @@ class Trainer:
                 agent_id = self.agent_map[player_id]
                 agent = self.agents[agent_id]
                 if agent.train:
-                    agent_game_over = env.is_game_over_for_player(player_id)
+                    agent_game_over = env.is_game_over_for_player(player_id) or game_over
                     agent.append_observation(player_id, reward, agent_game_over, env_idx)
                     need_train_step = False
                     train_agents_game_over = train_agents_game_over and agent_game_over
                     if isinstance(agent, DQNAgentBase):
                         need_train_step = agent_game_over or (player_id in env.active_players())
+                    elif hasattr(agent, 'train_multi_env_step'):
+                        need_train_step = env_idx is None
                     elif isinstance(agent, ActorAgent):
                         need_train_step = agent_game_over
-                    if need_train_step and env_idx is None:
+                    if need_train_step:
                         if self.verbose:
                             print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1][:-2]}, "
                                 f"train_step, reward: {reward}, game_over: {agent_game_over}")

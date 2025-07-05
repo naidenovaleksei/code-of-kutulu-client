@@ -339,7 +339,7 @@ class PPOAgent(ActorAgent):
 
     def append_observation(self, player_id, reward, game_over, env_idx=None):
         """Append observation with PPO-specific data"""
-        if not self.train:
+        if not self.train or reward is None:
             return
 
         state, action, observation = self.state_actions
