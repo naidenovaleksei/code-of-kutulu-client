@@ -1,5 +1,6 @@
 import os
 import json
+from copy import deepcopy
 from datetime import datetime
 from tqdm import tqdm
 
@@ -56,7 +57,7 @@ class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
-                 num_envs=1):
+                 num_envs=1, use_tqdm=True):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
@@ -67,6 +68,7 @@ class Trainer:
         self.verbose = verbose
         self.silent = silent
         self.asc_difficulty = asc_difficulty
+        self.use_tqdm = use_tqdm
 
         self.num_envs = num_envs
 
@@ -96,6 +98,8 @@ class Trainer:
             if 'name' in agent_info:
                 _name = agent_info.pop('name')
             _type = agent_info['type']
+            agent_info = deepcopy(agent_info)
+            agent_info['verbose'] = self.verbose
             agent = get_agent(agent_info)
             if _name is not None:
                 agent_dir = f'agent{i}_{_type}_{_name}'
@@ -192,7 +196,9 @@ class Trainer:
                 agent = self.agents[agent_id]
                 if agent.train:
                     agent_game_over = env.is_game_over_for_player(player_id) or game_over
-                    agent.append_observation(player_id, reward, agent_game_over, env_idx)
+                    other_rewards = list(rewards)
+                    other_rewards.pop(player_id)
+                    agent.append_observation(player_id, reward, agent_game_over, env_idx, other_rewards)
                     need_train_step = False
                     train_agents_game_over = train_agents_game_over and agent_game_over
                     if isinstance(agent, DQNAgentBase):
@@ -267,7 +273,7 @@ class Trainer:
         metrics_list = []
 
         exps = range(self.num_experiments)
-        if not self.verbose:
+        if not self.verbose and self.use_tqdm:
             exps = tqdm(exps)
         for i in exps:
             step = i + 1

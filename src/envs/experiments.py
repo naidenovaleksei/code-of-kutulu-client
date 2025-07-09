@@ -210,12 +210,15 @@ def get_top_k(agents_info, num_experiments, league_level, mazes, actions, k=2):
 def get_agent_info(iter_data, agent_id=0):
     exp_name = iter_data['exp_name']
     best_iter = iter_data['best_iter']
+    return _get_agent_info(exp_name, best_iter, agent_id)
+
+def _get_agent_info(exp_name, best_iter, agent_id, train=False):
     exp_date = f'{exp_name[0:4]}-{exp_name[4:6]}-{exp_name[6:8]}'
     agents_dir = f'../output/{exp_date}/{exp_name}'
     checkpoint_dir = f'{agents_dir}/agent{agent_id}/{best_iter}'
     with open(f'{agents_dir}/agents_info.json') as f:
         agents_info = json.load(f)
         info = agents_info[agent_id]
-        info['train'] = False
+        info['train'] = train
         info['checkpoint_dir'] = checkpoint_dir
     return info
