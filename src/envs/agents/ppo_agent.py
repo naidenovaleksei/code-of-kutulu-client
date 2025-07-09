@@ -43,6 +43,9 @@ class RewardShaper:
             bad_plan_bonus=-0.2,
             good_light_bonus=0.3,
             bad_light_bonus=-0.3,
+            other_reward_coef=None,
+            good_explorers_nearby_bonus=0,
+            bad_explorers_nearby_bonus=0,
             ):
         self.actions = actions
         self.verbose = verbose
@@ -50,6 +53,9 @@ class RewardShaper:
         self.bad_plan_bonus = bad_plan_bonus
         self.good_light_bonus = good_light_bonus
         self.bad_light_bonus = bad_light_bonus
+        self.other_reward_coef = other_reward_coef
+        self.good_explorers_nearby_bonus = good_explorers_nearby_bonus
+        self.bad_explorers_nearby_bonus = bad_explorers_nearby_bonus
     
     def _get_wanderers(self, observation):
         return [
@@ -93,7 +99,8 @@ class RewardShaper:
     def _compute_shaped_reward(self,
                                observation: AgentObservation,
                                action: int,
-                               next_observations: AgentObservation):
+                               next_observations: AgentObservation,
+                               other_rewards: List[float]):
         reward = 0
         if self.actions[action] == EffectType.PLAN.value:
             player = next_observations.obs.entities[0]
@@ -141,6 +148,33 @@ class RewardShaper:
             reward += light_bonus
             if self.verbose:
                 print(f"light_bonus: {light_bonus}")
+        if self.other_reward_coef is not None:
+            other_rewards = [r for r in other_rewards if r is not None]
+            if len(other_rewards) != 0:
+                min_other_reward = min(other_rewards)
+                min_other_reward = min(min_other_reward, 0)
+                other_reward_bouns = - self.other_reward_coef * min_other_reward
+                reward += other_reward_bouns
+                if self.verbose:
+                    print(f"other_reward_bouns: {other_reward_bouns}")
+        if self.good_explorers_nearby_bonus != 0 or self.bad_explorers_nearby_bonus != 0:
+            player = next_observations.obs.entities[0]
+            assert player.id == next_observations.player_id
+            player_pos = (player.x, player.y)
+            explorers = self._get_explorers(next_observations, player.id)
+            players_nearby_count = self._get_nearby_count(
+                player_pos,
+                explorers,
+                next_observations.info.lines,
+                PLAN_DISTANCE,
+            )
+            if players_nearby_count > 0:
+                nearby_bonus = self.good_explorers_nearby_bonus * players_nearby_count
+            else:
+                nearby_bonus = self.bad_explorers_nearby_bonus
+            reward += nearby_bonus
+            if self.verbose:
+                print(f"plan_bonus: {plan_bonus}")
         return reward
 
     def recalculate_rewards(self,
@@ -148,13 +182,16 @@ class RewardShaper:
                             actions: List[int],
                             states: List,
                             dones: List[bool],
+                            other_rewards: List[List[float]],
                             observations: List):
         assert dones[-1]
         assert sum(dones[:-1]) == 0
         rewards = list(rewards)
         T = len(rewards)
         for t in range(0, T - 1):
-            rewards[t] += self._compute_shaped_reward(observations[t], actions[t], observations[t+1])
+            rewards[t] += self._compute_shaped_reward(
+                observations[t], actions[t], observations[t+1], other_rewards[t],
+            )
         return rewards
 
 
@@ -197,10 +234,10 @@ class PPOBuffer:
         log_probs = [item['log_prob'] for item in augmented_data]
         values = [item['value'] for item in augmented_data]
         
-        states, actions, rewards, dones, _, observations = zip(*experiences)
+        states, actions, rewards, dones, other_rewards, observations = zip(*experiences)
         
         rewards = self.reward_shaper.recalculate_rewards(
-            rewards, actions, states, dones, observations
+            rewards, actions, states, dones, other_rewards, observations
         )
         
         return states, actions, rewards, dones, log_probs, values
@@ -337,14 +374,14 @@ class PPOAgent(ActorAgent):
 
         return state, action
 
-    def append_observation(self, player_id, reward, game_over, env_idx=None):
+    def append_observation(self, player_id, reward, game_over, env_idx=None, other_rewards=None):
         """Append observation with PPO-specific data"""
         if not self.train or reward is None:
             return
 
         state, action, observation = self.state_actions
         assert reward is not None
-        exp = Experience(state, action, reward, game_over, None, observation)
+        exp = Experience(state, action, reward, game_over, other_rewards, observation)
 
         # Choose the appropriate buffer
         if self.env_buffers is not None:

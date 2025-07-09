@@ -51,8 +51,7 @@ class NNAgent(BaseAgent):
             self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=T_max)
         else:
             raise ValueError(f'wrong scheduler_params: {scheduler_params}')
-        
-        
+
         if checkpoint_dir is not None:
             self.load_agent(checkpoint_dir, drop_layers)
 
@@ -114,6 +113,8 @@ class NNAgent(BaseAgent):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
 
     def load_agent(self, checkpoint_dir, drop_layers=None):
+        if self.verbose:
+            print(f"Loading agent from '{checkpoint_dir}'")
         # Load to CPU first, then move to device if needed
         device = getattr(self, 'device', 'cpu')
         map_location = 'cpu' if device == 'cpu' else None
@@ -121,7 +122,8 @@ class NNAgent(BaseAgent):
         if drop_layers:
             weights = torch.load(f"{checkpoint_dir}/model.pt", map_location=map_location)
             for layer in drop_layers:
-                del weights[layer]
+                if layer in weights:
+                    del weights[layer]
             self.model.load_state_dict(weights, strict=False)
         else:
             weights = torch.load(f"{checkpoint_dir}/model.pt", map_location=map_location)
