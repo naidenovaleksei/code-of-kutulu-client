@@ -62,6 +62,9 @@ class BaseAgent:
     def generate_state_and_step(self, player_id, need_update):
         raise NotImplementedError
 
+    def inference_step(self, player_id):
+        raise NotImplementedError
+
     def get_eps(self):
         raise NotImplementedError
     

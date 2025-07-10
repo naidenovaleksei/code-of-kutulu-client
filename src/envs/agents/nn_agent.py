@@ -79,11 +79,11 @@ class NNAgent(BaseAgent):
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
-        
+
         # Move data to device if the agent has device attribute (for GPU support)
         if hasattr(self, 'device') and hasattr(self, '_move_states_to_device'):
             data = self._move_states_to_device(data)
-        
+
         self.model.eval()
         with torch.no_grad():
             if return_value:
@@ -93,7 +93,6 @@ class NNAgent(BaseAgent):
         model_output = policy[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
 
-        # self.last_action = actions_masked.max() - (actions_masked.sum() - actions_masked.max()) / (np.sum(valid_actions) - 1)
         self.last_action = actions_masked
         if (self.train or self.explicit_random) and np.random.random() < self.get_eps():
             action = self.generate_random_step(actions_masked, player_mask)
@@ -105,6 +104,27 @@ class NNAgent(BaseAgent):
         if return_value:
             return state, action, policy, value
         return state, action
+
+    def inference_step(self, player_id):
+        valid_actions = self.get_valid_actions(player_id)
+        player_mask = ~np.array(valid_actions)
+        player_mask = player_mask[:self.action_space_n]
+
+        state = self.get_state(player_id)
+        data = self.episode_buffer.encode_states([state])
+
+        # Move data to device if the agent has device attribute (for GPU support)
+        if hasattr(self, 'device') and hasattr(self, '_move_states_to_device'):
+            data = self._move_states_to_device(data)
+
+        self.model.eval()
+        with torch.no_grad():
+            policy = self.model.get_policy(data)
+        model_output = policy[0].detach().cpu().numpy()
+        actions_masked = np.ma.array(model_output, mask=player_mask)
+        action = actions_masked.argmax()
+
+        return action
 
     def check_policy(self):
         return self.last_loss

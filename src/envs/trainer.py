@@ -55,13 +55,13 @@ BRONZE_MAZES = [
 
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
+                 agents=None,
                  env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True):
         self.num_experiments = num_experiments
         self.mazes = mazes
         self.league_level = league_level
-        self.players_count = len(agents_info)
         self.env_kwargs = env_kwargs or {}
         self.shuffle = shuffle
         self.actions = actions
@@ -72,7 +72,7 @@ class Trainer:
 
         self.num_envs = num_envs
 
-        if not self.silent:
+        if not self.silent and agents_info is not None:
             if exp_name is None:
                 exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
             self.log_dir = os.path.join(log_dir, exp_name)
@@ -91,27 +91,31 @@ class Trainer:
         self.agent_validator_plan = AgentValidator(self.actions, player_params=(100, 1, 0))
         self.only_train = only_train
 
-        self.agents = []
-        for i, agent_info in enumerate(agents_info):
-            agent_info = dict(agent_info)
-            _name = None
-            if 'name' in agent_info:
-                _name = agent_info.pop('name')
-            _type = agent_info['type']
-            agent_info = deepcopy(agent_info)
-            agent_info['verbose'] = self.verbose
-            agent = get_agent(agent_info)
-            if _name is not None:
-                agent_dir = f'agent{i}_{_type}_{_name}'
-            else:
-                agent_dir = f'agent{i}_{_type}'
-            if not self.silent:
-                agent_log_dir = os.path.join(self.log_dir, agent_dir)
-                agent.writer = SummaryWriter(log_dir=agent_log_dir)
-            if self.verbose:
-                print(f"agent {agent_dir}, type: {type(agent)}")
-            self.agents.append(agent)
+        if agents is not None:
+            self.agents = agents
+        else:
+            self.agents = []
+            for i, agent_info in enumerate(agents_info):
+                agent_info = dict(agent_info)
+                _name = None
+                if 'name' in agent_info:
+                    _name = agent_info.pop('name')
+                _type = agent_info['type']
+                agent_info = deepcopy(agent_info)
+                agent_info['verbose'] = self.verbose
+                agent = get_agent(agent_info)
+                if _name is not None:
+                    agent_dir = f'agent{i}_{_type}_{_name}'
+                else:
+                    agent_dir = f'agent{i}_{_type}'
+                if not self.silent:
+                    agent_log_dir = os.path.join(self.log_dir, agent_dir)
+                    agent.writer = SummaryWriter(log_dir=agent_log_dir)
+                if self.verbose:
+                    print(f"agent {agent_dir}, type: {type(agent)}")
+                self.agents.append(agent)
 
+        self.players_count = len(self.agents)
         self.agent_map = np.arange(len(self.agents))
         
         # Initialize multi-environment support for PPO agents
@@ -153,7 +157,7 @@ class Trainer:
         else:
             return self.play_multi_rollout(seed, step=step)
 
-    def play_single_rollout(self, seed=None, maze_name=None, env_idx=None, step=None):
+    def play_single_rollout(self, seed=None, maze_name=None, env_idx=None, step=None, only_eval=False):
         env = self.reset_env(seed, maze_name, step)
         if self.verbose:
             if env_idx is not None:
@@ -176,11 +180,17 @@ class Trainer:
 
             for player_id in env.active_players():
                 agent_id = self.agent_map[player_id]
-                state, At = self.agents[agent_id].generate_state_and_step(player_id)
+                if only_eval:
+                    At = self.agents[agent_id].inference_step(player_id)
+                else:
+                    _, At = self.agents[agent_id].generate_state_and_step(player_id)
                 action[player_id] = At
 
             entities, rewards, game_over, info = env.step(action)
             rollout_rewards.append(rewards)
+            
+            if only_eval:
+                continue
 
             if self.verbose:
                 rewards_by_agent = [rewards[i] for i in np.argsort(self.agent_map)]
