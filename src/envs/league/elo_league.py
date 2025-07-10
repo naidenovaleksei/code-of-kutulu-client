@@ -31,14 +31,16 @@ class EloLeague:
         # Обновление рейтингов по pairwise матчам
         for i in range(len(ranked_players)):
             for j in range(i + 1, len(ranked_players)):
-                player_i, _ = ranked_players[i]
-                player_j, _ = ranked_players[j]
+                player_i, result_i = ranked_players[i]
+                player_j, result_j = ranked_players[j]
+                assert result_i >= result_j
 
                 Ri = self.ratings[player_i]
                 Rj = self.ratings[player_j]
 
                 # i победил над j
-                Ri_new, Rj_new = self.update_elo_pair(Ri, Rj, 1)
+                update = 1 if result_i > result_j else 0.5
+                Ri_new, Rj_new = self.update_elo_pair(Ri, Rj, update)
                 self.ratings[player_i] = Ri_new
                 self.ratings[player_j] = Rj_new
 

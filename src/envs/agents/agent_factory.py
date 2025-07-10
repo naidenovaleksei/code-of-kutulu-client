@@ -1,4 +1,4 @@
-
+from copy import deepcopy
 from src.envs.agents.qlearning_agent import QlearningAgent
 from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
 from src.envs.agents.dqn_agent import DQNAgent
@@ -13,6 +13,7 @@ from src.envs.strategy import RandomStrategy
 
 
 def get_agent(agent_info):
+    agent_info = deepcopy(agent_info)
     _type = agent_info.pop('type')
     if _type == 'qlearning':
         if agent_info['strategy'] == 'random':

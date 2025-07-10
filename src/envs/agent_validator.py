@@ -117,7 +117,7 @@ class AgentValidator:
         for env, params in zip(env_list, params_list):
             for answer, explorers, wanderers in params:
                 self._set_env(env, agent, explorers, wanderers)
-                _, action = agent.generate_state_and_step(0, need_update=False)
+                action = agent.inference_step(0, need_update=False)
                 last_action = agent.get_last_action()
                 output_stds.append(last_action.std())
                 output_maxs.append(last_action.max())
