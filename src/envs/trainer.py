@@ -72,7 +72,7 @@ class Trainer:
 
         self.num_envs = num_envs
 
-        if not self.silent and agents_info is not None:
+        if not self.silent:
             if exp_name is None:
                 exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
             self.log_dir = os.path.join(log_dir, exp_name)
@@ -84,8 +84,9 @@ class Trainer:
             self.checkpoints_dir = os.path.join(date_dir, exp_name)
             os.makedirs(self.checkpoints_dir, exist_ok=True)
 
-            with open(f'{self.checkpoints_dir}/agents_info.json', 'w') as f:
-                json.dump(agents_info, f)
+            if agents_info is not None:
+                with open(f'{self.checkpoints_dir}/agents_info.json', 'w') as f:
+                    json.dump(agents_info, f)
 
         self.agent_validator = AgentValidator(self.actions)
         self.agent_validator_plan = AgentValidator(self.actions, player_params=(100, 1, 0))
@@ -104,16 +105,15 @@ class Trainer:
                 agent_info = deepcopy(agent_info)
                 agent_info['verbose'] = self.verbose
                 agent = get_agent(agent_info)
-                if _name is not None:
-                    agent_dir = f'agent{i}_{_type}_{_name}'
-                else:
-                    agent_dir = f'agent{i}_{_type}'
-                if not self.silent:
-                    agent_log_dir = os.path.join(self.log_dir, agent_dir)
-                    agent.writer = SummaryWriter(log_dir=agent_log_dir)
+                self.agents.append(agent)
+
+        if not self.silent:
+            for i, agent in enumerate(agents):
+                agent_dir = f'agent{i}_{_type}'
+                agent_log_dir = os.path.join(self.log_dir, agent_dir)
+                agent.writer = SummaryWriter(log_dir=agent_log_dir)
                 if self.verbose:
                     print(f"agent {agent_dir}, type: {type(agent)}")
-                self.agents.append(agent)
 
         self.players_count = len(self.agents)
         self.agent_map = np.arange(len(self.agents))
