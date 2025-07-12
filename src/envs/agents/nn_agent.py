@@ -10,6 +10,17 @@ EPSILON_START = 1.0
 EPSILON_FINAL = 0.02
 EPSILON_DECAY_LAST_FRAME = 10**5
 
+DEFAULT_ACTION_MASK = [
+    True,
+    True,
+    True,
+    True,
+    False,
+    True,
+    True,
+    False,
+]
+
 class NNAgent(BaseAgent):
     def __init__(self, state_type, action_space_n,
                  model,
@@ -18,7 +29,8 @@ class NNAgent(BaseAgent):
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
                  train, verbose=False, checkpoint_dir=None, drop_layers=None,
-                 optimizer='adam', scheduler_params=None, explicit_random=False):
+                 optimizer='adam', scheduler_params=None, explicit_random=False,
+                 explicit_action_mask=DEFAULT_ACTION_MASK):
         super(NNAgent, self).__init__(
             state_type,
             action_space_n,
@@ -38,6 +50,7 @@ class NNAgent(BaseAgent):
         self.model = model
         self.lr = lr
         self.explicit_random = explicit_random
+        self.explicit_action_mask = np.array(explicit_action_mask)
         if optimizer == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         elif optimizer == 'adamw':
@@ -76,6 +89,8 @@ class NNAgent(BaseAgent):
         valid_actions = self.get_valid_actions(player_id)
         player_mask = ~np.array(valid_actions)
         player_mask = player_mask[:self.action_space_n]
+        if self.explicit_action_mask is not None:
+            player_mask &= self.explicit_action_mask
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
@@ -109,6 +124,8 @@ class NNAgent(BaseAgent):
         valid_actions = self.get_valid_actions(player_id)
         player_mask = ~np.array(valid_actions)
         player_mask = player_mask[:self.action_space_n]
+        if self.explicit_action_mask is not None:
+            player_mask &= self.explicit_action_mask
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])

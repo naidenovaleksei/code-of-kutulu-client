@@ -107,6 +107,7 @@ class KutuluPlayer(KutuluEntity):
         super().__init__(EntityKind.EXPLORER.value, id, x, y, sanity, 0, 0)
         self.active = active
         self.effect_left = effect_left
+        self.can_yell = False
     
     @property
     def sanity(self) -> int:
@@ -158,6 +159,7 @@ class KutuluPlayer(KutuluEntity):
             'active': self.active,
             'effect_left': self.effect_left,
             'sanity': self.sanity,
+            'can_yell': self.can_yell,
         })
         return base_dict
     
