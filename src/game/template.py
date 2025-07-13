@@ -418,10 +418,10 @@ def get_valid_action_mask_by_coords(e, info):
         x < info['width'] - 1 and info['lines'][y][x + 1] != CELL_WALL,
         y < info['height'] - 1 and info['lines'][y + 1][x] != CELL_WALL,
         x > 0 and info['lines'][y][x - 1] != CELL_WALL,
-        False,
+        True,
         e['param1'] > 0 and e['effect_left'] <= 0,
         e['param2'] > 0 and e['effect_left'] <= 0,
-        False,
+        e['can_yell'],
     ]
 
 def parse_info():
@@ -449,12 +449,35 @@ class Solver:
         self.info = info
         self.actions = actions
         self.effect_left = 0
+        self.yelled = set()
+    
+    def _check_yell(self, player, entities):
+        explorers = [unit for unit in entities[1:] if unit["kind"] == "EXPLORER"]
+        for p in explorers:
+            p_id = p['id']
+            if p_id != player['id'] and \
+                p_id not in self.yelled and \
+                distance(
+                    (player['x'], player['y']), (p['x'], p['y'])
+                ) <= 1:
+                return True
+        return False
 
-    def convert_to_step(self, action_id, player_pos):
+    def convert_to_step(self, action_id, player_pos, entities):
         if self.actions[action_id] == 'PLAN':
             self.effect_left = 4
         elif self.actions[action_id] == 'LIGHT':
             self.effect_left = 2
+        elif self.actions[action_id] == 'YELL':
+            explorers = [unit for unit in entities[1:] if unit["kind"] == "EXPLORER"]
+            player = entities[0]
+            is_yelled = False
+            for p in explorers:
+                p_id = p['id']
+                if p_id != player['id'] and distance((player['x'], player['y']), (p['x'], p['y'])) <= 1:
+                    self.yelled.add(p_id)
+                    is_yelled = True
+            assert is_yelled
 
         if action_id >= len(MOVING_KUTULU_ACTIONS):
             return self.actions[action_id]
@@ -468,9 +491,10 @@ class Solver:
         player = entities[0]
         self.effect_left = max(0, self.effect_left - 1)
         player['effect_left'] = self.effect_left
+        player['can_yell'] = self._check_yell(player, entities)
         player_mask = ~np.array(get_valid_action_mask_by_coords(player, self.info))
         action_id = self.calculate_action(entities, player_pos, player_mask)
-        return self.convert_to_step(action_id, player_pos)
+        return self.convert_to_step(action_id, player_pos, entities)
 
     def calculate_action(self, entities, player_pos, player_mask):
         raise NotImplementedError

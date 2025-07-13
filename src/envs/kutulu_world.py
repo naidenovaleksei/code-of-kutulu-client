@@ -4,13 +4,14 @@ from gym import spaces
 # from numba import int32, float32    # import the types
 # from numba.experimental import jitclass
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Set, Any
 import numpy as np
 import requests
 from functools import lru_cache
 
-from src.envs.distance import find_path
+from src.envs.distance import find_path, distance
 from src.envs.kutulu_reward_manager import KutuluRewardManager
 from src.envs.kutulu_entities import (
     KutuluEntity, KutuluPlayer, KutuluWanderer, KutuluSlasher, 
@@ -53,6 +54,7 @@ class KutuluWorldEnv(gym.Env):
         self.players: Dict[int, KutuluPlayer] = dict()
         self.players_ids: List[int] = []
         self.turn: int = 0
+        self.yelled = defaultdict(set)
         
         self.seed = None
         self.constants = {}
@@ -110,6 +112,13 @@ class KutuluWorldEnv(gym.Env):
                     player.apply_effect(EffectType.PLAN, 4)
                 elif self._actions[action] == 'LIGHT':
                     player.apply_effect(EffectType.LIGHT, 2)
+                elif self._actions[action] == 'YELL':
+                    is_yelled = False
+                    for p_id, p in self.players.items():
+                        if p_id != i and distance((player.x, player.y), (p.x, p.y)) <= 1:
+                            self.yelled[i].add(p_id)
+                            is_yelled = True
+                    assert is_yelled
 
         response = requests.post(
             f'{self.host}/turn',
@@ -212,6 +221,16 @@ class KutuluWorldEnv(gym.Env):
         self.entities = [
             self._parse_entity(e) for e in state[1:]
         ]
+    
+    def _check_yell(self, player):
+        for p_id, p in self.players.items():
+            if p_id != player.id and \
+                p_id not in self.yelled[player.id] and \
+                distance(
+                    (player.x, player.y), (p.x, p.y)
+                ) <= 1:
+                return True
+        return False
 
     def _set_players(self, state, set_ids=False) -> None:
         if set_ids:
@@ -235,6 +254,9 @@ class KutuluWorldEnv(gym.Env):
                 
                 if set_ids:
                     self.players_ids.append(kutulu_player.id)
+
+        for player in self.players.values():
+            player.can_yell = self._check_yell(player)
 
     def get_valid_action_mask(self) -> Dict[int, List[bool]]:
         return {

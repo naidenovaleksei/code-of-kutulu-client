@@ -87,10 +87,11 @@ class NNAgent(BaseAgent):
             self._update_eps()
 
         valid_actions = self.get_valid_actions(player_id)
-        player_mask = ~np.array(valid_actions)
+        player_mask = np.array(valid_actions)
         player_mask = player_mask[:self.action_space_n]
         if self.explicit_action_mask is not None:
             player_mask &= self.explicit_action_mask
+        player_mask = ~player_mask
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
@@ -122,10 +123,11 @@ class NNAgent(BaseAgent):
 
     def inference_step(self, player_id):
         valid_actions = self.get_valid_actions(player_id)
-        player_mask = ~np.array(valid_actions)
+        player_mask = np.array(valid_actions)
         player_mask = player_mask[:self.action_space_n]
         if self.explicit_action_mask is not None:
             player_mask &= self.explicit_action_mask
+        player_mask = ~player_mask
 
         state = self.get_state(player_id)
         data = self.episode_buffer.encode_states([state])
