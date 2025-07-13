@@ -56,7 +56,9 @@ BRONZE_MAZES = [
 class Trainer:
     def __init__(self, num_experiments, agents_info, league_level, actions,
                  agents=None,
-                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True, log_dir='runs', exp_name=None,
+                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True,
+                 log_dir='../../../runs', output_dir='../../../output',
+                 exp_name=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True):
         self.num_experiments = num_experiments
@@ -76,9 +78,10 @@ class Trainer:
             if exp_name is None:
                 exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
             self.log_dir = os.path.join(log_dir, exp_name)
+            self.output_dir = output_dir
             
             date, time = str(datetime.now()).split()
-            date_dir = f'../output/{date}'
+            date_dir = f'{self.output_dir}/{date}'
             os.makedirs(date_dir, exist_ok=True)
             
             self.checkpoints_dir = os.path.join(date_dir, exp_name)
@@ -108,7 +111,7 @@ class Trainer:
                 self.agents.append(agent)
 
         if not self.silent:
-            for i, agent in enumerate(agents):
+            for i, agent in enumerate(self.agents):
                 agent_dir = f'agent{i}_{_type}'
                 agent_log_dir = os.path.join(self.log_dir, agent_dir)
                 agent.writer = SummaryWriter(log_dir=agent_log_dir)
@@ -188,17 +191,20 @@ class Trainer:
 
             entities, rewards, game_over, info = env.step(action)
             rollout_rewards.append(rewards)
-            
-            if only_eval:
-                continue
 
             if self.verbose:
                 rewards_by_agent = [rewards[i] for i in np.argsort(self.agent_map)]
+                actions_by_agent = [self.actions[action[i]] for i in np.argsort(self.agent_map)]
                 if env_idx is not None:
                     print(f"Env {env_idx}, step: {step}, rewards: {rewards_by_agent}")
+                    print(f"Env {env_idx}, step: {step}, actions: {actions_by_agent}")
                 else:
                     print(f"step: {step}, rewards: {rewards_by_agent}")
+                    print(f"step: {step}, actions: {actions_by_agent}")
                 # env.viz_map()
+            
+            if only_eval:
+                continue
 
             train_agents_game_over = True
             for player_id, reward in enumerate(rewards):
