@@ -36,16 +36,18 @@ METRICS_SMOOTH_COEF = 0.05
 PLAN_DISTANCE = 2
 LIGHT_DISTANCE = 5
 
-
 class RewardShaper:
     def __init__(self, actions, verbose,
             good_plan_bonus=0.3,
             bad_plan_bonus=-0.2,
             good_light_bonus=0.3,
-            bad_light_bonus=-0.3,
-            other_reward_coef=None,
-            good_explorers_nearby_bonus=0,
-            bad_explorers_nearby_bonus=0,
+            bad_light_bonus=-0.1,
+            other_reward_coef=0.01,
+            good_explorers_nearby_bonus=0.02,
+            bad_explorers_nearby_bonus=-0.04,
+            yell_bonus_coef=0.5,
+            bad_yell_bonus=-0.2,
+            shelter_bonus=0.5,
             ):
         self.actions = actions
         self.verbose = verbose
@@ -56,6 +58,9 @@ class RewardShaper:
         self.other_reward_coef = other_reward_coef
         self.good_explorers_nearby_bonus = good_explorers_nearby_bonus
         self.bad_explorers_nearby_bonus = bad_explorers_nearby_bonus
+        self.bad_yell_bonus = bad_yell_bonus
+        self.yell_bonus_coef = yell_bonus_coef
+        self.shelter_bonus = shelter_bonus
     
     def _get_wanderers(self, observation):
         return [
@@ -63,10 +68,16 @@ class RewardShaper:
             if e.kind in (EntityKind.WANDERER.value, EntityKind.SLASHER.value)
         ]
     
-    def _get_explorers(self, observation, player_id):
+    def _get_explorers(self, observation, player_id) -> List[KutuluEntity]:
         return [
             e for e in observation.obs.entities
             if e.kind == EntityKind.EXPLORER.value and e.id != player_id
+        ]
+    
+    def _get_shelters(self, observation) -> List[KutuluEntity]:
+        return [
+            e for e in observation.obs.entities
+            if e.kind == EntityKind.EFFECT_SHELTER.value
         ]
     
     def _get_nearby_count(self,
@@ -148,6 +159,27 @@ class RewardShaper:
             reward += light_bonus
             if self.verbose:
                 print(f"light_bonus: {light_bonus}")
+        elif self.actions[action] == EffectType.YELL.value:
+            yell_bonus = self.bad_yell_bonus
+            other_rewards = [r for r in other_rewards if r is not None]
+            if len(other_rewards) != 0:
+                min_other_reward = min(other_rewards)
+                if min_other_reward < 0:
+                    player = observation.obs.entities[0]
+                    assert player.id == observation.player_id
+                    player_pos = (player.x, player.y)
+                    explorers = self._get_explorers(observation, player.id)
+                    players_nearby_count = self._get_nearby_count(
+                        player_pos,
+                        explorers,
+                        observation.info.lines,
+                        1,
+                    )
+                    if players_nearby_count > 0:
+                        yell_bonus = - self.yell_bonus_coef * min_other_reward
+            reward += yell_bonus
+            if self.verbose:
+                print(f"yell_bonus: {yell_bonus}")
         if self.other_reward_coef is not None:
             other_rewards = [r for r in other_rewards if r is not None]
             if len(other_rewards) != 0:
@@ -174,7 +206,25 @@ class RewardShaper:
                 nearby_bonus = self.bad_explorers_nearby_bonus
             reward += nearby_bonus
             if self.verbose:
-                print(f"plan_bonus: {plan_bonus}")
+                print(f"nearby_bonus: {nearby_bonus}")
+        if self.shelter_bonus != 0:
+            player = next_observations.obs.entities[0]
+            assert player.id == next_observations.player_id
+            lines = next_observations.info.lines
+            player_pos = (player.x, player.y)
+            shelters = self._get_shelters(next_observations)
+            active_shelters = [sh for sh in shelters if sh.param0 > 0]
+            shelters_underfoot_count = self._get_nearby_count(
+                player_pos,
+                active_shelters,
+                next_observations.info.lines,
+                0,
+            )
+            if shelters_underfoot_count > 0:
+                reward += self.shelter_bonus
+                if self.verbose:
+                    print(f"shelter_bonus: {shelter_bonus}")
+
         return reward
 
     def recalculate_rewards(self,
