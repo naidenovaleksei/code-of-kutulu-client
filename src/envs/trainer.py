@@ -7,22 +7,16 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
-from src.envs.kutulu_world import KutuluWorldEnv
+from src.envs.kutulu_world import (
+    KutuluWorldEnv,
+    EXTENDED_KUTULU_ACTIONS,
+    DEFAULT_KUTULU_ACTIONS,
+)
 from src.envs.agent_validator import AgentValidator
-from src.envs.agents.qlearning_agent import QlearningAgent
-from src.envs.agents.cross_entropy_agent import CrossEntropyAgent
-from src.envs.agents.dqn_agent import DQNAgent
-from src.envs.agents.dqn_agent_ext import DQNAgentExt
-from src.envs.agents.dqn_agent_by_kind import DQNAgentByKind
-from src.envs.agents.reinforce_agent import REINFORCEAgent
-from src.envs.agents.a2c_agent import A2CAgent
 from src.envs.agents.dqn_agent import DQNAgentBase
-from src.envs.agents.dqn_agent_conv import DQNAgentConv
 from src.envs.agents.ppo_agent import PPOAgent
 from src.envs.agents.nn_agent import NNAgent
 from src.envs.agents.actor_agent import ActorAgent
-from src.envs.agents.rule_based_agent import EpsilonConstAgent
-from src.envs.strategy import RandomStrategy
 from src.envs.agents.agent_factory import get_agent
 
 WOOD_MAZES = [
@@ -53,20 +47,28 @@ BRONZE_MAZES = [
     "Pixelated",
 ]
 
+
+def get_mazes_by_league(league_level):
+    return BRONZE_MAZES if league_level >= 4 else WOOD_MAZES
+
+def get_actions_by_league(league_level):
+    return EXTENDED_KUTULU_ACTIONS if league_level >= 3 else DEFAULT_KUTULU_ACTIONS
+
+
 class Trainer:
-    def __init__(self, num_experiments, agents_info, league_level, actions,
+    def __init__(self, num_experiments, agents_info, league_level,
                  agents=None,
-                 env_kwargs=None, mazes=BRONZE_MAZES, shuffle=True,
+                 env_kwargs=None, shuffle=True,
                  log_dir='../../../runs', output_dir='../../../output',
                  exp_name=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True):
         self.num_experiments = num_experiments
-        self.mazes = mazes
         self.league_level = league_level
+        self.mazes = get_mazes_by_league(league_level)
+        self.actions = get_actions_by_league(league_level)
         self.env_kwargs = env_kwargs or {}
         self.shuffle = shuffle
-        self.actions = actions
         self.verbose = verbose
         self.silent = silent
         self.asc_difficulty = asc_difficulty
@@ -220,7 +222,7 @@ class Trainer:
                     if isinstance(agent, DQNAgentBase):
                         need_train_step = agent_game_over or (player_id in env.active_players())
                     elif hasattr(agent, 'train_multi_env_step'):
-                        need_train_step = env_idx is None
+                        need_train_step = agent_game_over and env_idx is None
                     elif isinstance(agent, ActorAgent):
                         need_train_step = agent_game_over
                     if need_train_step:

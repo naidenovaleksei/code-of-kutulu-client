@@ -134,7 +134,7 @@ class League:
         }
         trainer = Trainer(
             num_experiments=num_experiments, agents_info=None, agents=agents,
-            league_level=LEAGUE_LEVEL, actions=EXTENDED_KUTULU_ACTIONS, mazes=BRONZE_MAZES, log_dir='../runs',
+            league_level=LEAGUE_LEVEL,
             num_envs=NUM_ENVS, env_kwargs=env_kwargs, silent=True, use_tqdm=False,
         )
         result = trainer.train(metrics_int=999)
@@ -203,11 +203,9 @@ class League:
     def _play_round(self, agents: List[BaseAgent],
                    league_level=3, num_envs=1):
         assert len(agents) == 4
-        mazes = BRONZE_MAZES if league_level >= 3 else WOOD_MAZES
-        actions = EXTENDED_KUTULU_ACTIONS if league_level >= 3 else DEFAULT_KUTULU_ACTIONS
         trainer = Trainer(
             num_experiments=1, agents_info=None, agents=agents, shuffle=True,
-            league_level=league_level, mazes=mazes, actions=actions, log_dir='../runs', verbose=False,
+            league_level=league_level, verbose=False,
             silent=True, num_envs=num_envs, only_train=False, use_tqdm=False,
         )
         result = trainer.play_single_rollout(only_eval=True)

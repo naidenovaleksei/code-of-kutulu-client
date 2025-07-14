@@ -7,12 +7,8 @@ from tensorboard.backend.event_processing import event_accumulator
 
 from src.envs.trainer import (
     Trainer,
-    BRONZE_MAZES,
-    WOOD_MAZES,
-)
-from src.game.template import (
-    DEFAULT_KUTULU_ACTIONS,
-    EXTENDED_KUTULU_ACTIONS,
+    get_mazes_by_league,
+    get_actions_by_league,
 )
 
 
@@ -31,8 +27,7 @@ def get_trainer(
     good_plan_bonus, bad_plan_bonus, good_light_bonus, bad_light_bonus,
     verbose=False, silent=False, asc_difficulty=False, random_agent_info=None,
 ):
-    mazes = BRONZE_MAZES if league_level >= 3 else WOOD_MAZES
-    actions = EXTENDED_KUTULU_ACTIONS if league_level >= 3 else DEFAULT_KUTULU_ACTIONS
+    actions = get_actions_by_league(league_level)
     action_space_n = len(actions)
     
     env_kwargs = {
@@ -91,7 +86,7 @@ def get_trainer(
     assert len(agents_info) == 4
     trainer = Trainer(
         num_experiments=num_experiments, agents_info=agents_info, shuffle=True,
-        league_level=league_level, mazes=mazes, actions=actions, log_dir='../runs', verbose=verbose,
+        league_level=league_level, verbose=verbose,
         env_kwargs=env_kwargs, silent=silent, num_envs=num_envs, asc_difficulty=asc_difficulty,
     )
     return trainer
@@ -191,7 +186,7 @@ def get_best_iter(datetime_start, model_type):
 def get_top_k(agents_info, num_experiments, league_level, mazes, actions, k=2):
     trainer = Trainer(
         num_experiments=num_experiments, agents_info=agents_info, shuffle=True,
-        league_level=league_level, mazes=mazes, actions=actions, log_dir='../runs', verbose=False,
+        league_level=league_level, verbose=False,
         silent=True,
     )
     result = trainer.train()

@@ -20,6 +20,8 @@ from src.envs.kutulu_entities import (
 from src.game.template import (
     get_valid_action_mask_by_coords,
     REL_POSITIONS,
+    EXTENDED_KUTULU_ACTIONS,
+    DEFAULT_KUTULU_ACTIONS,
 )
 
 
