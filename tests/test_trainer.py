@@ -42,7 +42,7 @@ def agents_info():
 def trainer(agents_info):
     return Trainer(
         num_experiments=5000, agents_info=agents_info, shuffle=False,
-        league_level=3, actions=EXTENDED_KUTULU_ACTIONS, log_dir='../runs'
+        league_level=3, silent=True,
     )
 
 

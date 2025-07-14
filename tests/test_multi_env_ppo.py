@@ -4,8 +4,13 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.envs.trainer import Trainer
-from src.envs.agents.ppo_agent import PPOAgent
+from src.envs.agents.ppo_agent import PPOAgent, AgentObservation
 from src.game.template import DEFAULT_KUTULU_ACTIONS
+from src.envs.kutulu_world import (
+    KutuluObservation,
+    KutuluEnvInfo,
+    KutuluEntity,
+)
 
 
 def test_single_env_backward_compatibility():
@@ -37,8 +42,7 @@ def test_single_env_backward_compatibility():
         num_experiments=2,
         agents_info=agents_info,
         league_level=3,
-        actions=actions,
-        silent=True
+        silent=True,
     )
     
     assert trainer.num_envs == 1
@@ -84,9 +88,8 @@ def test_multi_env_initialization():
         num_experiments=1,
         agents_info=agents_info,
         league_level=3,
-        actions=actions,
         num_envs=4,  # Use 4 environments for faster testing
-        silent=True
+        silent=True,
     )
     
     assert trainer.num_envs == 4
@@ -120,9 +123,15 @@ def test_ppo_buffer_functionality():
     
     # Add some mock experiences
     mock_state = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]  # Simple 3x3 state
+    mock_observation = AgentObservation(
+        {},
+        KutuluEnvInfo([[]], 0, 0, ''),
+        KutuluObservation(2, [KutuluEntity('', 0, 0, 0, 0, 0, 0)]),
+        0,
+    )
     
-    buffer.append(Experience(mock_state, 0, 1.0, False, None, None), 0.5, 0.8)  # log_prob=0.5, value=0.8
-    buffer.append(Experience(mock_state, 0, 1.0, True, None, None), 0.3, 0.6)  # log_prob=0.3, value=0.6
+    buffer.append(Experience(mock_state, 4, 1.0, False, [], mock_observation), 0.5, 0.8)  # log_prob=0.5, value=0.8
+    buffer.append(Experience(mock_state, 4, 1.0, True, [], mock_observation), 0.3, 0.6)  # log_prob=0.3, value=0.6
     
     assert len(buffer.buffer) == 2
     

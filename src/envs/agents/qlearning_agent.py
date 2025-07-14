@@ -26,7 +26,8 @@ TEST_STATES = [
 
 
 class QlearningAgent(BaseAgent):
-    def __init__(self, strategy: BaseQStrategy, state_type, action_space_n, eps=0., train=False, alpha=None, gamma=None):
+    def __init__(self, strategy: BaseQStrategy, state_type, action_space_n, eps=0.,
+                 train=False, alpha=None, gamma=None, verbose=False):
         super(QlearningAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
