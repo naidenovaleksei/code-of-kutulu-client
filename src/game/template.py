@@ -5,6 +5,7 @@ import numpy as np
 import scipy.special as sp
 from scipy.signal import correlate2d
 import heapq
+from collections import defaultdict
 
 import pickle as pkl
 import zlib
@@ -230,8 +231,8 @@ def parse_state_by_kind(state, kinds=[
         result[kind] = (kind_list, features_list, dir_list)
     return result
 
-def get_distances(entities, player_pos, lines, find_path_func=find_path):
-    distances = {}
+def get_all_distances(entities, player_pos, lines, find_path_func=find_path):
+    all_distances = defaultdict(list)
     for rel_pos in REL_POSITIONS:
         pos = (rel_pos[0] + player_pos[0], rel_pos[1] + player_pos[1])
         if not 0 < pos[0] < len(lines[0]) - 1:
@@ -243,15 +244,20 @@ def get_distances(entities, player_pos, lines, find_path_func=find_path):
         for e in entities:
             entity_pos = (e['x'], e['y'])
             if entity_pos == player_pos:
-                return {MOVE_REL_POS['WAIT']: 0}
+                all_distances[MOVE_REL_POS['WAIT']].append(0)
             try:
                 path = find_path_func(pos, entity_pos, lines)
                 if len(path):
                     assert path[-1] != pos
                     assert path[0] == entity_pos
-                distances[rel_pos] = min(distances.get(rel_pos, 1000), len(path))
+                all_distances[rel_pos].append(len(path))
             except UnreachedPositionError as e:
                 pass
+    return all_distances
+
+def get_distances(entities, player_pos, lines, find_path_func=find_path):
+    all_distances = get_all_distances(entities, player_pos, lines, find_path_func)
+    distances = {k: min(v) for k, v in all_distances.items()}
     return distances
 
 def get_min_direction_and_distance(distances):

@@ -29,6 +29,14 @@ class EffectType(Enum):
     YELL = "YELL"
 
 
+class MoveType(Enum):
+    UP = "UP"
+    RIGHT = "RIGHT"
+    DOWN = "DOWN"
+    LEFT = "LEFT"
+    WAIT = "WAIT"
+
+
 class KutuluEntity:
     """Base class for all entities in the Kutulu game."""
     

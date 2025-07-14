@@ -9,9 +9,12 @@ from src.envs.kutulu_entities import (
     EntityKind,
     EffectType,
     KutuluEntity,
+    MoveType,
 )
 from src.game.template import (
-    EXTENDED_KUTULU_ACTIONS
+    EXTENDED_KUTULU_ACTIONS,
+    REL_POSITIONS,
+    get_all_distances,
 )
 from src.envs.agents import AgentObservation
 from src.envs.agents.nn_agent import(
@@ -48,6 +51,8 @@ class RewardShaper:
             yell_bonus_coef=0.5,
             bad_yell_bonus=-0.2,
             shelter_bonus=0.5,
+            wait_reward_coef=1.0,
+            bad_towards_enemy_bonus=-0.3,
             ):
         self.actions = actions
         self.verbose = verbose
@@ -61,7 +66,9 @@ class RewardShaper:
         self.bad_yell_bonus = bad_yell_bonus
         self.yell_bonus_coef = yell_bonus_coef
         self.shelter_bonus = shelter_bonus
-    
+        self.wait_reward_coef = wait_reward_coef
+        self.bad_towards_enemy_bonus = bad_towards_enemy_bonus
+
     def _get_wanderers(self, observation):
         return [
             e for e in observation.obs.entities
@@ -107,10 +114,26 @@ class RewardShaper:
                 min_dist = min(min_dist, len(path))
         return min_dist
 
+    def _score_moves_by_wanderers(self, player_pos, observation: AgentObservation, limit=4):
+        wanderers = self._get_wanderers(observation)
+        wanderers = [
+            w.to_dict() for w in wanderers
+            if distance(player_pos, (w.x, w.y)) <= limit
+        ]
+        all_distances = get_all_distances(wanderers, player_pos, observation.info.lines)
+        all_distances = {
+            # [1, 2, 2] -> 0.6385
+            k: np.exp(-np.array(v)).sum()
+            for k, v in all_distances.items()
+        }
+        move_scores = [all_distances.get(rel_pos, 0) for rel_pos in REL_POSITIONS[:4]]
+        return move_scores
+
     def _compute_shaped_reward(self,
                                observation: AgentObservation,
                                action: int,
                                next_observations: AgentObservation,
+                               original_reward: float,
                                other_rewards: List[float]):
         reward = 0
         if self.actions[action] == EffectType.PLAN.value:
@@ -180,6 +203,29 @@ class RewardShaper:
             reward += yell_bonus
             if self.verbose:
                 print(f"yell_bonus: {yell_bonus}")
+        elif self.actions[action] == MoveType.WAIT.value:
+            if original_reward < 0:
+                wait_bonus = self.wait_reward_coef * original_reward
+                reward += wait_bonus
+                if self.verbose:
+                    print(f"wait_bonus: {wait_bonus}")
+        else:
+            # MOVE
+            assert self.actions[action] in (
+                MoveType.UP.value,
+                MoveType.RIGHT.value,
+                MoveType.DOWN.value,
+                MoveType.LEFT.value,
+            )
+            player = observation.obs.entities[0]
+            assert player.id == observation.player_id
+            player_pos = (player.x, player.y)
+            move_scores = self._score_moves_by_wanderers(player_pos, observation)
+            if move_scores[action] > 0 and move_scores[action] == max(move_scores):
+                towards_enemy_bonus = self.bad_towards_enemy_bonus
+                reward += towards_enemy_bonus
+                if self.verbose:
+                    print(f"towards_enemy_bonus: {towards_enemy_bonus}")
         if self.other_reward_coef is not None:
             other_rewards = [r for r in other_rewards if r is not None]
             if len(other_rewards) != 0:
@@ -223,7 +269,7 @@ class RewardShaper:
             if shelters_underfoot_count > 0:
                 reward += self.shelter_bonus
                 if self.verbose:
-                    print(f"shelter_bonus: {shelter_bonus}")
+                    print(f"shelter_bonus: {self.shelter_bonus}")
 
         return reward
 
@@ -240,7 +286,7 @@ class RewardShaper:
         T = len(rewards)
         for t in range(0, T - 1):
             rewards[t] += self._compute_shaped_reward(
-                observations[t], actions[t], observations[t+1], other_rewards[t],
+                observations[t], actions[t], observations[t+1], rewards[t], other_rewards[t],
             )
         return rewards
 
