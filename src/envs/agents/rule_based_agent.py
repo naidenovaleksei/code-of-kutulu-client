@@ -13,7 +13,7 @@ from src.game.template import (
 
 
 class EpsilonConstAgent(BaseAgent):
-    def __init__(self, state_type, action_space_n, epsilon_params, action):
+    def __init__(self, state_type, action_space_n, epsilon_params, action, verbose=False):
         super(EpsilonConstAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,

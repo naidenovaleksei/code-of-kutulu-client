@@ -20,7 +20,8 @@ def test_single_env_backward_compatibility():
             'actions': actions,
             'train': True,
             'verbose': False,
-            'model_params': {'size': 3}
+            'model_params': {'size': 3},
+            'explicit_action_mask': None,
         },
         {
             'type': 'epsilon_wait',
@@ -28,7 +29,6 @@ def test_single_env_backward_compatibility():
             'action_space_n': len(actions),
             'epsilon_params': {'start': 0.1, 'final': 0.1, 'decay': 1000},
             'action': 'WAIT',
-            'train': False
         }
     ]
     
@@ -67,7 +67,8 @@ def test_multi_env_initialization():
             'actions': actions,
             'train': True,
             'verbose': False,
-            'model_params': {'size': 3}
+            'model_params': {'size': 3},
+            'explicit_action_mask': None,
         },
         {
             'type': 'epsilon_wait',
@@ -75,7 +76,6 @@ def test_multi_env_initialization():
             'action_space_n': len(actions),
             'epsilon_params': {'start': 0.1, 'final': 0.1, 'decay': 1000},
             'action': 'WAIT',
-            'train': False
         }
     ]
     

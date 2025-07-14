@@ -50,7 +50,10 @@ class NNAgent(BaseAgent):
         self.model = model
         self.lr = lr
         self.explicit_random = explicit_random
-        self.explicit_action_mask = np.array(explicit_action_mask)
+        if explicit_action_mask is not None:
+            self.explicit_action_mask = np.array(explicit_action_mask)
+        else:
+            self.explicit_action_mask = None
         if optimizer == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         elif optimizer == 'adamw':
