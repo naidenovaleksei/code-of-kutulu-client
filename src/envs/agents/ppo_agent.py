@@ -33,11 +33,14 @@ from src.envs.kutulu_observer import (
     KutuluConvObserver,
 )
 from src.envs.models.conv_a2c_model import ConvA2CModel
-from src.envs.distance import find_path, distance
+from src.envs.distance import find_path, distance, UnreachedPositionError
+from src.envs.reward_shaper import PotentialRewardShaper
+
 
 METRICS_SMOOTH_COEF = 0.05
 PLAN_DISTANCE = 2
 LIGHT_DISTANCE = 5
+YELL_DISTANCE = 1
 
 class RewardShaper:
     def __init__(self, actions, verbose,
@@ -294,13 +297,17 @@ class RewardShaper:
 class PPOBuffer:
     """Enhanced buffer for PPO that stores additional information needed for clipped objective"""
     
-    def __init__(self, state_encoder: BaseStateEncoder, actions, reward_params=None, need_aug=False, verbose=False):
+    def __init__(self, state_encoder: BaseStateEncoder, actions,
+                 reward_params=None, need_aug=False, use_potential=True, verbose=False):
         self.buffer = []
         self.state_encoder = state_encoder
         self.need_aug = need_aug
         if reward_params is None:
             reward_params = {}
-        self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
+        if use_potential:
+            self.reward_shaper = PotentialRewardShaper(actions, verbose, **reward_params)
+        else:
+            self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
         
     def start_episode(self):
         self.buffer = []
@@ -815,4 +822,3 @@ class PPOAgent(ActorAgent):
 
         returns = advantages + values[:-1]
         return returns.detach(), advantages.detach()
-

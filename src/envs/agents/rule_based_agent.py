@@ -49,6 +49,9 @@ class EpsilonConstAgent(BaseAgent):
             return np.random.randint(self.action_space_n)
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
 
+    def inference_step(self, player_id):
+        return self.generate_state_and_step(player_id, need_update=False)[1]
+
     def generate_state_and_step(self, player_id, need_update=True):
         if need_update:
             self.frame_idx += 1

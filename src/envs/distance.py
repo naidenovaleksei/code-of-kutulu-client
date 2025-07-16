@@ -1,6 +1,7 @@
 from src.game.template import (
     find_path as find_path,
     distance as distance,
+    UnreachedPositionError as UnreachedPositionError,
 )
 
 if __name__ == '__main__':
