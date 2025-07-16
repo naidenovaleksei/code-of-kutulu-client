@@ -213,6 +213,18 @@ class PotentialRewardShaper:
                                original_reward: float,
                                other_rewards: List[float]):
         reward = 0
+        bonuses = {
+            'original_reward': original_reward,
+            'no_move_bonus': 0,
+            'wanderers_nearby_bonus': 0,
+            'explorers_nearby_bonus': 0,
+            'shelters_nearby_bonus': 0,
+            'others_sanity_loss_bonus': 0,
+            'plan_bonus': 0,
+            'light_bonus': 0,
+            'yell_bonus': 0
+        }
+        
         if original_reward < 0 and self.actions[action] not in (
             MoveType.UP.value,
             MoveType.RIGHT.value,
@@ -221,27 +233,32 @@ class PotentialRewardShaper:
         ):
             no_move_bonus = self.no_move_reward_coef * original_reward
             reward += no_move_bonus
+            bonuses['no_move_bonus'] = no_move_bonus
             if self.verbose:
                 print(f"no_move_bonus: {no_move_bonus}")
-            return reward
+            return reward, bonuses
 
         wanderers_nearby_bonus = self._wanderers_nearby_bonus(observation, next_observations)
         reward += wanderers_nearby_bonus
+        bonuses['wanderers_nearby_bonus'] = wanderers_nearby_bonus
         if self.verbose:
             print(f"wanderers_nearby_bonus: {wanderers_nearby_bonus}")
 
         explorers_nearby_bonus = self._explorers_nearby_bonus(observation, next_observations)
         reward += explorers_nearby_bonus
+        bonuses['explorers_nearby_bonus'] = explorers_nearby_bonus
         if self.verbose:
             print(f"explorers_nearby_bonus: {explorers_nearby_bonus}")
 
         shelters_nearby_bonus = self._shelters_nearby_bonus(observation, next_observations)
         reward += shelters_nearby_bonus
+        bonuses['shelters_nearby_bonus'] = shelters_nearby_bonus
         if self.verbose:
             print(f"shelters_nearby_bonus: {shelters_nearby_bonus}")
 
         others_sanity_loss_bonus = self._others_sanity_loss_bonus(observation, next_observations)
         reward += others_sanity_loss_bonus
+        bonuses['others_sanity_loss_bonus'] = others_sanity_loss_bonus
         if self.verbose:
             print(f"others_sanity_loss_bonus: {others_sanity_loss_bonus}")
 
@@ -249,21 +266,24 @@ class PotentialRewardShaper:
             assert original_reward >= 0
             plan_bonus = self._plan_bonus(observation, next_observations)
             reward += plan_bonus
+            bonuses['plan_bonus'] = plan_bonus
             if self.verbose:
                 print(f"plan_bonus: {plan_bonus}")
         elif self.actions[action] == EffectType.LIGHT.value:
             assert original_reward >= 0
             light_bonus = self._light_bonus(observation, next_observations)
             reward += light_bonus
+            bonuses['light_bonus'] = light_bonus
             if self.verbose:
                 print(f"light_bonus: {light_bonus}")
         elif self.actions[action] == EffectType.YELL.value:
             assert original_reward >= 0
             yell_bonus = self._yell_bonus(observation, next_observations)
             reward += yell_bonus
+            bonuses['yell_bonus'] = yell_bonus
             if self.verbose:
                 print(f"yell_bonus: {yell_bonus}")
-        return reward
+        return reward, bonuses
 
     def recalculate_rewards(self,
                             rewards: List[float],
@@ -276,8 +296,37 @@ class PotentialRewardShaper:
         assert sum(dones[:-1]) == 0
         rewards = list(rewards)
         T = len(rewards)
+        
+        # Initialize bonus tracking
+        bonus_sums = {
+            'original_reward': 0,
+            'no_move_bonus': 0,
+            'wanderers_nearby_bonus': 0,
+            'explorers_nearby_bonus': 0,
+            'shelters_nearby_bonus': 0,
+            'others_sanity_loss_bonus': 0,
+            'plan_bonus': 0,
+            'light_bonus': 0,
+            'yell_bonus': 0
+        }
+        bonus_counts = {key: 0 for key in bonus_sums}
+        
         for t in range(0, T - 1):
-            rewards[t] += self._compute_shaped_reward(
+            shaped_reward, bonuses = self._compute_shaped_reward(
                 observations[t], actions[t], observations[t+1], rewards[t], other_rewards[t],
             )
-        return rewards
+            rewards[t] += shaped_reward
+            
+            # Accumulate bonuses
+            for bonus_type, value in bonuses.items():
+                if value != 0:  # Only count non-zero bonuses
+                    bonus_sums[bonus_type] += value
+                    bonus_counts[bonus_type] += 1
+        
+        # Calculate average bonuses
+        avg_bonuses = {}
+        for bonus_type, total in bonus_sums.items():
+            count = bonus_counts[bonus_type]
+            avg_bonuses[bonus_type] = total / max(1, count)  # Avoid division by zero
+            
+        return rewards, avg_bonuses

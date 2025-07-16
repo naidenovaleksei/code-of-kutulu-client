@@ -302,6 +302,7 @@ class PPOBuffer:
         self.buffer = []
         self.state_encoder = state_encoder
         self.need_aug = need_aug
+        self.latest_bonus_averages = None
         if reward_params is None:
             reward_params = {}
         if use_potential:
@@ -339,9 +340,18 @@ class PPOBuffer:
         
         states, actions, rewards, dones, other_rewards, observations = zip(*experiences)
         
-        rewards = self.reward_shaper.recalculate_rewards(
+        # Get recalculated rewards and bonus averages
+        result = self.reward_shaper.recalculate_rewards(
             rewards, actions, states, dones, other_rewards, observations
         )
+        
+        # Check if the result is a tuple (rewards, avg_bonuses) or just rewards
+        if isinstance(result, tuple) and len(result) == 2:
+            rewards, avg_bonuses = result
+            # Store the average bonuses in the buffer
+            self.latest_bonus_averages = avg_bonuses
+        else:
+            rewards = result
         
         return states, actions, rewards, dones, log_probs, values
 
@@ -440,6 +450,9 @@ class PPOAgent(ActorAgent):
         self.max_grad_norm = max_grad_norm
         self.gae_lambda = gae_lambda
         
+        # Initialize latest_bonus_averages to store reward shaper metrics
+        self.latest_bonus_averages = None
+        
         # Multi-environment support
         self.num_envs = 1
         self.env_buffers = None
@@ -513,6 +526,10 @@ class PPOAgent(ActorAgent):
         # Collect data from all environment buffers
         all_states, all_actions, all_rewards, all_dones = [], [], [], []
         all_log_probs, all_values = [], []
+        
+        # Collect bonus averages from all buffers
+        bonus_sums = {}
+        bonus_counts = {}
 
         for env_buffer in self.env_buffers:
             if len(env_buffer.buffer) > 0:
@@ -523,7 +540,24 @@ class PPOAgent(ActorAgent):
                 all_dones.extend(dones)
                 all_log_probs.extend(log_probs)
                 all_values.extend(values)
+                
+                # Collect bonus averages if available
+                if env_buffer.latest_bonus_averages is not None:
+                    for bonus_type, value in env_buffer.latest_bonus_averages.items():
+                        if bonus_type not in bonus_sums:
+                            bonus_sums[bonus_type] = 0
+                            bonus_counts[bonus_type] = 0
+                        bonus_sums[bonus_type] += value
+                        bonus_counts[bonus_type] += 1
+                
                 env_buffer.start_episode()  # Reset for next episode
+        
+        # Calculate average bonuses across all environments
+        if bonus_sums:
+            self.latest_bonus_averages = {
+                bonus_type: total / max(1, bonus_counts[bonus_type])
+                for bonus_type, total in bonus_sums.items()
+            }
         
         if len(all_states) == 0:
             return
@@ -664,6 +698,10 @@ class PPOAgent(ActorAgent):
         """Train the PPO model with clipped objective"""
         # End the current episode and get the episode data
         states, actions, rewards, dones, old_log_probs, values = self.episode_buffer.end_episode()
+        
+        # Get bonus averages if available
+        if self.episode_buffer.latest_bonus_averages is not None:
+            self.latest_bonus_averages = self.episode_buffer.latest_bonus_averages
 
         if len(states) == 0:
             return
