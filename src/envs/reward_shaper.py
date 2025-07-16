@@ -114,6 +114,7 @@ class PotentialRewardShaper:
                 if w_distance <= limit:
                     wanderers_distances.append(w_distance)
         # TODO: 1 / (1 + x) or exp(-x)?
+        # return - (1 / (1 + np.array(wanderers_distances))).sum()
         return - np.exp(-np.array(wanderers_distances)).sum()
 
     def _explorers_nearby_potential(self, observation: AgentObservation):
@@ -127,7 +128,8 @@ class PotentialRewardShaper:
             w_pos = (w.x, w.y)
             w_distance = len(find_path(player_pos, w_pos, observation.info.lines))
             explorers_distances.append(w_distance)
-        return np.exp(-np.array(explorers_distances)).sum()
+        return (1 / (1 + np.array(explorers_distances))).sum()
+        # return np.exp(-np.array(explorers_distances)).sum()
 
     def _shelters_nearby_potential(self, observation: AgentObservation):
         # more - better
@@ -145,7 +147,8 @@ class PotentialRewardShaper:
                 pass
         if len(shelters_distances) == 0:
             return 0
-        return np.exp(-min(shelters_distances))
+        return 1 / (1 + min(shelters_distances))
+        # return np.exp(-min(shelters_distances))
 
     def _others_sanity_loss_potential(self, observation: AgentObservation, distance_limit: int):
         # more - better

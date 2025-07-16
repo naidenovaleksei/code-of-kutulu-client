@@ -75,7 +75,7 @@ class AgentValidator:
         self.wanderers_params = wanderers_params
         self.plan_action = EXTENDED_KUTULU_ACTIONS.index('PLAN')
     
-    def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3, env_type='normal', verbose=False):
+    def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3, env_types=['normal'], verbose=False):
         result = []
         output_stds = []
         output_maxs = []
@@ -83,52 +83,53 @@ class AgentValidator:
         actions = []
         train = agent.train
         agent.train = False
-        if env_type == 'normal':
-            env_list = [
-                self.normal_env
-            ]
-            params_list = [
-                self._get_params(entity_kind, n_min, n_max, ['UP', 'RIGHT', 'DOWN', 'LEFT'])
-            ]
-        elif env_type == 'coridor':
-            env_list = [
-                self.horizontal_coridor_env,
-                self.vertical_coridor_env,
-            ]
-            params_list = [
-                self._get_params(entity_kind, n_min, n_max, ['RIGHT', 'LEFT']),
-                self._get_params(entity_kind, n_min, n_max, ['UP', 'DOWN']),
-            ]
-        elif env_type == 'corner':
-            env_list = [
-                self.top_left_coridor_env,
-                self.top_right_coridor_env,
-                self.down_right_coridor_env,
-                self.down_left_coridor_env,
-            ]
-            params_list = [
-                self._get_params(entity_kind, n_min, n_max, ['DOWN', 'RIGHT']),
-                self._get_params(entity_kind, n_min, n_max, ['LEFT', 'DOWN']),
-                self._get_params(entity_kind, n_min, n_max, ['UP', 'LEFT']),
-                self._get_params(entity_kind, n_min, n_max, ['RIGHT', 'UP']),
-            ]
-        else:
-            raise ValueError(f'wrong type: {env_type}')
-        for env, params in zip(env_list, params_list):
-            for answer, explorers, wanderers in params:
-                self._set_env(env, agent, explorers, wanderers)
-                action = agent.inference_step(0)
-                last_action = agent.get_last_action()
-                output_stds.append(last_action.std())
-                output_maxs.append(last_action.max())
-                output_means.append(last_action.mean())
-                result.append(action in answer)
-                actions.append(action.item())
-                if verbose:
-                    print(f'answer: {answer}, action: {action}, explorers: {explorers}, wanderers: {wanderers}')
-                    print(f'action: {result[-1]}, std: {output_stds[-1]}')
-                    env.viz_map(action=action, agent_id=0)
-                    print()
+        for env_type in env_types:
+            if env_type == 'normal':
+                env_list = [
+                    self.normal_env
+                ]
+                params_list = [
+                    self._get_params(entity_kind, n_min, n_max, ['UP', 'RIGHT', 'DOWN', 'LEFT'])
+                ]
+            elif env_type == 'coridor':
+                env_list = [
+                    self.horizontal_coridor_env,
+                    self.vertical_coridor_env,
+                ]
+                params_list = [
+                    self._get_params(entity_kind, n_min, n_max, ['RIGHT', 'LEFT']),
+                    self._get_params(entity_kind, n_min, n_max, ['UP', 'DOWN']),
+                ]
+            elif env_type == 'corner':
+                env_list = [
+                    self.top_left_coridor_env,
+                    self.top_right_coridor_env,
+                    self.down_right_coridor_env,
+                    self.down_left_coridor_env,
+                ]
+                params_list = [
+                    self._get_params(entity_kind, n_min, n_max, ['DOWN', 'RIGHT']),
+                    self._get_params(entity_kind, n_min, n_max, ['LEFT', 'DOWN']),
+                    self._get_params(entity_kind, n_min, n_max, ['UP', 'LEFT']),
+                    self._get_params(entity_kind, n_min, n_max, ['RIGHT', 'UP']),
+                ]
+            else:
+                raise ValueError(f'wrong type: {env_type}')
+            for env, params in zip(env_list, params_list):
+                for answer, explorers, wanderers in params:
+                    self._set_env(env, agent, explorers, wanderers)
+                    action = agent.inference_step(0)
+                    last_action = agent.get_last_action()
+                    output_stds.append(last_action.std())
+                    output_maxs.append(last_action.max())
+                    output_means.append(last_action.mean())
+                    result.append(action in answer)
+                    actions.append(action.item())
+                    if verbose:
+                        print(f'answer: {answer}, action: {action}, explorers: {explorers}, wanderers: {wanderers}')
+                        print(f'action: {result[-1]}, std: {output_stds[-1]}')
+                        env.viz_map(action=action, agent_id=0)
+                        print()
         agent.observer = None
         agent.train = train
         if verbose:
