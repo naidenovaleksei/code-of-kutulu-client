@@ -306,7 +306,10 @@ class PPOBuffer:
         if reward_params is None:
             reward_params = {}
         if use_potential:
-            self.reward_shaper = PotentialRewardShaper(actions, verbose, **reward_params)
+            try:
+                self.reward_shaper = PotentialRewardShaper(actions, verbose, **reward_params)
+            except Exception:
+                self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
         else:
             self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
         

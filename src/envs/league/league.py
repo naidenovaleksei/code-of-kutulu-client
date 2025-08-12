@@ -112,32 +112,39 @@ class League:
             opponents.append(a)
         return opponents
 
-    def train_new_agent(self, old_agent: LeagueAgent, round_id: int, num_experiments=NUM_EXPERIMENTS):
+    def train_new_agent(self, old_agent: LeagueAgent, round_id: int, silent=True, num_experiments=NUM_EXPERIMENTS):
         new_agent = deepcopy(old_agent)
         new_agent.agent.train = True
         opponents = self.sample_opponents(new_agent, 3)
         agents = [new_agent.agent] + opponents
-        trainer, result = self.play_match(agents, num_experiments)
+        trainer, result = self.play_match(agents, num_experiments, silent)
         new_agent.agent = trainer.agents[0]
         new_agent.version += str(round_id)
         return new_agent, result
 
-    def play_match(self, agents, num_experiments):
+    def play_match(self, agents, num_experiments, silent):
         LEAGUE_LEVEL = 3
         NUM_ENVS = 8
         env_kwargs={
+            # 'reward_params': {
+            #     'sanity_coef': 0.047,
+            #     'reward_for_win': 0,
+            #     'reward_for_lose': 0,
+            # }
             'reward_params': {
                 'sanity_coef': 0.047,
                 'reward_for_win': 0,
-                'reward_for_lose': 0,
+                'reward_for_lose': -1.,
+                # 'step_bonus': 0.01,
+                'step_bonus': 0.0,
             }
         }
         trainer = Trainer(
             num_experiments=num_experiments, agents_info=None, agents=agents,
             league_level=LEAGUE_LEVEL,
-            num_envs=NUM_ENVS, env_kwargs=env_kwargs, silent=True, use_tqdm=False,
+            num_envs=NUM_ENVS, env_kwargs=env_kwargs, silent=silent, use_tqdm=False,
         )
-        result = trainer.train(metrics_int=999)
+        result = trainer.train(metrics_int=10)
         return trainer, result
     
     def show_leaderboard(self, top_n=10, normalize=True):
