@@ -1,8 +1,6 @@
 from typing import List, Tuple
 
 import numpy as np
-import torch.nn.functional as F
-from collections import deque
 
 from src.envs.kutulu_entities import (
     EntityKind,
@@ -17,7 +15,6 @@ from src.game.template import (
 from src.envs.agents import AgentObservation
 from src.envs.distance import find_path, distance, UnreachedPositionError
 
-METRICS_SMOOTH_COEF = 0.05
 PLAN_DISTANCE = 2
 LIGHT_DISTANCE = 5
 YELL_DISTANCE = 1
@@ -333,3 +330,256 @@ class PotentialRewardShaper:
             avg_bonuses[bonus_type] = total / max(1, count)  # Avoid division by zero
             
         return rewards, avg_bonuses
+
+
+
+class RewardShaper:
+    def __init__(self, actions, verbose,
+            good_plan_bonus=0.3,
+            bad_plan_bonus=-0.2,
+            good_light_bonus=0.3,
+            bad_light_bonus=-0.1,
+            other_reward_coef=0.01,
+            good_explorers_nearby_bonus=0.02,
+            bad_explorers_nearby_bonus=-0.04,
+            yell_bonus_coef=0.5,
+            bad_yell_bonus=-0.2,
+            shelter_bonus=0.5,
+            wait_reward_coef=1.0,
+            bad_towards_enemy_bonus=-0.3,
+            ):
+        self.actions = actions
+        self.verbose = verbose
+        self.good_plan_bonus = good_plan_bonus
+        self.bad_plan_bonus = bad_plan_bonus
+        self.good_light_bonus = good_light_bonus
+        self.bad_light_bonus = bad_light_bonus
+        self.other_reward_coef = other_reward_coef
+        self.good_explorers_nearby_bonus = good_explorers_nearby_bonus
+        self.bad_explorers_nearby_bonus = bad_explorers_nearby_bonus
+        self.bad_yell_bonus = bad_yell_bonus
+        self.yell_bonus_coef = yell_bonus_coef
+        self.shelter_bonus = shelter_bonus
+        self.wait_reward_coef = wait_reward_coef
+        self.bad_towards_enemy_bonus = bad_towards_enemy_bonus
+
+    def _get_wanderers(self, observation):
+        return [
+            e for e in observation.obs.entities
+            if e.kind in (EntityKind.WANDERER.value, EntityKind.SLASHER.value)
+        ]
+    
+    def _get_explorers(self, observation, player_id) -> List[KutuluEntity]:
+        return [
+            e for e in observation.obs.entities
+            if e.kind == EntityKind.EXPLORER.value and e.id != player_id
+        ]
+    
+    def _get_shelters(self, observation) -> List[KutuluEntity]:
+        return [
+            e for e in observation.obs.entities
+            if e.kind == EntityKind.EFFECT_SHELTER.value
+        ]
+    
+    def _get_nearby_count(self,
+                          player_pos: Tuple[int],
+                          entities: List[KutuluEntity],
+                          lines: List[List[str]],
+                          limit: int):
+        e_nearby_count = 0
+        for e in entities:
+            e_pos = (e.x, e.y)
+            if distance(player_pos, e_pos) <= limit:
+                path = find_path(player_pos, e_pos, lines)
+                if len(path) <= limit:
+                    e_nearby_count += 1
+        return e_nearby_count
+    
+    def _get_min_dist(self,
+                      player_pos: Tuple[int],
+                      entities: List[KutuluEntity],
+                      lines: List[List[str]],
+                      limit: int):
+        min_dist = 1000
+        for e in entities:
+            e_pos = (e.x, e.y)
+            if distance(player_pos, e_pos) <= limit:
+                path = find_path(player_pos, e_pos, lines)
+                min_dist = min(min_dist, len(path))
+        return min_dist
+
+    def _score_moves_by_wanderers(self, player_pos, observation: AgentObservation, limit=4):
+        wanderers = self._get_wanderers(observation)
+        wanderers = [
+            w.to_dict() for w in wanderers
+            if distance(player_pos, (w.x, w.y)) <= limit
+        ]
+        all_distances = get_all_distances(wanderers, player_pos, observation.info.lines)
+        all_distances = {
+            # [1, 2, 2] -> 0.6385
+            k: np.exp(-np.array(v)).sum()
+            for k, v in all_distances.items()
+        }
+        move_scores = [all_distances.get(rel_pos, 0) for rel_pos in REL_POSITIONS[:4]]
+        return move_scores
+
+    def _compute_shaped_reward(self,
+                               observation: AgentObservation,
+                               action: int,
+                               next_observations: AgentObservation,
+                               original_reward: float,
+                               other_rewards: List[float]):
+        reward = 0
+        if self.actions[action] == EffectType.PLAN.value:
+            player = next_observations.obs.entities[0]
+            assert player.id == next_observations.player_id
+            player_pos = (player.x, player.y)
+            explorers = self._get_explorers(next_observations, player.id)
+            players_nearby_count = self._get_nearby_count(
+                player_pos,
+                explorers,
+                next_observations.info.lines,
+                PLAN_DISTANCE,
+            )
+            if players_nearby_count > 0:
+                plan_bonus = self.good_plan_bonus * (players_nearby_count + 1)
+            else:
+                plan_bonus = self.bad_plan_bonus
+            reward += plan_bonus
+            if self.verbose:
+                print(f"plan_bonus: {plan_bonus}")
+        elif self.actions[action] == EffectType.LIGHT.value:
+            player = observation.obs.entities[0]
+            assert player.id == observation.player_id
+            player_pos = (player.x, player.y)
+            wanderers = self._get_wanderers(observation)
+            is_bad_light = min([distance(player_pos, (w.x, w.y)) for w in wanderers], default=0) <= 1
+            if is_bad_light:
+                light_bonus = self.bad_light_bonus
+            else:
+                cur_enemies_min_dist = self._get_min_dist(
+                    player_pos,
+                    wanderers,
+                    observation.info.lines,
+                    LIGHT_DISTANCE,
+                )
+                next_enemies_min_dist = self._get_min_dist(
+                    player_pos,
+                    self._get_wanderers(next_observations),
+                    next_observations.info.lines,
+                    LIGHT_DISTANCE,
+                )
+                if cur_enemies_min_dist < next_enemies_min_dist:
+                    light_bonus = self.good_light_bonus
+                else:
+                    light_bonus = self.bad_light_bonus
+            reward += light_bonus
+            if self.verbose:
+                print(f"light_bonus: {light_bonus}")
+        elif self.actions[action] == EffectType.YELL.value:
+            yell_bonus = self.bad_yell_bonus
+            other_rewards = [r for r in other_rewards if r is not None]
+            if len(other_rewards) != 0:
+                min_other_reward = min(other_rewards)
+                if min_other_reward < 0:
+                    player = observation.obs.entities[0]
+                    assert player.id == observation.player_id
+                    player_pos = (player.x, player.y)
+                    explorers = self._get_explorers(observation, player.id)
+                    players_nearby_count = self._get_nearby_count(
+                        player_pos,
+                        explorers,
+                        observation.info.lines,
+                        1,
+                    )
+                    if players_nearby_count > 0:
+                        yell_bonus = - self.yell_bonus_coef * min_other_reward
+            reward += yell_bonus
+            if self.verbose:
+                print(f"yell_bonus: {yell_bonus}")
+        elif self.actions[action] == MoveType.WAIT.value:
+            if original_reward < 0:
+                wait_bonus = self.wait_reward_coef * original_reward
+                reward += wait_bonus
+                if self.verbose:
+                    print(f"wait_bonus: {wait_bonus}")
+        else:
+            # MOVE
+            assert self.actions[action] in (
+                MoveType.UP.value,
+                MoveType.RIGHT.value,
+                MoveType.DOWN.value,
+                MoveType.LEFT.value,
+            )
+            player = observation.obs.entities[0]
+            assert player.id == observation.player_id
+            player_pos = (player.x, player.y)
+            move_scores = self._score_moves_by_wanderers(player_pos, observation)
+            if move_scores[action] > 0 and move_scores[action] == max(move_scores):
+                towards_enemy_bonus = self.bad_towards_enemy_bonus
+                reward += towards_enemy_bonus
+                if self.verbose:
+                    print(f"towards_enemy_bonus: {towards_enemy_bonus}")
+        if self.other_reward_coef is not None:
+            other_rewards = [r for r in other_rewards if r is not None]
+            if len(other_rewards) != 0:
+                min_other_reward = min(other_rewards)
+                min_other_reward = min(min_other_reward, 0)
+                other_reward_bouns = - self.other_reward_coef * min_other_reward
+                reward += other_reward_bouns
+                if self.verbose:
+                    print(f"other_reward_bouns: {other_reward_bouns}")
+        if self.good_explorers_nearby_bonus != 0 or self.bad_explorers_nearby_bonus != 0:
+            player = next_observations.obs.entities[0]
+            assert player.id == next_observations.player_id
+            player_pos = (player.x, player.y)
+            explorers = self._get_explorers(next_observations, player.id)
+            players_nearby_count = self._get_nearby_count(
+                player_pos,
+                explorers,
+                next_observations.info.lines,
+                PLAN_DISTANCE,
+            )
+            if players_nearby_count > 0:
+                nearby_bonus = self.good_explorers_nearby_bonus * players_nearby_count
+            else:
+                nearby_bonus = self.bad_explorers_nearby_bonus
+            reward += nearby_bonus
+            if self.verbose:
+                print(f"nearby_bonus: {nearby_bonus}")
+        if self.shelter_bonus != 0:
+            player = next_observations.obs.entities[0]
+            assert player.id == next_observations.player_id
+            lines = next_observations.info.lines
+            player_pos = (player.x, player.y)
+            shelters = self._get_shelters(next_observations)
+            active_shelters = [sh for sh in shelters if sh.param0 > 0]
+            shelters_underfoot_count = self._get_nearby_count(
+                player_pos,
+                active_shelters,
+                next_observations.info.lines,
+                0,
+            )
+            if shelters_underfoot_count > 0:
+                reward += self.shelter_bonus
+                if self.verbose:
+                    print(f"shelter_bonus: {self.shelter_bonus}")
+
+        return reward
+
+    def recalculate_rewards(self,
+                            rewards: List[float],
+                            actions: List[int],
+                            states: List,
+                            dones: List[bool],
+                            other_rewards: List[List[float]],
+                            observations: List):
+        assert dones[-1]
+        assert sum(dones[:-1]) == 0
+        rewards = list(rewards)
+        T = len(rewards)
+        for t in range(0, T - 1):
+            rewards[t] += self._compute_shaped_reward(
+                observations[t], actions[t], observations[t+1], rewards[t], other_rewards[t],
+            )
+        return rewards

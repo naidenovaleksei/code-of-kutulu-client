@@ -4,7 +4,8 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.envs.trainer import Trainer
-from src.envs.agents.ppo_agent import PPOAgent, AgentObservation
+from src.envs.agents import AgentObservation
+from src.envs.agents.ppo_agent import PPOAgent
 from src.game.template import DEFAULT_KUTULU_ACTIONS
 from src.envs.kutulu_world import (
     KutuluObservation,

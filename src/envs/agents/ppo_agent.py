@@ -1,22 +1,12 @@
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from collections import deque
 
-from src.envs.kutulu_entities import (
-    EntityKind,
-    EffectType,
-    KutuluEntity,
-    MoveType,
-)
 from src.game.template import (
     EXTENDED_KUTULU_ACTIONS,
-    REL_POSITIONS,
-    get_all_distances,
 )
-from src.envs.agents import AgentObservation
 from src.envs.agents.nn_agent import(
     GAMMA,
     LEARNING_RATE,
@@ -33,265 +23,10 @@ from src.envs.kutulu_observer import (
     KutuluConvObserver,
 )
 from src.envs.models.conv_a2c_model import ConvA2CModel
-from src.envs.distance import find_path, distance, UnreachedPositionError
-from src.envs.reward_shaper import PotentialRewardShaper
+from src.envs.reward_shaper import PotentialRewardShaper, RewardShaper
 
 
 METRICS_SMOOTH_COEF = 0.05
-PLAN_DISTANCE = 2
-LIGHT_DISTANCE = 5
-YELL_DISTANCE = 1
-
-class RewardShaper:
-    def __init__(self, actions, verbose,
-            good_plan_bonus=0.3,
-            bad_plan_bonus=-0.2,
-            good_light_bonus=0.3,
-            bad_light_bonus=-0.1,
-            other_reward_coef=0.01,
-            good_explorers_nearby_bonus=0.02,
-            bad_explorers_nearby_bonus=-0.04,
-            yell_bonus_coef=0.5,
-            bad_yell_bonus=-0.2,
-            shelter_bonus=0.5,
-            wait_reward_coef=1.0,
-            bad_towards_enemy_bonus=-0.3,
-            ):
-        self.actions = actions
-        self.verbose = verbose
-        self.good_plan_bonus = good_plan_bonus
-        self.bad_plan_bonus = bad_plan_bonus
-        self.good_light_bonus = good_light_bonus
-        self.bad_light_bonus = bad_light_bonus
-        self.other_reward_coef = other_reward_coef
-        self.good_explorers_nearby_bonus = good_explorers_nearby_bonus
-        self.bad_explorers_nearby_bonus = bad_explorers_nearby_bonus
-        self.bad_yell_bonus = bad_yell_bonus
-        self.yell_bonus_coef = yell_bonus_coef
-        self.shelter_bonus = shelter_bonus
-        self.wait_reward_coef = wait_reward_coef
-        self.bad_towards_enemy_bonus = bad_towards_enemy_bonus
-
-    def _get_wanderers(self, observation):
-        return [
-            e for e in observation.obs.entities
-            if e.kind in (EntityKind.WANDERER.value, EntityKind.SLASHER.value)
-        ]
-    
-    def _get_explorers(self, observation, player_id) -> List[KutuluEntity]:
-        return [
-            e for e in observation.obs.entities
-            if e.kind == EntityKind.EXPLORER.value and e.id != player_id
-        ]
-    
-    def _get_shelters(self, observation) -> List[KutuluEntity]:
-        return [
-            e for e in observation.obs.entities
-            if e.kind == EntityKind.EFFECT_SHELTER.value
-        ]
-    
-    def _get_nearby_count(self,
-                          player_pos: Tuple[int],
-                          entities: List[KutuluEntity],
-                          lines: List[List[str]],
-                          limit: int):
-        e_nearby_count = 0
-        for e in entities:
-            e_pos = (e.x, e.y)
-            if distance(player_pos, e_pos) <= limit:
-                path = find_path(player_pos, e_pos, lines)
-                if len(path) <= limit:
-                    e_nearby_count += 1
-        return e_nearby_count
-    
-    def _get_min_dist(self,
-                      player_pos: Tuple[int],
-                      entities: List[KutuluEntity],
-                      lines: List[List[str]],
-                      limit: int):
-        min_dist = 1000
-        for e in entities:
-            e_pos = (e.x, e.y)
-            if distance(player_pos, e_pos) <= limit:
-                path = find_path(player_pos, e_pos, lines)
-                min_dist = min(min_dist, len(path))
-        return min_dist
-
-    def _score_moves_by_wanderers(self, player_pos, observation: AgentObservation, limit=4):
-        wanderers = self._get_wanderers(observation)
-        wanderers = [
-            w.to_dict() for w in wanderers
-            if distance(player_pos, (w.x, w.y)) <= limit
-        ]
-        all_distances = get_all_distances(wanderers, player_pos, observation.info.lines)
-        all_distances = {
-            # [1, 2, 2] -> 0.6385
-            k: np.exp(-np.array(v)).sum()
-            for k, v in all_distances.items()
-        }
-        move_scores = [all_distances.get(rel_pos, 0) for rel_pos in REL_POSITIONS[:4]]
-        return move_scores
-
-    def _compute_shaped_reward(self,
-                               observation: AgentObservation,
-                               action: int,
-                               next_observations: AgentObservation,
-                               original_reward: float,
-                               other_rewards: List[float]):
-        reward = 0
-        if self.actions[action] == EffectType.PLAN.value:
-            player = next_observations.obs.entities[0]
-            assert player.id == next_observations.player_id
-            player_pos = (player.x, player.y)
-            explorers = self._get_explorers(next_observations, player.id)
-            players_nearby_count = self._get_nearby_count(
-                player_pos,
-                explorers,
-                next_observations.info.lines,
-                PLAN_DISTANCE,
-            )
-            if players_nearby_count > 0:
-                plan_bonus = self.good_plan_bonus * (players_nearby_count + 1)
-            else:
-                plan_bonus = self.bad_plan_bonus
-            reward += plan_bonus
-            if self.verbose:
-                print(f"plan_bonus: {plan_bonus}")
-        elif self.actions[action] == EffectType.LIGHT.value:
-            player = observation.obs.entities[0]
-            assert player.id == observation.player_id
-            player_pos = (player.x, player.y)
-            wanderers = self._get_wanderers(observation)
-            is_bad_light = min([distance(player_pos, (w.x, w.y)) for w in wanderers], default=0) <= 1
-            if is_bad_light:
-                light_bonus = self.bad_light_bonus
-            else:
-                cur_enemies_min_dist = self._get_min_dist(
-                    player_pos,
-                    wanderers,
-                    observation.info.lines,
-                    LIGHT_DISTANCE,
-                )
-                next_enemies_min_dist = self._get_min_dist(
-                    player_pos,
-                    self._get_wanderers(next_observations),
-                    next_observations.info.lines,
-                    LIGHT_DISTANCE,
-                )
-                if cur_enemies_min_dist < next_enemies_min_dist:
-                    light_bonus = self.good_light_bonus
-                else:
-                    light_bonus = self.bad_light_bonus
-            reward += light_bonus
-            if self.verbose:
-                print(f"light_bonus: {light_bonus}")
-        elif self.actions[action] == EffectType.YELL.value:
-            yell_bonus = self.bad_yell_bonus
-            other_rewards = [r for r in other_rewards if r is not None]
-            if len(other_rewards) != 0:
-                min_other_reward = min(other_rewards)
-                if min_other_reward < 0:
-                    player = observation.obs.entities[0]
-                    assert player.id == observation.player_id
-                    player_pos = (player.x, player.y)
-                    explorers = self._get_explorers(observation, player.id)
-                    players_nearby_count = self._get_nearby_count(
-                        player_pos,
-                        explorers,
-                        observation.info.lines,
-                        1,
-                    )
-                    if players_nearby_count > 0:
-                        yell_bonus = - self.yell_bonus_coef * min_other_reward
-            reward += yell_bonus
-            if self.verbose:
-                print(f"yell_bonus: {yell_bonus}")
-        elif self.actions[action] == MoveType.WAIT.value:
-            if original_reward < 0:
-                wait_bonus = self.wait_reward_coef * original_reward
-                reward += wait_bonus
-                if self.verbose:
-                    print(f"wait_bonus: {wait_bonus}")
-        else:
-            # MOVE
-            assert self.actions[action] in (
-                MoveType.UP.value,
-                MoveType.RIGHT.value,
-                MoveType.DOWN.value,
-                MoveType.LEFT.value,
-            )
-            player = observation.obs.entities[0]
-            assert player.id == observation.player_id
-            player_pos = (player.x, player.y)
-            move_scores = self._score_moves_by_wanderers(player_pos, observation)
-            if move_scores[action] > 0 and move_scores[action] == max(move_scores):
-                towards_enemy_bonus = self.bad_towards_enemy_bonus
-                reward += towards_enemy_bonus
-                if self.verbose:
-                    print(f"towards_enemy_bonus: {towards_enemy_bonus}")
-        if self.other_reward_coef is not None:
-            other_rewards = [r for r in other_rewards if r is not None]
-            if len(other_rewards) != 0:
-                min_other_reward = min(other_rewards)
-                min_other_reward = min(min_other_reward, 0)
-                other_reward_bouns = - self.other_reward_coef * min_other_reward
-                reward += other_reward_bouns
-                if self.verbose:
-                    print(f"other_reward_bouns: {other_reward_bouns}")
-        if self.good_explorers_nearby_bonus != 0 or self.bad_explorers_nearby_bonus != 0:
-            player = next_observations.obs.entities[0]
-            assert player.id == next_observations.player_id
-            player_pos = (player.x, player.y)
-            explorers = self._get_explorers(next_observations, player.id)
-            players_nearby_count = self._get_nearby_count(
-                player_pos,
-                explorers,
-                next_observations.info.lines,
-                PLAN_DISTANCE,
-            )
-            if players_nearby_count > 0:
-                nearby_bonus = self.good_explorers_nearby_bonus * players_nearby_count
-            else:
-                nearby_bonus = self.bad_explorers_nearby_bonus
-            reward += nearby_bonus
-            if self.verbose:
-                print(f"nearby_bonus: {nearby_bonus}")
-        if self.shelter_bonus != 0:
-            player = next_observations.obs.entities[0]
-            assert player.id == next_observations.player_id
-            lines = next_observations.info.lines
-            player_pos = (player.x, player.y)
-            shelters = self._get_shelters(next_observations)
-            active_shelters = [sh for sh in shelters if sh.param0 > 0]
-            shelters_underfoot_count = self._get_nearby_count(
-                player_pos,
-                active_shelters,
-                next_observations.info.lines,
-                0,
-            )
-            if shelters_underfoot_count > 0:
-                reward += self.shelter_bonus
-                if self.verbose:
-                    print(f"shelter_bonus: {self.shelter_bonus}")
-
-        return reward
-
-    def recalculate_rewards(self,
-                            rewards: List[float],
-                            actions: List[int],
-                            states: List,
-                            dones: List[bool],
-                            other_rewards: List[List[float]],
-                            observations: List):
-        assert dones[-1]
-        assert sum(dones[:-1]) == 0
-        rewards = list(rewards)
-        T = len(rewards)
-        for t in range(0, T - 1):
-            rewards[t] += self._compute_shaped_reward(
-                observations[t], actions[t], observations[t+1], rewards[t], other_rewards[t],
-            )
-        return rewards
 
 
 class PPOBuffer:
@@ -517,15 +252,7 @@ class PPOAgent(ActorAgent):
             self.current_value
         )
 
-    def train_step(self):
-        if self.train and len(self.episode_buffer.buffer) > 0:
-            super().train_step()
-    
-    def train_multi_env_step(self):
-        """Train using data from all environments"""
-        if not self.train or self.env_buffers is None:
-            return self.train_step()  # Fall back to single-env
-        
+    def collect_all_data_from_buffers(self):
         # Collect data from all environment buffers
         all_states, all_actions, all_rewards, all_dones = [], [], [], []
         all_log_probs, all_values = [], []
@@ -561,13 +288,29 @@ class PPOAgent(ActorAgent):
                 bonus_type: total / max(1, bonus_counts[bonus_type])
                 for bonus_type, total in bonus_sums.items()
             }
+        return all_states, all_actions, all_rewards, all_dones, all_log_probs, all_values
+
+    def train_step(self):
+        if self.train and len(self.episode_buffer.buffer) > 0:
+            super().train_step()
+
+    def _train_model(self):
+        """Train the PPO model with clipped objective"""
+        # End the current episode and get the episode data
+        states, actions, rewards, dones, old_log_probs, values = self.episode_buffer.end_episode()
+        # Get bonus averages if available
+        if self.episode_buffer.latest_bonus_averages is not None:
+            self.latest_bonus_averages = self.episode_buffer.latest_bonus_averages
+        self._train_model_with_data(states, actions, rewards, dones, old_log_probs, values)
+    
+    def train_multi_env_step(self):
+        """Train using data from all environments"""
+        if not self.train or self.env_buffers is None:
+            return self.train_step()  # Fall back to single-env
         
-        if len(all_states) == 0:
-            return
-        
+        all_data = self.collect_all_data_from_buffers()
         # Use the combined data for training
-        self._train_model_with_data(all_states, all_actions, all_rewards, all_dones,
-                                   all_log_probs, all_values)
+        self._train_model_with_data(*all_data)
         
         if self.scheduler:
             self.scheduler.step()
@@ -689,144 +432,13 @@ class PPOAgent(ActorAgent):
             self.kl_div = METRICS_SMOOTH_COEF * (total_kl_div / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.kl_div
 
         if self.verbose:
-            print(f"Multi-Env Episode {self.episode_idx}, "
+            print(f"Episode {self.episode_idx}, "
                   f"Samples: {dataset_size}, "
                   f"Policy Loss: {total_policy_loss/num_batches:.4f}, "
                   f"Value Loss: {total_value_loss/num_batches:.4f}, "
                   f"Entropy: {total_entropy/num_batches:.4f}, "
                   f"KL Div: {total_kl_div/num_batches:.6f}, "
                   f"Total Return: {np.sum(rewards):.4f}")
-
-    def _train_model(self):
-        """Train the PPO model with clipped objective"""
-        # End the current episode and get the episode data
-        states, actions, rewards, dones, old_log_probs, values = self.episode_buffer.end_episode()
-        
-        # Get bonus averages if available
-        if self.episode_buffer.latest_bonus_averages is not None:
-            self.latest_bonus_averages = self.episode_buffer.latest_bonus_averages
-
-        if len(states) == 0:
-            return
-    
-        self.model.train()
-
-        # Encode states
-        states_tensor = self.episode_buffer.encode_states(states)
-        actions_tensor = torch.tensor(actions, dtype=torch.long)
-        old_log_probs_tensor = torch.tensor(old_log_probs, dtype=torch.float32)
-
-        # Calculate returns and advantages using GAE
-        returns_tensor, advantages_tensor = self._calculate_gae(rewards, values, dones)
-
-        # Normalize advantages
-        if len(advantages_tensor) > 1:
-            advantages_tensor = (advantages_tensor - advantages_tensor.mean()) / (advantages_tensor.std() + 1e-8)
-
-        # PPO training loop
-        dataset_size = len(states)
-        early_stop = False
-        
-        for epoch in range(self.ppo_epochs):
-            if early_stop:
-                break
-            # Create mini-batches
-            indices = torch.randperm(dataset_size)
-            
-            total_policy_loss = 0
-            total_value_loss = 0
-            total_entropy = 0
-            total_kl_div = 0
-            num_batches = 0
-            
-            for start_idx in range(0, dataset_size, self.mini_batch_size):
-                end_idx = min(start_idx + self.mini_batch_size, dataset_size)
-                batch_indices = indices[start_idx:end_idx]
-                
-                # Get mini-batch data
-                batch_states = states_tensor[batch_indices]
-                batch_actions = actions_tensor[batch_indices]
-                batch_old_log_probs = old_log_probs_tensor[batch_indices]
-                batch_returns = returns_tensor[batch_indices]
-                batch_advantages = advantages_tensor[batch_indices]
-                
-                # Forward pass
-                policy, current_values = self.model(batch_states)
-                current_values = current_values.view(-1)
-                
-                # Get current log probabilities
-                log_probs = torch.log(policy + 1e-8)
-                current_log_probs = log_probs[range(len(batch_actions)), batch_actions]
-                
-                # Calculate probability ratio
-                ratio = torch.exp(current_log_probs - batch_old_log_probs)
-                
-                # Calculate surrogate losses
-                surr1 = ratio * batch_advantages
-                surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * batch_advantages
-                
-                # PPO clipped objective (we want to maximize, so minimize negative)
-                policy_loss = -torch.min(surr1, surr2).mean()
-                
-                # Value loss
-                value_loss = F.mse_loss(current_values, batch_returns)
-                
-                # Entropy for exploration
-                entropy = -(log_probs * policy).sum(dim=1).mean()
-                
-                # Total loss
-                loss = policy_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
-                
-                # Backpropagation
-                self.optimizer.zero_grad()
-                loss.backward()
-                
-                # Gradient clipping
-                if self.max_grad_norm > 0:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-                
-                self.optimizer.step()
-                
-                # Accumulate metrics
-                total_policy_loss += policy_loss.item()
-                total_value_loss += value_loss.item()
-                total_entropy += entropy.item()
-                num_batches += 1
-                
-                # Calculate KL divergence for early stopping
-                with torch.no_grad():
-                    kl_div = (batch_old_log_probs - current_log_probs).mean()
-                    total_kl_div += kl_div.item()
-                
-                # Early stopping if KL divergence is too high
-                if abs(kl_div) > self.target_kl:
-                    if self.verbose:
-                        print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {kl_div:.6f}")
-                    early_stop = True
-                    break
-
-        # Update loss tracking
-        final_loss = total_policy_loss + total_value_loss - total_entropy
-        if self.last_loss == np.inf:
-            self.last_loss = final_loss / num_batches
-            self.policy_loss = total_policy_loss / num_batches
-            self.value_loss = total_value_loss / num_batches
-            self.entropy = total_entropy / num_batches
-            self.kl_div = total_kl_div / num_batches
-        else:
-            self.last_loss = METRICS_SMOOTH_COEF * (final_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.last_loss
-            self.policy_loss = METRICS_SMOOTH_COEF * (total_policy_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.policy_loss
-            self.value_loss = METRICS_SMOOTH_COEF * (total_value_loss / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.value_loss
-            self.entropy = METRICS_SMOOTH_COEF * (total_entropy / num_batches) + (1 - METRICS_SMOOTH_COEF) * self.entropy
-            self.kl_div = METRICS_SMOOTH_COEF * kl_div + (1 - METRICS_SMOOTH_COEF) * self.kl_div
-
-        if self.verbose:
-            print(f"Episode {self.episode_idx}, "
-                  f"Policy Loss: {total_policy_loss/num_batches:.4f}, "
-                  f"Value Loss: {total_value_loss/num_batches:.4f}, "
-                  f"Entropy: {total_entropy/num_batches:.4f}, "
-                  f"KL Div: {total_kl_div/num_batches:.6f}, "
-                  f"Return: {np.sum(rewards):.4f}")
 
     def _calculate_gae(self, rewards: List[float], values: List[float], dones: List[bool]):
         """
