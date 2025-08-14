@@ -361,6 +361,14 @@ class Trainer:
                 if 'bonused_reward' not in metrics:
                     metrics['bonused_reward'] = [None] * len(self.agents)
                 metrics['bonused_reward'][i] = sum(agent.latest_bonus_averages.values())
+
+                if hasattr(agent, 'metrics_aggregator'):
+                    agent_metrics = agent.metrics_aggregator.get_metrics()
+                    for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
+                        metrics[loss] = agent_metrics[loss]
+                else:
+                    for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
+                        metrics[loss] = getattr(agent, loss, None)
         
         for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
             metrics[loss] = [getattr(agent, loss, None) for agent in self.agents]

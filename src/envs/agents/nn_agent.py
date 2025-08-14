@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 
 from src.envs.agents import BaseAgent
+from src.envs.agent_metric_aggregator import AgentMetricsAggregator
 
 GAMMA = 0.99
 LEARNING_RATE = 1e-4
@@ -50,6 +51,7 @@ class NNAgent(BaseAgent):
         self.model = model
         self.lr = lr
         self.explicit_random = explicit_random
+        self.metrics_aggregator = AgentMetricsAggregator(self.verbose)
         if explicit_action_mask is not None:
             self.explicit_action_mask = np.array(explicit_action_mask)
         else:
@@ -149,7 +151,8 @@ class NNAgent(BaseAgent):
         return action
 
     def check_policy(self):
-        return self.last_loss
+        metrics = self.metrics_aggregator.get_metrics()
+        return metrics.get('loss', self.last_loss)
 
     def save_agent(self, checkpoint_dir):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
