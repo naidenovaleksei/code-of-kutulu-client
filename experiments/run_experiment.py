@@ -22,6 +22,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def eval_resolver(s):
+    return eval(s)
+
+OmegaConf.register_new_resolver("eval", eval_resolver)
+
+
 def flatten_config(cfg: DictConfig, parent_key: str = "", sep: str = ".") -> dict:
     """Flatten nested configuration for MLflow logging."""
     items = []
