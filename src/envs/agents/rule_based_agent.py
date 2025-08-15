@@ -13,7 +13,7 @@ from src.game.template import (
 
 
 class EpsilonConstAgent(BaseAgent):
-    def __init__(self, state_type, action_space_n, epsilon_params, action, verbose=False):
+    def __init__(self, state_type, action_space_n, epsilon_params, action, verbose=False, seed=None):
         super(EpsilonConstAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -36,13 +36,15 @@ class EpsilonConstAgent(BaseAgent):
         self.epsilon_reset = epsilon_params.get('reset')
         self.epsilon_reset_coef = epsilon_params.get('reset_coef')
         self.frame_idx = 0
+        if seed:
+            np.random.seed(seed)
 
     def get_eps(self):
         return max(
             self.epsilon_final,
             self.eps,
         )
-    
+
     def generate_random_step(self, actions_masked, player_mask):
         ps = np.ma.array(np.ones(self.action_space_n), mask=player_mask).filled(0)
         if ps.sum() == 0:

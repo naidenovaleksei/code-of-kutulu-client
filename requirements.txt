@@ -9,3 +9,5 @@ tensorboard
 jupyter
 seaborn
 optuna
+hydra-core
+mlflow

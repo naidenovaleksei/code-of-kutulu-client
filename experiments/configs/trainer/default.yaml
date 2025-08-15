@@ -1,0 +1,19 @@
+# @package _global_
+trainer:
+  num_experiments: 2000
+  league_level: 3
+  shuffle: true
+  verbose: false
+  silent: true
+  only_train: true
+  asc_difficulty: false
+  num_envs: 2
+  use_tqdm: true
+  metrics_int: 5
+  seed: 42
+  env_kwargs:
+    reward_params:
+      sanity_coef: 0.05
+      reward_for_win: 0
+      reward_for_lose: 0
+      step_bonus: 0.0

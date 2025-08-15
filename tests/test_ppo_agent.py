@@ -62,7 +62,6 @@ def test_ppo_agent_creation():
     """Test that the PPO agent can be created and initialized properly"""
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         train=True,
         actions=DEFAULT_KUTULU_ACTIONS,
     )
@@ -88,7 +87,6 @@ def test_ppo_agent_custom_parameters():
     """Test PPO agent with custom parameters"""
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         clip_ratio=0.3,
         ppo_epochs=8,
         mini_batch_size=32,
@@ -111,7 +109,6 @@ def test_ppo_agent_gae_calculation():
     """Test that GAE (Generalized Advantage Estimation) is calculated correctly"""
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         gamma=0.9,
         gae_lambda=0.95,
         train=True,
@@ -142,7 +139,6 @@ def test_ppo_agent_gae_vs_different_lambda():
     """Test that different GAE lambda values produce different advantages"""
     agent1 = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         gamma=0.9,
         gae_lambda=0.0,  # No GAE, just TD error
         train=True,
@@ -151,7 +147,6 @@ def test_ppo_agent_gae_vs_different_lambda():
     
     agent2 = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         gamma=0.9,
         gae_lambda=1.0,  # Full Monte Carlo
         train=True,
@@ -175,7 +170,6 @@ def test_ppo_clipped_objective_components():
     """Test that PPO clipped objective components work correctly"""
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         clip_ratio=0.2,
         train=True,
         actions=DEFAULT_KUTULU_ACTIONS,
@@ -213,7 +207,6 @@ def test_ppo_agent_state_type_assertion():
     # This should work
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         train=True,
         actions=DEFAULT_KUTULU_ACTIONS,
     )
@@ -223,7 +216,6 @@ def test_ppo_agent_state_type_assertion():
     with pytest.raises(AssertionError):
         PPOAgent(
             state_type='closest',
-            action_space_n=5,
             train=True,
             actions=DEFAULT_KUTULU_ACTIONS,
         )
@@ -233,7 +225,6 @@ def test_ppo_agent_model_compatibility():
     """Test that PPO agent uses the same model as A2C (ConvA2CModel)"""
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         model_params={'size': 3, 'fc_dim': 128},
         train=True,
         actions=DEFAULT_KUTULU_ACTIONS,
@@ -313,7 +304,6 @@ def test_ppo_agent_training_components():
     """Test that PPO agent has all necessary components for training"""
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         train=True,
         verbose=True,
         actions=DEFAULT_KUTULU_ACTIONS,
@@ -340,7 +330,6 @@ def test_ppo_mini_batch_size_handling():
     # Test with mini-batch size larger than episode length
     agent = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         mini_batch_size=100,  # Larger than typical episode
         train=True,
         actions=DEFAULT_KUTULU_ACTIONS,
@@ -351,7 +340,6 @@ def test_ppo_mini_batch_size_handling():
     # Test with very small mini-batch size
     agent_small = PPOAgent(
         state_type='conv',
-        action_space_n=5,
         mini_batch_size=1,
         train=True,
         actions=DEFAULT_KUTULU_ACTIONS,

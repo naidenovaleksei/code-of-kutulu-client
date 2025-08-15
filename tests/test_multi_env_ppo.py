@@ -22,7 +22,6 @@ def test_single_env_backward_compatibility():
         {
             'type': 'ppo',
             'state_type': 'conv',
-            'action_space_n': len(actions),
             'actions': actions,
             'train': True,
             'verbose': False,
@@ -68,7 +67,6 @@ def test_multi_env_initialization():
         {
             'type': 'ppo',
             'state_type': 'conv',
-            'action_space_n': len(actions),
             'actions': actions,
             'train': True,
             'verbose': False,

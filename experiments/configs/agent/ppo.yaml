@@ -1,0 +1,42 @@
+train: true
+type: ppo
+state_type: conv
+
+# Model parameters
+model_params:
+  fc_dim: 16
+  conv_dim: 8
+  size: 3
+
+# Training parameters
+gamma: 0.95
+lr: 1e-4
+optimizer: adamw
+scheduler_params:
+  type: cosine
+  T_max: ${trainer.num_experiments}
+
+# PPO specific parameters
+entropy_coef: 0.4
+value_loss_coef: 0.1
+clip_ratio: 0.04
+ppo_epochs: 5
+mini_batch_size: 32
+target_kl: 0.15
+max_grad_norm: 0.15
+gae_lambda: 0.91
+explicit_action_mask: null
+
+# Reward shaping parameters
+reward_params:
+  gamma: 0.99
+  lights_left_coef: 0.04
+  light_potential_coef: 1.0
+  plans_left_coef: 0.05
+  plan_potential_coef: 1.0
+  yell_potential_coef: 1.0
+  w_nearby_potential_coef: 1.0
+  e_nearby_potential_coef: 1.0
+  s_nearby_potential_coef: 1.0
+  sanity_loss_potential_coef: 0.1
+  no_move_reward_coef: 0.5

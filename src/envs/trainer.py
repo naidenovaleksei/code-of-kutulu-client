@@ -62,7 +62,7 @@ class Trainer:
                  log_dir='../../../runs', output_dir='../../../output',
                  exp_name=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
-                 num_envs=1, use_tqdm=True):
+                 num_envs=1, use_tqdm=True, metrics_int=10, seed=None):
         self.num_experiments = num_experiments
         self.league_level = league_level
         self.mazes = get_mazes_by_league(league_level)
@@ -73,6 +73,7 @@ class Trainer:
         self.silent = silent
         self.asc_difficulty = asc_difficulty
         self.use_tqdm = use_tqdm
+        self.metrics_int = metrics_int
 
         self.num_envs = num_envs
 
@@ -96,6 +97,7 @@ class Trainer:
         self.agent_validator = AgentValidator(self.actions)
         self.agent_validator_plan = AgentValidator(self.actions, player_params=(100, 1, 0))
         self.only_train = only_train
+        self.seed = seed
 
         if agents is not None:
             self.agents = agents
@@ -287,7 +289,7 @@ class Trainer:
             agent.save_agent(checkpoint_dir_step)
         return self.checkpoints_dir
 
-    def train(self, metrics_int=10, save_models_int=100):
+    def train(self):
         reward_list = []
         model_dir_list = []
         metrics_list = []
@@ -300,16 +302,20 @@ class Trainer:
             if self.verbose:
                 print()
                 print(f"rollout: {step}")
-            rollout_rewards = self.play_rollout(step=step)
+            if self.seed:
+                seed = np.random.RandomState(self.seed + step).randint(999999)
+            else:
+                seed = None
+            rollout_rewards = self.play_rollout(step=step, seed=seed)
             reward_list.append(rollout_rewards)
 
-            # Save models periodically
-            if not self.silent and step % save_models_int == 0:
-                model_dir = self.save_models(step)
-                model_dir_list.append(model_dir)
+            # # Save models periodically
+            # if not self.silent and step % save_models_int == 0:
+            #     model_dir = self.save_models(step)
+            #     model_dir_list.append(model_dir)
 
             # Log metrics periodically
-            if step % metrics_int == 0:
+            if step % self.metrics_int == 0:
                 metrics = self._calculate_metrics(reward_list[-100:])
                 metrics_list.append(metrics)
                 if not self.silent:
@@ -362,16 +368,18 @@ class Trainer:
                     metrics['bonused_reward'] = [None] * len(self.agents)
                 metrics['bonused_reward'][i] = sum(agent.latest_bonus_averages.values())
 
-                if hasattr(agent, 'metrics_aggregator'):
-                    agent_metrics = agent.metrics_aggregator.get_metrics()
-                    for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
-                        metrics[loss] = agent_metrics[loss]
-                else:
-                    for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
-                        metrics[loss] = getattr(agent, loss, None)
-        
-        for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
-            metrics[loss] = [getattr(agent, loss, None) for agent in self.agents]
+            if hasattr(agent, 'metrics_aggregator'):
+                agent_metrics = agent.metrics_aggregator.get_metrics()
+                for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div', 'loss']:
+                    if loss not in metrics:
+                        metrics[loss] = [None] * len(self.agents)
+                    metrics[loss][i] = agent_metrics[loss]
+            else:
+                for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div', 'loss']:
+                    if loss not in metrics:
+                        metrics[loss] = [None] * len(self.agents)
+                    metrics[loss][i] = getattr(agent, loss, None)
+
         return metrics
 
     def _log_metrics(self, step, metrics):
@@ -381,8 +389,8 @@ class Trainer:
             # Log all metrics in combined plots
             agent.writer.add_scalar('Play/Rewards', metrics['rewards'][i], step)
             agent.writer.add_scalar('Play/Winners', metrics['winner_list'][i], step)
-            agent.writer.add_scalar('Train/Policy', metrics['check_policy'][i], step)
-            agent.writer.add_scalar('Train/Epsilon', metrics['eps'][i], step)
+            # agent.writer.add_scalar('Train/Policy', metrics['check_policy'][i], step)
+            # agent.writer.add_scalar('Train/Epsilon', metrics['eps'][i], step)
             agent.writer.add_scalar('Check/Explorer/acc', metrics['check_exp'][i][0], step)
             agent.writer.add_scalar('Check/Wanderer/acc', metrics['check_wan'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_plan0', metrics['check_exp_normal_plan0'][i][0], step)
@@ -414,7 +422,7 @@ class Trainer:
                 if bonus_type in metrics and metrics[bonus_type][i] is not None:
                     agent.writer.add_scalar(f'Rewards/{bonus_type}', metrics[bonus_type][i], step)
             
-            for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div']:
+            for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div', 'loss']:
                 if metrics[loss][i] is not None:
                     agent.writer.add_scalar(f'Train/{loss}', metrics[loss][i], step)
 

@@ -115,7 +115,7 @@ class PPOBuffer:
 
 
 class PPOAgent(ActorAgent):
-    def __init__(self, state_type, action_space_n, actions=EXTENDED_KUTULU_ACTIONS,
+    def __init__(self, state_type, actions=EXTENDED_KUTULU_ACTIONS,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
                  train=False, verbose=False, 
@@ -144,7 +144,7 @@ class PPOAgent(ActorAgent):
             gae_lambda: Lambda parameter for GAE (Generalized Advantage Estimation)
         """
         assert state_type == 'conv', "PPO agent only supports 'conv' state type"
-
+        action_space_n = len(actions)
         self.size = model_params.pop('size', 3)
         model = ConvA2CModel(
             num_classes=action_space_n,

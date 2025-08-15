@@ -1,0 +1,9 @@
+type: epsilon_wait
+action_space_n: 8
+epsilon_params:
+  start: 0.13
+  final: 0.13
+  decay: 400000
+state_type: closest
+action: WAIT
+seed: 14

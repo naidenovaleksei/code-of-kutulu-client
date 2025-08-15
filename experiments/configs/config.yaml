@@ -1,0 +1,25 @@
+defaults:
+  - agent: ppo
+  - trainer: default
+  - competitor: epsilon_wait
+  - _self_
+
+experiment:
+  name: "ppo_single_agent"
+  description: "Single PPO agent training experiment"
+  num_agents: 4
+  training_agent_idx: 0
+
+# MLflow configuration
+mlflow:
+  tracking_uri: "file:${oc.env:HOME}/projects/kutulu_artifacts/mlruns"
+  experiment_name: "${experiment.name}"
+  artifact_location: "${oc.env:HOME}/projects/kutulu_artifacts/mlflow_artifacts"
+
+# Hydra configuration
+hydra:
+  run:
+    dir: ${oc.env:HOME}/projects/kutulu_artifacts/experiments/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${oc.env:HOME}/projects/kutulu_artifacts/experiments/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra:job.num}
