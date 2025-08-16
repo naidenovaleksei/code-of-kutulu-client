@@ -9,5 +9,6 @@ tensorboard
 jupyter
 seaborn
 optuna
+optuna-integration[mlflow]
 hydra-core
 mlflow

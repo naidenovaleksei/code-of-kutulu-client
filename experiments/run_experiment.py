@@ -9,6 +9,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 import mlflow
 import mlflow.pytorch
+import numpy as np
 import torch
 
 # Add project root to path for imports
@@ -98,36 +99,26 @@ def log_system_info():
     mlflow.set_tag("hostname", os.uname().nodename)
 
 
-def calculate_final_metrics(results) -> dict:
+def calculate_final_metrics(results, training_agent_id) -> dict:
     """Calculate final metrics from training results."""
     reward_list, model_dir_list, metrics_list = results
     
-    if not reward_list:
-        return {}
-    
-    import numpy as np
-    
-    # Calculate final reward statistics
-    final_rewards = []
-    for rewards in reward_list[-100:]:  # Last 100 episodes
-        if len(rewards) > 0:
-            final_rewards.append(np.sum(rewards[:, 0]))  # Sum rewards for training agent
-    
     final_metrics = {}
-    if final_rewards:
-        final_metrics['final_mean_reward'] = float(np.mean(final_rewards))
-        final_metrics['final_std_reward'] = float(np.std(final_rewards))
-        final_metrics['final_max_reward'] = float(np.max(final_rewards))
-        final_metrics['final_min_reward'] = float(np.min(final_rewards))
-    
-    # Add metrics from last metrics calculation
+
     if metrics_list:
         last_metrics = metrics_list[-1]
-        if 'winner_list' in last_metrics:
-            final_metrics['final_win_rate'] = float(last_metrics['winner_list'][0])
-        if 'rewards' in last_metrics:
-            final_metrics['final_avg_reward'] = float(last_metrics['rewards'][0])
-    
+        final_metrics['final_win_rate'] = last_metrics['winner_list'][training_agent_id]
+        final_metrics['final_avg_reward'] = last_metrics['rewards'][training_agent_id]
+        final_metrics['acc_explorer'] = last_metrics['check_exp'][training_agent_id][0]
+        final_metrics['acc_explorer_plan0'] = last_metrics['check_exp_normal_plan0'][training_agent_id][0]
+        final_metrics['acc_explorer_plan1'] = last_metrics['check_exp_normal_plan1'][training_agent_id][0]
+        final_metrics['acc_wanderer'] = last_metrics['check_wan'][training_agent_id][0]
+        final_metrics['acc_weighted'] = last_metrics['acc_weighted'][training_agent_id]
+        final_metrics['loss'] = last_metrics['loss'][training_agent_id]
+        final_metrics['policy_loss'] = last_metrics['policy_loss'][training_agent_id]
+        final_metrics['value_loss'] = last_metrics['value_loss'][training_agent_id]
+        final_metrics['entropy'] = last_metrics['entropy'][training_agent_id]
+
     final_metrics['total_episodes'] = len(reward_list)
     final_metrics['total_model_saves'] = len(model_dir_list)
     
@@ -220,7 +211,7 @@ def run_experiment(cfg: DictConfig) -> None:
             results = trainer.train()
             
             # Calculate and log final metrics
-            final_metrics = calculate_final_metrics(results)
+            final_metrics = calculate_final_metrics(results, cfg.experiment.training_agent_id)
             if final_metrics:
                 mlflow.log_metrics(final_metrics)
             

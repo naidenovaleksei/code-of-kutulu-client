@@ -234,32 +234,32 @@ class PotentialRewardShaper:
             no_move_bonus = self.no_move_reward_coef * original_reward
             reward += no_move_bonus
             bonuses['no_move_bonus'] = no_move_bonus
-            if self.verbose:
+            if self.verbose and abs(no_move_bonus) > 1e-4:
                 print(f"no_move_bonus: {no_move_bonus}")
             return reward, bonuses
 
         wanderers_nearby_bonus = self._wanderers_nearby_bonus(observation, next_observations)
         reward += wanderers_nearby_bonus
         bonuses['wanderers_nearby_bonus'] = wanderers_nearby_bonus
-        if self.verbose:
+        if self.verbose and abs(wanderers_nearby_bonus) > 1e-4:
             print(f"wanderers_nearby_bonus: {wanderers_nearby_bonus}")
 
         explorers_nearby_bonus = self._explorers_nearby_bonus(observation, next_observations)
         reward += explorers_nearby_bonus
         bonuses['explorers_nearby_bonus'] = explorers_nearby_bonus
-        if self.verbose:
+        if self.verbose and abs(explorers_nearby_bonus) > 1e-4:
             print(f"explorers_nearby_bonus: {explorers_nearby_bonus}")
 
         shelters_nearby_bonus = self._shelters_nearby_bonus(observation, next_observations)
         reward += shelters_nearby_bonus
         bonuses['shelters_nearby_bonus'] = shelters_nearby_bonus
-        if self.verbose:
+        if self.verbose and abs(shelters_nearby_bonus) > 1e-4:
             print(f"shelters_nearby_bonus: {shelters_nearby_bonus}")
 
         others_sanity_loss_bonus = self._others_sanity_loss_bonus(observation, next_observations)
         reward += others_sanity_loss_bonus
         bonuses['others_sanity_loss_bonus'] = others_sanity_loss_bonus
-        if self.verbose:
+        if self.verbose and abs(others_sanity_loss_bonus) > 1e-4:
             print(f"others_sanity_loss_bonus: {others_sanity_loss_bonus}")
 
         if self.actions[action] == EffectType.PLAN.value:
@@ -267,21 +267,21 @@ class PotentialRewardShaper:
             plan_bonus = self._plan_bonus(observation, next_observations)
             reward += plan_bonus
             bonuses['plan_bonus'] = plan_bonus
-            if self.verbose:
+            if self.verbose and abs(plan_bonus) > 1e-4:
                 print(f"plan_bonus: {plan_bonus}")
         elif self.actions[action] == EffectType.LIGHT.value:
             assert original_reward >= 0
             light_bonus = self._light_bonus(observation, next_observations)
             reward += light_bonus
             bonuses['light_bonus'] = light_bonus
-            if self.verbose:
+            if self.verbose and abs(light_bonus) > 1e-4:
                 print(f"light_bonus: {light_bonus}")
         elif self.actions[action] == EffectType.YELL.value:
             assert original_reward >= 0
             yell_bonus = self._yell_bonus(observation, next_observations)
             reward += yell_bonus
             bonuses['yell_bonus'] = yell_bonus
-            if self.verbose:
+            if self.verbose and abs(yell_bonus) > 1e-4:
                 print(f"yell_bonus: {yell_bonus}")
         return reward, bonuses
 

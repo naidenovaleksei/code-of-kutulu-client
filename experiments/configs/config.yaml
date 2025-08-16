@@ -8,7 +8,7 @@ experiment:
   name: "ppo_single_agent"
   description: "Single PPO agent training experiment"
   num_agents: 4
-  training_agent_idx: 0
+  training_agent_id: 0
 
 # MLflow configuration
 mlflow:

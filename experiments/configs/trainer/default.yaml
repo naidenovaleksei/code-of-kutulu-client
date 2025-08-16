@@ -7,13 +7,14 @@ trainer:
   silent: true
   only_train: true
   asc_difficulty: false
-  num_envs: 2
+  num_envs: 4
   use_tqdm: true
   metrics_int: 5
   seed: 42
   env_kwargs:
     reward_params:
-      sanity_coef: 0.05
+      sanity_coef: 1
       reward_for_win: 0
-      reward_for_lose: 0
+      reward_for_lose: 0.0
       step_bonus: 0.0
+      madness_per_turn_coef: 0.0

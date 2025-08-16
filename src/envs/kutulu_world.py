@@ -81,8 +81,10 @@ class KutuluWorldEnv(gym.Env):
         data = response.json()
         self.game_id = data['gameId']
         self.constants = data['constants']
+        madness_per_turn_coef = self.reward_params.get('madness_per_turn_coef', 0)
+        spread_madness_per_turn = self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT'] * madness_per_turn_coef
         self.reward_manager = KutuluRewardManager(
-            spread_madness_per_turn=self.constants['SPREAD_MADNESS_PER_TURN_AMOUNT'],
+            spread_madness_per_turn=spread_madness_per_turn,
             **self.reward_params
         )
         self.map = data['map']

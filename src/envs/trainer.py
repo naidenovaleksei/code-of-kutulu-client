@@ -356,7 +356,7 @@ class Trainer:
         # metrics['check_wan_corner'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
         metrics['frame_ids'] = [agent.frame_idx if isinstance(agent, DQNAgentBase) else None for agent in self.agents]
         metrics['lr_list'] = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
-        
+
         # Add reward bonus metrics from agents that have a reward shaper
         for i, agent in enumerate(self.agents):
             if hasattr(agent, 'latest_bonus_averages') and agent.latest_bonus_averages is not None:
@@ -380,6 +380,14 @@ class Trainer:
                         metrics[loss] = [None] * len(self.agents)
                     metrics[loss][i] = getattr(agent, loss, None)
 
+            if 'acc_weighted' not in metrics:
+                metrics['acc_weighted'] = [None] * len(self.agents)
+            metrics['acc_weighted'][i] = sum([
+                0.4 * metrics['check_exp'][i][0],
+                0.1 * metrics['check_exp_normal_plan0'][i][0],
+                0.1 * metrics['check_exp_normal_plan1'][i][0],
+                0.4 * metrics['check_wan'][i][0],
+            ])
         return metrics
 
     def _log_metrics(self, step, metrics):
@@ -391,6 +399,7 @@ class Trainer:
             agent.writer.add_scalar('Play/Winners', metrics['winner_list'][i], step)
             # agent.writer.add_scalar('Train/Policy', metrics['check_policy'][i], step)
             # agent.writer.add_scalar('Train/Epsilon', metrics['eps'][i], step)
+            agent.writer.add_scalar('Check/acc_weighted', metrics['acc_weighted'][i], step)
             agent.writer.add_scalar('Check/Explorer/acc', metrics['check_exp'][i][0], step)
             agent.writer.add_scalar('Check/Wanderer/acc', metrics['check_wan'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_plan0', metrics['check_exp_normal_plan0'][i][0], step)
@@ -411,6 +420,7 @@ class Trainer:
             # agent.writer.add_scalar('Check/Wanderer/max', metrics['check_wan_normal'][i][3], step)
             # agent.writer.add_scalar('Check/Explorer/mean', metrics['check_exp_normal'][i][4], step)
             # agent.writer.add_scalar('Check/Wanderer/mean', metrics['check_wan_normal'][i][4], step)
+            
             
             # Log reward bonus metrics
             bonus_types = [
