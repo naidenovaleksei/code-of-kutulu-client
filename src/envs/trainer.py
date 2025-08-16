@@ -173,6 +173,7 @@ class Trainer:
                 print(f"Environment {env_idx}: {maze_name} (seed: {seed})")
             else:
                 print(f"Environment: {maze_name} (seed: {seed})")
+            print(f"constants: {env.constants}")
         for agent in self.agents:
             agent.set_env(env)
         rollout_rewards = []
@@ -202,11 +203,11 @@ class Trainer:
                 rewards_by_agent = [rewards[i] for i in np.argsort(self.agent_map)]
                 actions_by_agent = [self.actions[action[i]] for i in np.argsort(self.agent_map)]
                 if env_idx is not None:
-                    print(f"Env {env_idx}, step: {step}, rewards: {rewards_by_agent}")
                     print(f"Env {env_idx}, step: {step}, actions: {actions_by_agent}")
+                    print(f"Env {env_idx}, step: {step}, rewards: {rewards_by_agent}")
                 else:
-                    print(f"step: {step}, rewards: {rewards_by_agent}")
                     print(f"step: {step}, actions: {actions_by_agent}")
+                    print(f"step: {step}, rewards: {rewards_by_agent}")
                 # env.viz_map()
             
             if only_eval:
