@@ -10,7 +10,7 @@ model_params:
 
 # Training parameters
 gamma: 0.95
-lr: 1e-4
+lr: 0.001
 optimizer: adamw
 scheduler_params:
   type: cosine

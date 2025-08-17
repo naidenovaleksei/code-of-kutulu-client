@@ -8,7 +8,7 @@ model_params:
   fc_dim: 16
   conv_dim: 32
 epsilon_params:
-  start: 0.2
+  start: 0.75
   final: 0
   decay: ${eval:'${trainer.num_experiments} * ${trainer.num_envs} * 50'}
 size: 4

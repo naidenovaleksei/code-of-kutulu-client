@@ -1,20 +1,20 @@
 # @package _global_
 trainer:
-  num_experiments: 2000
+  num_experiments: 100
   league_level: 3
   shuffle: true
   verbose: false
-  silent: true
+  silent: false
   only_train: true
   asc_difficulty: false
   num_envs: 4
   use_tqdm: true
-  metrics_int: 5
+  metrics_int: 10
   seed: 42
   env_kwargs:
     reward_params:
-      sanity_coef: 1
-      reward_for_win: 0
-      reward_for_lose: 0.0
-      step_bonus: 0.0
-      madness_per_turn_coef: 0.0
+      sanity_coef: 0.025
+      reward_for_win: 5
+      reward_for_lose: -0.5
+      step_bonus: 0.25
+      madness_per_turn_coef: 0.5
