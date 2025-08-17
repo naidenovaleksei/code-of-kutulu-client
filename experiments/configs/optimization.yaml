@@ -1,0 +1,66 @@
+# Configuration for hyperparameter optimization with Optuna
+
+defaults:
+  - agent: ppo
+  - trainer: default
+  - competitor: qdn_conv
+  - _self_
+
+# Base experiment configuration (inherits from existing config structure)
+base_experiment:
+  experiment:
+    name: "ppo_single_agent"
+    description: "Single PPO agent training experiment"
+    num_agents: 4
+    training_agent_id: 0
+
+  # MLflow configuration
+  mlflow:
+    tracking_uri: "file:${oc.env:HOME}/projects/kutulu_artifacts/mlruns"
+    experiment_name: "${experiment.name}"
+    artifact_location: "${oc.env:HOME}/projects/kutulu_artifacts/mlflow_artifacts"
+
+  # Include trainer config in base_experiment
+  trainer: ${trainer}
+  agent: ${agent}
+  competitor: ${competitor}
+
+# Optimization-specific configuration
+optimization:
+  # Study configuration
+  study_name: "ppo_hyperparameter_study"
+  storage_url: null  # Use in-memory storage, or specify SQLite URL like "sqlite:///study.db"
+  
+  # Optimization settings
+  n_trials: 50
+  timeout: null  # No timeout (in seconds), or specify like 3600 for 1 hour
+  direction: "maximize"  # "maximize" or "minimize"
+  objective_metric: "final_mean_reward"  # Metric to optimize from calculate_final_metrics
+  
+  # Trial settings
+  fast_trials: true  # Reduce num_experiments per trial for faster optimization
+  max_experiments_per_trial: 300  # Max episodes per trial when fast_trials is true
+  
+  # MLflow integration
+  log_to_mlflow: true
+  
+  # # Pruner configuration (early stopping of unpromising trials)
+  # pruner:
+  #   enabled: true
+  #   n_startup_trials: 5      # Number of trials before pruning starts
+  #   n_warmup_steps: 10       # Number of steps before pruning evaluation
+  #   interval_steps: 1        # Interval for pruning evaluation
+  
+  # Sampler configuration
+  sampler:
+    type: "tpe"              # "tpe" (Tree-structured Parzen Estimator) or "random"
+    n_startup_trials: 10     # Number of random trials before TPE starts
+    seed: 42
+
+# Hydra configuration for optimization runs
+hydra:
+  run:
+    dir: ${oc.env:HOME}/projects/kutulu_artifacts/experiments/optimization/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${oc.env:HOME}/projects/kutulu_artifacts/experiments/optimization/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra:job.num}

@@ -16,6 +16,7 @@ scheduler_params:
   type: cosine
   T_max: ${trainer.num_experiments}
 
+need_aug: false
 # PPO specific parameters
 entropy_coef: 0.4
 value_loss_coef: 0.5

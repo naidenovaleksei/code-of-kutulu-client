@@ -103,10 +103,10 @@ class PPOBuffer:
             self.state_encoder.action_rotation_augment(exp.action, clockwise_dir),
             exp.reward,
             exp.done,
-            None,
-            None,
+            exp.new_state,
+            exp.observation,
         )
-        
+
         return {
             'experience': augmented_exp,
             'log_prob': ppo_item['log_prob'],
@@ -122,7 +122,7 @@ class PPOAgent(ActorAgent):
                  entropy_coef=0.01, value_loss_coef=0.5, 
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5,
-                 gae_lambda=0.95, reward_params=None, **kw):
+                 gae_lambda=0.95, reward_params=None, need_aug=False, **kw):
         """
         PPO (Proximal Policy Optimization) Agent with Clipped Objective
 
@@ -168,8 +168,9 @@ class PPOAgent(ActorAgent):
         if reward_params is None:
             reward_params = {}
         self.reward_params = reward_params
+        self.need_aug = need_aug
         # Initialize with PPO-specific buffer
-        ppo_buffer = PPOBuffer(DQNStateEncoderConv(), self.actions,
+        ppo_buffer = PPOBuffer(DQNStateEncoderConv(), self.actions, need_aug=self.need_aug,
                                verbose=self.verbose, reward_params=self.reward_params)
         # Replace the episode buffer with PPO buffer
         self.episode_buffer = ppo_buffer
@@ -198,7 +199,7 @@ class PPOAgent(ActorAgent):
         if num_envs > 1:
             # Create separate buffers for each environment
             self.env_buffers = [
-                PPOBuffer(DQNStateEncoderConv(), self.actions,
+                PPOBuffer(DQNStateEncoderConv(), self.actions, need_aug=self.need_aug,
                           verbose=self.verbose, reward_params=self.reward_params)
                 for _ in range(num_envs)
             ]
