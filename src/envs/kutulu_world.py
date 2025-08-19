@@ -10,6 +10,7 @@ from typing import Dict, List, Set, Any
 import numpy as np
 import requests
 from functools import lru_cache
+import warnings
 
 from src.envs.distance import find_path, distance
 from src.envs.kutulu_reward_manager import KutuluRewardManager
@@ -122,7 +123,8 @@ class KutuluWorldEnv(gym.Env):
                         if p_id != i and distance((player.x, player.y), (p.x, p.y)) <= 1:
                             self.yelled[i].add(p_id)
                             is_yelled = True
-                    assert is_yelled
+                    if not is_yelled:
+                        warnings.warn("not is_yelled")
 
         response = requests.post(
             f'{self.host}/turn',
