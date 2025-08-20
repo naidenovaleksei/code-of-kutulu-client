@@ -58,12 +58,34 @@ def suggest_hyperparameters(trial: optuna.Trial, base_config: DictConfig) -> Dic
     # config.competitor.epsilon_params.start = trial.suggest_float("epsilon_start", 0, 1)
 
     # training params
-    config.agent.entropy_coef = trial.suggest_float("entropy_coef", 0, 2)
-    config.agent.value_loss_coef = trial.suggest_float("value_loss_coef", 0, 2)
-    config.agent.clip_ratio = trial.suggest_float("clip_ratio", 0.01, 1)
-    config.agent.target_kl = trial.suggest_float("target_kl", 0.01, 1)
-    config.agent.max_grad_norm = trial.suggest_float("max_grad_norm", 0.01, 1)
+    # config.agent.entropy_coef = trial.suggest_float("entropy_coef", 0, 1)
+    # config.agent.value_loss_coef = trial.suggest_float("value_loss_coef", 0, 0.5)
+    # config.agent.clip_ratio = trial.suggest_float("clip_ratio", 0.01, 1)
+    # config.agent.target_kl = trial.suggest_float("target_kl", 0.01, 1)
+    # config.agent.max_grad_norm = trial.suggest_float("max_grad_norm", 0.01, 1)
+    
+    # # loss params
+    # config.agent.lr = trial.suggest_float("lr", 0.0001, 0.1, log=True)
+    # config.agent.mini_batch_size = trial.suggest_categorical("mini_batch_size", [8, 16, 32, 64])
+    # config.agent.ppo_epochs = trial.suggest_int("ppo_epochs", 1, 10)
 
+    # # rl params
+    # config.agent.gamma = trial.suggest_float("gamma", 0.9, 0.99999)
+    # config.agent.gae_lambda = trial.suggest_float("gae_lambda", 0.9, 0.99999)
+
+    # reward params
+    config.agent.reward_params.gamma = trial.suggest_float("gamma", 0.9, 0.99999, log=True)
+    config.agent.reward_params.lights_left_coef = trial.suggest_float("lights_left_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.light_potential_coef = trial.suggest_float("light_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.plans_left_coef = trial.suggest_float("plans_left_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.plan_potential_coef = trial.suggest_float("plan_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.yell_potential_coef = trial.suggest_float("yell_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.w_nearby_potential_coef = trial.suggest_float("w_nearby_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.e_nearby_potential_coef = trial.suggest_float("e_nearby_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.s_nearby_potential_coef = trial.suggest_float("s_nearby_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.sanity_loss_potential_coef = trial.suggest_float("sanity_loss_potential_coef", 1e-4, 1.0, log=True)
+    config.agent.reward_params.no_move_reward_coef = trial.suggest_float("no_move_reward_coef", 1e-4, 1.0, log=True)
+    
     return config
 
 
