@@ -72,13 +72,15 @@ class PotentialRewardShaper:
             if e.kind == EntityKind.EFFECT_SHELTER.value and e.param0 > 0
         ]
 
-    def _light_potential(self, observation: AgentObservation):
+    def _light_potential(self, observation: AgentObservation,
+                         prev_close_wanderer_ids:set = None):
         # more - better
         player = observation.obs.entities[0]
         assert player.id == observation.player_id
         lights_left = player.param2
-        wanderers_nearby_potential = self._wanderers_nearby_potential(observation, LIGHT_DISTANCE) 
-        return wanderers_nearby_potential + self.lights_left_coef * lights_left
+        wanderers_nearby_potential, close_wanderer_ids = self._wanderers_nearby_potential(
+            observation, LIGHT_DISTANCE, prev_close_wanderer_ids) 
+        return wanderers_nearby_potential + self.lights_left_coef * lights_left, close_wanderer_ids
 
     def _plan_potential(self, observation: AgentObservation):
         # more - better
@@ -97,22 +99,32 @@ class PotentialRewardShaper:
         # TODO: sqrt or log?
         return np.sqrt(sum_sanity) + self.plans_left_coef * plans_left
 
-    def _wanderers_nearby_potential(self, observation: AgentObservation, limit=4):
+    def _wanderers_nearby_potential(self, observation: AgentObservation, limit: int,
+                                    prev_close_wanderer_ids:set = None):
         # more - better
         player = observation.obs.entities[0]
         assert player.id == observation.player_id
         player_pos = (player.x, player.y)
         wanderers = self._get_wanderers(observation)
         wanderers_distances = []
+        close_wanderer_ids = set()
         for w in wanderers:
             w_pos = (w.x, w.y)
+            if distance(player_pos, w_pos) <= 1:
+                close_wanderer_ids.add(w.id)
             if distance(player_pos, w_pos) <= limit:
                 w_distance = len(find_path(player_pos, w_pos, observation.info.lines))
                 if w_distance <= limit:
                     wanderers_distances.append(w_distance)
+        if prev_close_wanderer_ids is not None:
+            for w in wanderers:
+                if w.id in prev_close_wanderer_ids:
+                    prev_close_wanderer_ids.remove(w.id)
+            for _ in prev_close_wanderer_ids:
+                wanderers_distances.append(0)
         # TODO: 1 / (1 + x) or exp(-x)?
         # return - (1 / (1 + np.array(wanderers_distances))).sum()
-        return - np.exp(-np.array(wanderers_distances)).sum()
+        return - np.exp(-np.array(wanderers_distances)).sum(), close_wanderer_ids
 
     def _explorers_nearby_potential(self, observation: AgentObservation):
         # more - better
@@ -125,7 +137,10 @@ class PotentialRewardShaper:
             w_pos = (w.x, w.y)
             w_distance = len(find_path(player_pos, w_pos, observation.info.lines))
             explorers_distances.append(w_distance)
-        return (1 / (1 + np.array(explorers_distances))).sum()
+        if len(explorers_distances) == 0:
+            return 0
+        return 1 / (1 + min(explorers_distances))
+        # return (1 / (1 + np.array(explorers_distances))).sum()
         # return np.exp(-np.array(explorers_distances)).sum()
 
     def _shelters_nearby_potential(self, observation: AgentObservation):
@@ -137,6 +152,8 @@ class PotentialRewardShaper:
         shelters_distances = []
         for s in shelters:
             s_pos = (s.x, s.y)
+            if s.param0 <= 0:
+                continue
             try:
                 s_distance = len(find_path(player_pos, s_pos, observation.info.lines))
                 shelters_distances.append(s_distance)
@@ -156,15 +173,18 @@ class PotentialRewardShaper:
         sum_sanity = 1
         for e in explorers:
             e_pos = (e.x, e.y)
-            if distance(player_pos, e_pos) <= distance_limit:
+            e_distance = distance(player_pos, e_pos)
+            if distance_limit is None:
+                sum_sanity += e.param0 / (2 + e_distance)
+            elif e_distance <= distance_limit:
                 sum_sanity += e.param0
         # distance[0..750] -> potential[-0.015..-0.4, 0]
         # TODO: sqrt or log?
         return -np.log(sum_sanity)
 
     def _light_bonus(self, observation, next_observation):
-        light_potential = self._light_potential(observation)
-        next_light_potential = self._light_potential(next_observation)
+        light_potential, close_wanderer_ids = self._light_potential(observation)
+        next_light_potential, _ = self._light_potential(next_observation, close_wanderer_ids)
         light_bonus = self.light_gamma * next_light_potential - light_potential
         return light_bonus * self.light_potential_coef
 
@@ -182,8 +202,8 @@ class PotentialRewardShaper:
         return yell_bonus * self.yell_potential_coef
 
     def _wanderers_nearby_bonus(self, observation, next_observation):
-        w_nearby_potential = self._wanderers_nearby_potential(observation)
-        next_w_nearby_potential = self._wanderers_nearby_potential(next_observation)
+        w_nearby_potential, close_wanderer_ids = self._wanderers_nearby_potential(observation, 4)
+        next_w_nearby_potential, _ = self._wanderers_nearby_potential(next_observation, 4, close_wanderer_ids)
         w_nearby_bonus = self.w_nearby_gamma * next_w_nearby_potential - w_nearby_potential
         return w_nearby_bonus * self.w_nearby_potential_coef
 
@@ -200,8 +220,8 @@ class PotentialRewardShaper:
         return s_nearby_bonus * self.s_nearby_potential_coef
 
     def _others_sanity_loss_bonus(self, observation, next_observation):
-        sanity_loss_potential = self._others_sanity_loss_potential(observation, 3)
-        next_sanity_loss_potential = self._others_sanity_loss_potential(next_observation, 3)
+        sanity_loss_potential = self._others_sanity_loss_potential(observation, None)
+        next_sanity_loss_potential = self._others_sanity_loss_potential(next_observation, None)
         sanity_loss_bonus = self.sanity_loss_gamma * next_sanity_loss_potential - sanity_loss_potential
         sanity_loss_bonus = max(sanity_loss_bonus, 0)
         return sanity_loss_bonus * self.sanity_loss_potential_coef
