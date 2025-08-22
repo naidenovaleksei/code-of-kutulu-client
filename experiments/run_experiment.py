@@ -15,7 +15,7 @@ import torch
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.envs.trainer import Trainer, get_actions_by_league
+from src.envs.trainer import Trainer, get_actions_by_league, DEFAULT_KUTULU_ACTIONS
 from src.envs.agents.agent_factory import get_agent
 
 # Configure logging
@@ -75,6 +75,17 @@ def create_agents_info(cfg: DictConfig) -> list:
     # Create random agents for remaining slots
     random_agent_template = OmegaConf.to_container(cfg.competitor, resolve=True)
     
+    if 'wrapper_params' in random_agent_template:
+        if 'actions_mask' in random_agent_template['wrapper_params']:
+            actions_mask = random_agent_template['wrapper_params']['actions_mask']
+            if actions_mask is not None:
+                if actions_mask == 'default':
+                    actions = DEFAULT_KUTULU_ACTIONS
+                elif actions_mask == 'no_yell':
+                    actions = DEFAULT_KUTULU_ACTIONS + ["PLAN", "LIGHT"]
+                else:
+                    raise ValueError()
+                random_agent_template['wrapper_params']['actions_mask'] = actions
     # Fill remaining agent slots
     num_agents = cfg.experiment.get('num_agents', 4)
     for i in range(len(agents_info), num_agents):
@@ -114,10 +125,17 @@ def calculate_final_metrics(results, training_agent_id) -> dict:
         final_metrics['acc_explorer_plan1'] = last_metrics['check_exp_normal_plan1'][training_agent_id][0]
         final_metrics['acc_wanderer'] = last_metrics['check_wan'][training_agent_id][0]
         final_metrics['acc_weighted'] = last_metrics['acc_weighted'][training_agent_id]
+        final_metrics['acc_weighted_full'] = last_metrics['acc_weighted_full'][training_agent_id]
         final_metrics['loss'] = last_metrics['loss'][training_agent_id]
         final_metrics['policy_loss'] = last_metrics['policy_loss'][training_agent_id]
         final_metrics['value_loss'] = last_metrics['value_loss'][training_agent_id]
         final_metrics['entropy'] = last_metrics['entropy'][training_agent_id]
+        final_metrics['acc_weighted_avg100'] = np.mean([
+            m['acc_weighted'][training_agent_id] for m in metrics_list[-10:]
+        ])
+        final_metrics['acc_weighted_full_avg100'] = np.mean([
+            m['acc_weighted_full'][training_agent_id] for m in metrics_list[-10:]
+        ])
 
     final_metrics['total_episodes'] = len(reward_list)
     final_metrics['total_model_saves'] = len(model_dir_list)

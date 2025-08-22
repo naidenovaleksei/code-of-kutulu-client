@@ -20,10 +20,10 @@ class StupidAgentWrapper:
         self.explicit_change = explicit_change
 
         if actions_mask is not None:
-            self.actions_mask = np.array([
-                i for i, v in enumerate(EXTENDED_KUTULU_ACTIONS)
-                if v in actions_mask
-            ])[:self.agent.action_space_n]
+            self.actions_mask = np.zeros(self.agent.action_space_n, dtype=np.bool)
+            for i, v in enumerate(EXTENDED_KUTULU_ACTIONS):
+                if v in actions_mask and i < self.agent.action_space_n:
+                    self.actions_mask[i] = True
         if seed:
             np.random.seed(seed)
 

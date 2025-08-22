@@ -18,7 +18,7 @@ import torch
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.envs.trainer import Trainer
+from src.envs.trainer import Trainer, DEFAULT_KUTULU_ACTIONS
 from experiments.run_experiment import (
     setup_mlflow, create_agents_info, log_system_info, 
     calculate_final_metrics, flatten_config
@@ -56,6 +56,17 @@ def suggest_hyperparameters(trial: optuna.Trial, base_config: DictConfig) -> Dic
     
     # competitor params
     # config.competitor.epsilon_params.start = trial.suggest_float("epsilon_start", 0, 1)
+    config.competitor.wrapper_params.epsilon = trial.suggest_float("epsilon", 0.0, 1.0)
+    config.competitor.wrapper_params.explicit_change = trial.suggest_categorical("explicit_change", [True, False])
+    config.competitor.wrapper_params.mode = trial.suggest_categorical("mode", ["sample", "random"])
+    config.competitor.wrapper_params.actions_mask = trial.suggest_categorical(
+        "actions_mask",
+        [
+            None,
+            "default",
+            "no_yell",
+        ]
+    )
 
     # training params
     # config.agent.entropy_coef = trial.suggest_float("entropy_coef", 0, 1)
@@ -73,19 +84,19 @@ def suggest_hyperparameters(trial: optuna.Trial, base_config: DictConfig) -> Dic
     # config.agent.gamma = trial.suggest_float("gamma", 0.9, 0.99999)
     # config.agent.gae_lambda = trial.suggest_float("gae_lambda", 0.9, 0.99999)
 
-    # reward params
-    config.agent.reward_params.gamma = trial.suggest_float("gamma", 0.9, 0.99999, log=True)
-    config.agent.reward_params.lights_left_coef = trial.suggest_float("lights_left_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.light_potential_coef = trial.suggest_float("light_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.plans_left_coef = trial.suggest_float("plans_left_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.plan_potential_coef = trial.suggest_float("plan_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.yell_potential_coef = trial.suggest_float("yell_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.w_nearby_potential_coef = trial.suggest_float("w_nearby_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.e_nearby_potential_coef = trial.suggest_float("e_nearby_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.s_nearby_potential_coef = trial.suggest_float("s_nearby_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.sanity_loss_potential_coef = trial.suggest_float("sanity_loss_potential_coef", 1e-4, 1.0, log=True)
-    config.agent.reward_params.no_move_reward_coef = trial.suggest_float("no_move_reward_coef", 1e-4, 1.0, log=True)
-    
+    # # reward params
+    # # config.agent.reward_params.gamma = trial.suggest_float("gamma", 0.9, 0.99999, log=True)
+    # config.agent.reward_params.lights_left_coef = trial.suggest_float("lights_left_coef", 0, 0.2)
+    # config.agent.reward_params.light_potential_coef = trial.suggest_float("light_potential_coef", 0, 0.5)
+    # config.agent.reward_params.plans_left_coef = trial.suggest_float("plans_left_coef", 0, 0.2)
+    # config.agent.reward_params.plan_potential_coef = trial.suggest_float("plan_potential_coef", 0, 0.2)
+    # config.agent.reward_params.yell_potential_coef = trial.suggest_float("yell_potential_coef", 0, 0.3)
+    # # config.agent.reward_params.w_nearby_potential_coef = trial.suggest_float("w_nearby_potential_coef", 1e-4, 1.0, log=True)
+    # config.agent.reward_params.e_nearby_potential_coef = trial.suggest_float("e_nearby_potential_coef", 0, 0.4)
+    # config.agent.reward_params.s_nearby_potential_coef = trial.suggest_float("s_nearby_potential_coef", 0, 0.9)
+    # config.agent.reward_params.sanity_loss_potential_coef = trial.suggest_float("sanity_loss_potential_coef", 0, 0.35)
+    # config.agent.reward_params.no_move_reward_coef = trial.suggest_float("no_move_reward_coef", 0, 0.02)
+
     return config
 
 

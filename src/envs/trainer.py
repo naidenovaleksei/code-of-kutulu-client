@@ -389,6 +389,16 @@ class Trainer:
                 0.1 * metrics['check_exp_normal_plan1'][i][0],
                 0.4 * metrics['check_wan'][i][0],
             ])
+            if 'acc_weighted_full' not in metrics:
+                metrics['acc_weighted_full'] = [None] * len(self.agents)
+            metrics['acc_weighted_full'][i] = sum([
+                0.4 * metrics['check_exp'][i][0],
+                0.05 * metrics['check_exp'][i][2],
+                0.05 * metrics['check_wan'][i][2],
+                0.05 * metrics['check_exp_normal_plan0'][i][0],
+                0.05 * metrics['check_exp_normal_plan1'][i][0],
+                0.4 * metrics['check_wan'][i][0],
+            ])
         return metrics
 
     def _log_metrics(self, step, metrics):
