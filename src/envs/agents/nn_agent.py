@@ -122,9 +122,16 @@ class NNAgent(BaseAgent):
 
         self.state_actions = (state, action, self.get_raw_observation(player_id))
         
+        output = {
+            'state': state,
+            'action': action,
+            'model_output': model_output,
+            'valid_actions': valid_actions,
+        }
         if return_value:
-            return state, action, policy, value
-        return state, action
+            output['value'] = value
+            output['policy'] = policy
+        return output
 
     def inference_step(self, player_id):
         valid_actions = self.get_valid_actions(player_id)
@@ -148,7 +155,12 @@ class NNAgent(BaseAgent):
         actions_masked = np.ma.array(model_output, mask=player_mask)
         action = actions_masked.argmax()
 
-        return action
+        return {
+            'state': state,
+            'action': action,
+            'model_output': model_output,
+            'valid_actions': valid_actions,
+        }
 
     def check_policy(self):
         metrics = self.metrics_aggregator.get_metrics()

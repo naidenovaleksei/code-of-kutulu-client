@@ -29,14 +29,14 @@ explicit_action_mask: null
 
 # Reward shaping parameters
 reward_params:
-  gamma: 0.99
-  lights_left_coef: 0.1
-  light_potential_coef: 0.8
-  plans_left_coef: 0.03
-  plan_potential_coef: 0.01
+  gamma: 0.90
+  lights_left_coef: 0.0
+  light_potential_coef: 0.0
+  plans_left_coef: 0.0
+  plan_potential_coef: 0.0
   yell_potential_coef: 0.0
-  w_nearby_potential_coef: 0.3
-  e_nearby_potential_coef: 0.3
-  s_nearby_potential_coef: 0.3
-  sanity_loss_potential_coef: 0.1
+  w_nearby_potential_coef: 0.0
+  e_nearby_potential_coef: 0.0
+  s_nearby_potential_coef: 0.0
+  sanity_loss_potential_coef: 0.0
   no_move_reward_coef: 0.0

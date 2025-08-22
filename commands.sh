@@ -1,5 +1,7 @@
 # venv
+source ~/.local/share/virtualenvs/kutulu-_n6nfavE/bin/activate
 source ~/kutulu-env/bin/activate
+conda deactivate
 
 # mlflow
 mlflow ui --backend-store-uri file:$HOME/projects/kutulu_artifacts/mlruns --port 5001
@@ -28,16 +30,11 @@ python experiments/run_experiment.py \
 python experiments/run_experiment.py \
     trainer.num_experiments=1 \
     trainer.silent=true \
-    trainer.verbose=true \
-    agent.need_aug=true
+    trainer.verbose=true
+
+python experiments/run_experiment.py \
+    trainer.num_experiments=1000
 
 # optimize_hyperparameters
 python experiments/optimize_hyperparameters.py optimization.n_trials=100 optimization.objective_metric=acc_weighted \
     competitor=qdn_conv 
-
-python experiments/optimize_hyperparameters.py optimization.n_trials=100 \
-    optimization.objective_metric=acc_weighted \
-    base_experiment.experiment.name=ppo_single_agent_loss \
-    optimization.study_name=ppo_hyperparameter_study_loss \
-    trainer.num_experiments=300 \
-    agent.need_aug=true

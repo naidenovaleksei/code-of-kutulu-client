@@ -9,12 +9,16 @@ from src.envs.agents.a2c_agent import A2CAgent
 from src.envs.agents.dqn_agent_conv import DQNAgentConv
 from src.envs.agents.ppo_agent import PPOAgent
 from src.envs.agents.rule_based_agent import EpsilonConstAgent
+from src.envs.agents.stupid_wrapper_agent import StupidAgentWrapper
 from src.envs.strategy import RandomStrategy
 
 
 def get_agent(agent_info):
     agent_info = deepcopy(agent_info)
     _type = agent_info.pop('type')
+    wrapper_params = None
+    if 'wrapper_params' in agent_info:
+        wrapper_params = agent_info.pop('wrapper_params')
     if _type == 'qlearning':
         if agent_info['strategy'] == 'random':
             agent_info['strategy'] = RandomStrategy()
@@ -41,4 +45,6 @@ def get_agent(agent_info):
         agent = DQNAgentConv(**agent_info)
     else:
         raise ValueError(f'unknown kind: {_type}')
+    if wrapper_params is not None:
+        agent = StupidAgentWrapper(**wrapper_params, agent=agent)
     return agent

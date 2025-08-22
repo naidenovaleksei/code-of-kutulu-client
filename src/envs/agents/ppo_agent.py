@@ -213,7 +213,10 @@ class PPOAgent(ActorAgent):
         self.observer = KutuluConvObserver(env, self.size)
 
     def generate_state_and_step(self, player_id, need_update=True):
-        state, action, policy, value = super().generate_state_and_step(player_id, need_update, True)
+        output = super().generate_state_and_step(player_id, need_update, True)
+        action = output['action']
+        policy = output['policy']
+        value = output['value']
 
         # PPO-specific: calculate log probability and store value
         action_dist = torch.distributions.Categorical(policy)
@@ -224,7 +227,7 @@ class PPOAgent(ActorAgent):
         self.current_log_prob = log_prob
         self.current_value = value_estimate
 
-        return state, action
+        return output
 
     def append_observation(self, player_id, reward, game_over, env_idx=None, other_rewards=None):
         """Append observation with PPO-specific data"""

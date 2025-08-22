@@ -191,10 +191,10 @@ class Trainer:
             for player_id in env.active_players():
                 agent_id = self.agent_map[player_id]
                 if only_eval:
-                    At = self.agents[agent_id].inference_step(player_id)
+                    output = self.agents[agent_id].inference_step(player_id)
                 else:
-                    _, At = self.agents[agent_id].generate_state_and_step(player_id)
-                action[player_id] = At
+                    output = self.agents[agent_id].generate_state_and_step(player_id)
+                action[player_id] = output['action']
 
             entities, rewards, game_over, info = env.step(action)
             rollout_rewards.append(rewards)
