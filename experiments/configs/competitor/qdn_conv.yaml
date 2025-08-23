@@ -8,17 +8,16 @@ model_params:
   fc_dim: 16
   conv_dim: 32
 epsilon_params:
-  start: 0.75
+  start: 0
   final: 0
   decay: ${eval:'${trainer.num_experiments} * ${trainer.num_envs} * 50'}
 size: 4
-# explicit_random: true
 explicit_random: false
 checkpoint_dir: ${oc.env:HOME}/projects/kutulu_artifacts/experiments/outputs/2025-06-22/20250622-045641/agent0/1000
 wrapper_params:
-  mode: sample
-  actions_mask: null
-  epsilon: 0.5
+  mode: random
+  actions_mask: no_yell
+  epsilon: 0.3
   seed: 1001
   softmax: true
   explicit_change: true
