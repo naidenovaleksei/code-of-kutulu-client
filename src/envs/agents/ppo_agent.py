@@ -98,6 +98,9 @@ class PPOBuffer:
         clockwise_dir = np.random.randint(0, 4)
         exp = ppo_item['experience']
         
+        if exp.action < 4:
+            clockwise_dir = (clockwise_dir - exp.action + 4) % 4
+        
         augmented_exp = Experience(
             self.state_encoder.state_rotation_augment(exp.state, clockwise_dir),
             self.state_encoder.action_rotation_augment(exp.action, clockwise_dir),
