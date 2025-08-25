@@ -1,7 +1,7 @@
 # @package _global_
 trainer:
   num_experiments: 100
-  league_level: 3
+  league_level: 4
   shuffle: true
   verbose: false
   silent: false
@@ -14,7 +14,7 @@ trainer:
   env_kwargs:
     reward_params:
       sanity_coef: 0.025
-      reward_for_win: 5
-      reward_for_lose: -0.5
-      step_bonus: 0.25
-      madness_per_turn_coef: 0.5
+      reward_for_win: 2
+      reward_for_lose: -0.1
+      step_bonus: 0.35
+      madness_per_turn_coef: 0.48

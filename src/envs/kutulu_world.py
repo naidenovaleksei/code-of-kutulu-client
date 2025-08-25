@@ -80,6 +80,7 @@ class KutuluWorldEnv(gym.Env):
         )
         self.seed = seed
         data = response.json()
+        assert data['mazeName'] == self.maze_name, f"{data['mazeName']} != {self.maze_name}"
         self.game_id = data['gameId']
         self.constants = data['constants']
         madness_per_turn_coef = self.reward_params.get('madness_per_turn_coef', 0)

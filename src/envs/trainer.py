@@ -20,31 +20,33 @@ from src.envs.agents.actor_agent import ActorAgent
 from src.envs.agents.agent_factory import get_agent
 
 WOOD_MAZES = [
-    "PacMan",
+    "Pac man",
     "Hypersonic",
     "Oasis",
     "Corridors",
-    "OriginOfSymmetry",
-    "FourOfAKind",
+    "Origin of symmetry",
+    "Four of a kind",
 ]
 
 BRONZE_MAZES = [
-    "FourOfAKind",
+    "Four of a kind",
     "Hypersonic",
-    "OriginOfSymmetry",
-    "ShelterMe",
-    "SlasherHell",
+    "Origin of symmetry",
+    "Shelter me",
+    "Slasher's hell",
     "Typhoon",
     "Oasis",
     "Cross",
-    "ShelterInPeril",
+    "Shelter in Peril",
     "Corridors",
     "Roommates",
-    "PacMan",
-    "ChallengeFromBeyond",
+    "Pac man",
+    "The challenge from beyond",
     "Cog",
-    "HillClimbing",
+    "Hill climbing",
     "Pixelated",
+    # "Minimal spawning three",
+    # "The random map",
 ]
 
 
@@ -167,6 +169,7 @@ class Trainer:
             return self.play_multi_rollout(seed, step=step)
 
     def play_single_rollout(self, seed=None, maze_name=None, env_idx=None, step=None, only_eval=False):
+        print(maze_name)
         env = self.reset_env(seed, maze_name, step)
         if self.verbose:
             if env_idx is not None:
@@ -250,10 +253,13 @@ class Trainer:
         """Play rollout across multiple environments simultaneously"""
         # Track rewards for each environment
         env_rollout_rewards = [[] for _ in range(self.num_envs)]
+        
+        selected_mazes = list(self.mazes)
 
-        # Select different mazes for diversity
-        selected_mazes = self.mazes[:self.num_envs] if self.num_envs <= len(self.mazes) else \
-                        (self.mazes * ((self.num_envs // len(self.mazes)) + 1))[:self.num_envs]
+        if self.seed:
+            np.random.RandomState(self.seed + step).shuffle(selected_mazes)
+        else:
+            np.random.shuffle(selected_mazes)
 
         for env_idx in range(self.num_envs):
             maze_name = selected_mazes[env_idx]
