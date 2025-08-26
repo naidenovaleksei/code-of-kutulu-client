@@ -36,7 +36,7 @@ BRONZE_MAZES = [
     "Slasher's hell",
     "Typhoon",
     "Oasis",
-    "Cross",
+    # "Cross",
     "Shelter in Peril",
     "Corridors",
     "Roommates",

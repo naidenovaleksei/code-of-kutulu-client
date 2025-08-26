@@ -36,5 +36,9 @@ python experiments/run_experiment.py \
     trainer.num_experiments=1000
 
 # optimize_hyperparameters
-python experiments/optimize_hyperparameters.py optimization.n_trials=100 optimization.objective_metric=acc_weighted \
-    competitor=qdn_conv 
+python experiments/optimize_hyperparameters.py \
+    optimization.n_trials=100 \
+    optimization.objective_metric=acc_weighted_full_avg100 \
+    optimization.direction=maximize \
+    optimization.study_name=ppo_study_env4 \
+    base_experiment.experiment.name=ppo_env4

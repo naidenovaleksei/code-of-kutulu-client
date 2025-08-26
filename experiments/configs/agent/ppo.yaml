@@ -9,7 +9,7 @@ model_params:
   size: 3
 
 # Training parameters
-gamma: 0.90
+gamma: 0.80
 lr: 0.001
 optimizer: adamw
 scheduler_params:
@@ -24,19 +24,19 @@ ppo_epochs: 4
 mini_batch_size: 16
 target_kl: 0.15
 max_grad_norm: 0.15
-gae_lambda: 0.99
+gae_lambda: 0.43
 explicit_action_mask: null
 
 # Reward shaping parameters
 reward_params:
   gamma: 0.90
-  lights_left_coef: 0.0
-  light_potential_coef: 0.0
-  plans_left_coef: 0.0
-  plan_potential_coef: 0.0
-  yell_potential_coef: 0.0
+  lights_left_coef: 0.08
+  light_potential_coef: 0.08
+  plans_left_coef: 0.16
+  plan_potential_coef: 0.04
+  yell_potential_coef: 0.03
   w_nearby_potential_coef: 0.0
-  e_nearby_potential_coef: 0.0
-  s_nearby_potential_coef: 0.0
-  sanity_loss_potential_coef: 0.0
-  no_move_reward_coef: 0.0
+  e_nearby_potential_coef: 0.35
+  s_nearby_potential_coef: 0.06
+  sanity_loss_potential_coef: 0.07
+  no_move_reward_coef: 0.01
