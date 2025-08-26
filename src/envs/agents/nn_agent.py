@@ -108,7 +108,9 @@ class NNAgent(BaseAgent):
         self.model.eval()
         with torch.no_grad():
             if return_value:
-                policy, value = self.model(data)
+                output = self.model(data)
+                policy = output['policy']
+                value = output['value']
             else:
                 policy = self.model.get_policy(data)
         model_output = policy[0].detach().cpu().numpy()
@@ -132,6 +134,9 @@ class NNAgent(BaseAgent):
             output['value'] = value
             output['policy'] = policy
         return output
+
+    def get_metric_names(self):
+        return []
 
     def inference_step(self, player_id):
         valid_actions = self.get_valid_actions(player_id)

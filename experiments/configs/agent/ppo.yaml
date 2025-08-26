@@ -19,6 +19,7 @@ scheduler_params:
 # PPO specific parameters
 entropy_coef: 1.4
 value_loss_coef: 0.5
+terminate_loss_coef: 0.1
 clip_ratio: 0.04
 ppo_epochs: 4
 mini_batch_size: 16

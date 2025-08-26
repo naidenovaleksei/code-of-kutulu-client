@@ -72,6 +72,7 @@ class PPOBuffer:
         experiences = [item['experience'] for item in augmented_data]
         log_probs = [item['log_prob'] for item in augmented_data]
         values = [item['value'] for item in augmented_data]
+        turns_to_death = np.arange(len(augmented_data))[::-1]
         
         states, actions, rewards, dones, other_rewards, observations = zip(*experiences)
         
@@ -88,7 +89,7 @@ class PPOBuffer:
         else:
             rewards = result
         
-        return states, actions, rewards, dones, log_probs, values
+        return states, actions, rewards, dones, log_probs, values, turns_to_death
 
     def encode_states(self, states):
         return self.state_encoder.encode_states(states)
@@ -122,7 +123,7 @@ class PPOAgent(ActorAgent):
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
                  train=False, verbose=False, 
-                 entropy_coef=0.01, value_loss_coef=0.5, 
+                 entropy_coef=0.01, value_loss_coef=0.5, terminate_loss_coef=0,
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5,
                  gae_lambda=0.95, reward_params=None, need_aug=False, **kw):
@@ -182,6 +183,7 @@ class PPOAgent(ActorAgent):
         # PPO-specific parameters
         self.entropy_coef = entropy_coef
         self.value_loss_coef = value_loss_coef
+        self.terminate_loss_coef = terminate_loss_coef
         self.clip_ratio = clip_ratio
         self.ppo_epochs = ppo_epochs
         self.mini_batch_size = mini_batch_size
@@ -260,6 +262,7 @@ class PPOAgent(ActorAgent):
         # Collect data from all environment buffers
         all_states, all_actions, all_rewards, all_dones = [], [], [], []
         all_log_probs, all_values = [], []
+        all_turns_to_death = []
         
         # Collect bonus averages from all buffers
         bonus_sums = {}
@@ -267,13 +270,14 @@ class PPOAgent(ActorAgent):
 
         for env_buffer in self.env_buffers:
             if len(env_buffer.buffer) > 0:
-                states, actions, rewards, dones, log_probs, values = env_buffer.end_episode()
+                states, actions, rewards, dones, log_probs, values, turns_to_death = env_buffer.end_episode()
                 all_states.extend(states)
                 all_actions.extend(actions)
                 all_rewards.extend(rewards)
                 all_dones.extend(dones)
                 all_log_probs.extend(log_probs)
                 all_values.extend(values)
+                all_turns_to_death.extend(turns_to_death)
                 
                 # Collect bonus averages if available
                 if env_buffer.latest_bonus_averages is not None:
@@ -292,7 +296,7 @@ class PPOAgent(ActorAgent):
                 bonus_type: total / max(1, bonus_counts[bonus_type])
                 for bonus_type, total in bonus_sums.items()
             }
-        return all_states, all_actions, all_rewards, all_dones, all_log_probs, all_values
+        return all_states, all_actions, all_rewards, all_dones, all_log_probs, all_values, all_turns_to_death
 
     def train_step(self):
         if self.train and len(self.episode_buffer.buffer) > 0:
@@ -301,11 +305,11 @@ class PPOAgent(ActorAgent):
     def _train_model(self):
         """Train the PPO model with clipped objective"""
         # End the current episode and get the episode data
-        states, actions, rewards, dones, old_log_probs, values = self.episode_buffer.end_episode()
+        states, actions, rewards, dones, old_log_probs, values, turns_to_death = self.episode_buffer.end_episode()
         # Get bonus averages if available
         if self.episode_buffer.latest_bonus_averages is not None:
             self.latest_bonus_averages = self.episode_buffer.latest_bonus_averages
-        self._train_model_with_data(states, actions, rewards, dones, old_log_probs, values)
+        self._train_model_with_data(states, actions, rewards, dones, old_log_probs, values, turns_to_death)
     
     def train_multi_env_step(self):
         """Train using data from all environments"""
@@ -319,7 +323,7 @@ class PPOAgent(ActorAgent):
         if self.scheduler:
             self.scheduler.step()
     
-    def _train_model_with_data(self, states, actions, rewards, dones, old_log_probs, values):
+    def _train_model_with_data(self, states, actions, rewards, dones, old_log_probs, values, turns_to_death):
         """Train the PPO model with provided data"""
         if len(states) == 0:
             return
@@ -330,6 +334,7 @@ class PPOAgent(ActorAgent):
         states_tensor = self.episode_buffer.encode_states(states)
         actions_tensor = torch.tensor(actions, dtype=torch.long)
         old_log_probs_tensor = torch.tensor(old_log_probs, dtype=torch.float32)
+        turns_to_death_tensor = torch.tensor(turns_to_death, dtype=torch.float32)
 
         # Calculate returns and advantages using GAE
         returns_tensor, advantages_tensor = self._calculate_gae(rewards, values, dones)
@@ -358,10 +363,13 @@ class PPOAgent(ActorAgent):
                 batch_old_log_probs = old_log_probs_tensor[batch_indices]
                 batch_returns = returns_tensor[batch_indices]
                 batch_advantages = advantages_tensor[batch_indices]
+                batch_turns_to_death = turns_to_death_tensor[batch_indices]
                 
                 # Forward pass
-                policy, current_values = self.model(batch_states)
-                current_values = current_values.view(-1)
+                output = self.model(batch_states)
+                policy = output['policy']
+                current_values = output['value'].view(-1)
+                pred_turns_to_death = output['turns_to_death'].view(-1)
                 
                 # Get current log probabilities
                 log_probs = torch.log(policy + 1e-8)
@@ -379,12 +387,19 @@ class PPOAgent(ActorAgent):
                 
                 # Value loss
                 value_loss = F.mse_loss(current_values, batch_returns)
+
+                # Aux terminate loss
+                terminate_loss = F.l1_loss(
+                    pred_turns_to_death,
+                    torch.log1p(batch_turns_to_death)
+                )
                 
                 # Entropy for exploration
                 entropy = -(log_probs * policy).sum(dim=1).mean()
                 
                 # Total loss
                 loss = policy_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
+                loss += self.terminate_loss_coef * terminate_loss
                 
                 # Backpropagation
                 self.optimizer.zero_grad()
@@ -403,6 +418,7 @@ class PPOAgent(ActorAgent):
                 self.metrics_aggregator.add_metrics({
                     'policy_loss': policy_loss.item(),
                     'value_loss': value_loss.item(),
+                    'terminate_loss': terminate_loss.item(),
                     'entropy': entropy.item(),
                     'loss': loss.item(),
                     'kl_div': kl_div.item(),
@@ -416,6 +432,16 @@ class PPOAgent(ActorAgent):
                     break
 
         self.metrics_aggregator.save_metrics(self.episode_idx)
+
+    def get_metric_names(self):
+        return [
+            'policy_loss',
+            'value_loss',
+            'terminate_loss',
+            'entropy',
+            'kl_div',
+            'loss'
+        ]
 
     def _calculate_gae(self, rewards: List[float], values: List[float], dones: List[bool]):
         """

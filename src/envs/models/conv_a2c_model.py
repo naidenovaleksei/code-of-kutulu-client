@@ -17,6 +17,8 @@ class ConvA2CModel(ConvStateEncoderModel):
         self.actor = nn.Linear(fc_dim, num_classes)
         # Critic (value) head
         self.critic = nn.Linear(fc_dim, 1)
+        # Aux turns_to_death head
+        self.terminator = nn.Linear(fc_dim, 1)
 
     def forward(self, x):
         # Shared feature extraction
@@ -29,20 +31,23 @@ class ConvA2CModel(ConvStateEncoderModel):
 
         # Critic: output state value
         value = self.critic(shared_features)
+        
+        turns_to_death = self.terminator(shared_features)
 
-        return policy, value
+        return {
+            'policy': policy,
+            'value': value,
+            'turns_to_death': turns_to_death,
+        }
     
     def get_policy(self, x):
         """Return action probabilities"""
-        policy, _ = self.forward(x)
-        return policy
+        return self.forward(x)['policy']
     
     def get_value(self, x):
         """Return state value"""
-        _, value = self.forward(x)
-        return value
+        return self.forward(x)['value']
     
     def get_log_probs(self, x):
         """Return log probabilities of actions for policy gradient update"""
-        policy, _ = self.forward(x)
-        return torch.log(policy + 1e-8)  # Add small epsilon to avoid log(0)
+        return torch.log(self.forward(x)['policy'] + 1e-8)  # Add small epsilon to avoid log(0)

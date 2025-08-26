@@ -377,12 +377,12 @@ class Trainer:
 
             if hasattr(agent, 'metrics_aggregator') and agent.train:
                 agent_metrics = agent.metrics_aggregator.get_metrics()
-                for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div', 'loss']:
+                for loss in self.agents[0].get_metric_names():
                     if loss not in metrics:
                         metrics[loss] = [None] * len(self.agents)
                     metrics[loss][i] = agent_metrics[loss]
             else:
-                for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div', 'loss']:
+                for loss in self.agents[0].get_metric_names():
                     if loss not in metrics:
                         metrics[loss] = [None] * len(self.agents)
                     metrics[loss][i] = getattr(agent, loss, None)
@@ -449,7 +449,7 @@ class Trainer:
                 if bonus_type in metrics and metrics[bonus_type][i] is not None:
                     agent.writer.add_scalar(f'Rewards/{bonus_type}', metrics[bonus_type][i], step)
             
-            for loss in ['policy_loss', 'value_loss', 'entropy', 'kl_div', 'loss']:
+            for loss in self.agents[0].get_metric_names():
                 if metrics[loss][i] is not None:
                     agent.writer.add_scalar(f'Train/{loss}', metrics[loss][i], step)
 
