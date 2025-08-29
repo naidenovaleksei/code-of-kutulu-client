@@ -223,7 +223,7 @@ class PPOAgent(ActorAgent):
 
         # PPO-specific: calculate log probability and store value
         action_dist = torch.distributions.Categorical(policy)
-        log_prob = action_dist.log_prob(torch.tensor(action)).item()
+        log_prob = action_dist.log_prob(torch.tensor([action])).item()
         value_estimate = value.item()
         
         # Store for later use in append_observation

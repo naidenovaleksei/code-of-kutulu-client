@@ -58,6 +58,7 @@ class StupidAgentWrapper:
                 action = np.random.randint(action_space_n)
             else:
                 action = np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
+            action = action.item()
         else:
             action = output['action']
         return {

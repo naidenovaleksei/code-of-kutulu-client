@@ -124,7 +124,7 @@ class NNAgent(BaseAgent):
         
         output = {
             'state': state,
-            'action': action,
+            'action': action.item(),
             'model_output': model_output,
             'valid_actions': valid_actions,
         }
@@ -157,7 +157,7 @@ class NNAgent(BaseAgent):
 
         return {
             'state': state,
-            'action': action,
+            'action': action.item(),
             'model_output': model_output,
             'valid_actions': valid_actions,
         }
@@ -188,7 +188,7 @@ class NNAgent(BaseAgent):
                 weights['fc.weight'] = weights.pop('fc1.weight')
             if 'fc1.bias' in weights and hasattr(self.model, 'fc'):
                 weights['fc.bias'] = weights.pop('fc1.bias')
-            self.model.load_state_dict(weights)
+            self.model.load_state_dict(weights, strict=False)
         
         # Move model to device after loading
         if hasattr(self, 'device'):

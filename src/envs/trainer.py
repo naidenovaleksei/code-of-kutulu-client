@@ -343,8 +343,8 @@ class Trainer:
         metrics['rewards'] = np.mean(total_reward_list, axis=0)
         winner_list = np.argmax(total_reward_list, 1)
         metrics['winner_list'] = [np.sum(winner_list == i) / len(winner_list) for i, agent in enumerate(self.agents)]
-        metrics['check_policy'] = [agent.check_policy() for agent in self.agents]
-        metrics['eps'] = [agent.get_eps() for agent in self.agents]
+        # metrics['check_policy'] = [agent.check_policy() for agent in self.agents]
+        # metrics['eps'] = [agent.get_eps() for agent in self.agents]
         metrics['check_exp'] = [
             av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_types=('normal', 'coridor', 'corner'))
             for agent in self.agents
