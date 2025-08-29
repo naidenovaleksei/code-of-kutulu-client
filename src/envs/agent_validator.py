@@ -82,6 +82,11 @@ class AgentValidator:
         output_means = []
         actions = []
         train = agent.train
+        if not train:
+            if verbose:
+                return [], [], []
+            return 0, 0, 0, 0, 0
+
         agent.train = False
         for env_type in env_types:
             if env_type == 'normal':
@@ -124,7 +129,7 @@ class AgentValidator:
                     output_maxs.append(last_action.max())
                     output_means.append(last_action.mean())
                     result.append(action in answer)
-                    actions.append(action.item())
+                    actions.append(action)
                     if verbose:
                         print(f'answer: {answer}, action: {action}, explorers: {explorers}, wanderers: {wanderers}')
                         print(f'action: {result[-1]}, std: {output_stds[-1]}')

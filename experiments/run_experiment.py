@@ -83,6 +83,8 @@ def create_agents_info(cfg: DictConfig) -> list:
                     actions = DEFAULT_KUTULU_ACTIONS
                 elif actions_mask == 'no_yell':
                     actions = DEFAULT_KUTULU_ACTIONS + ["PLAN", "LIGHT"]
+                elif actions_mask == 'wait':
+                    actions = ["WAIT"]
                 else:
                     raise ValueError()
                 random_agent_template['wrapper_params']['actions_mask'] = actions
