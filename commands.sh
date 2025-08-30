@@ -46,4 +46,5 @@ python experiments/optimize_hyperparameters.py \
     optimization.objective_metric=acc_weighted_full_avg100 \
     optimization.direction=maximize \
     optimization.study_name=ppo_study_env4 \
-    base_experiment.experiment.name=ppo_env4
+    base_experiment.experiment.name=ppo_env4 \
+    trainer.num_experiments=1000
