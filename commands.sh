@@ -10,7 +10,11 @@ mlflow ui --backend-store-uri file:$HOME/projects/kutulu_artifacts/mlruns --port
 tensorboard --logdir $HOME/projects/kutulu_artifacts/experiments/outputs --port 6007
 
 # experiment
-python experiments/run_experiment.py agent.lr=0.001 trainer.num_experiments=100 trainer.silent=false trainer.verbose=false trainer.metrics_int=10 trainer.num_envs=4 competitor=qdn_conv
+python experiments/run_experiment.py \
+    agent.lr=0.001 trainer.num_experiments=100 \
+    trainer.silent=false trainer.verbose=false \
+    trainer.metrics_int=10 trainer.num_envs=4 \
+    competitor=ppo
 
 python experiments/run_experiment.py \
     agent.lr=0.001 \
@@ -30,7 +34,8 @@ python experiments/run_experiment.py \
 python experiments/run_experiment.py \
     trainer.num_experiments=1 \
     trainer.silent=true \
-    trainer.verbose=true
+    trainer.verbose=true \
+    competitor=ppo
 
 python experiments/run_experiment.py \
     trainer.num_experiments=1000

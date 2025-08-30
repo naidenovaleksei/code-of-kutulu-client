@@ -48,23 +48,28 @@ def suggest_hyperparameters(trial: optuna.Trial, base_config: DictConfig) -> Dic
     config = deepcopy(base_config)
     
     # env params
-    # config.trainer.env_kwargs.reward_params.sanity_coef = trial.suggest_float("sanity_coef", 0.01, 0.1)
-    # config.trainer.env_kwargs.reward_params.reward_for_win = trial.suggest_float("reward_for_win", 0, 10)
-    # config.trainer.env_kwargs.reward_params.reward_for_lose = trial.suggest_float("reward_for_lose", -10, 0)
+    # # config.trainer.env_kwargs.reward_params.sanity_coef = trial.suggest_float("sanity_coef", 0.01, 0.1)
+    # config.trainer.env_kwargs.reward_params.reward_for_win = trial.suggest_float("reward_for_win", 0, 5)
+    # config.trainer.env_kwargs.reward_params.reward_for_lose = trial.suggest_float("reward_for_lose", -5, 0)
     # config.trainer.env_kwargs.reward_params.step_bonus = trial.suggest_float("step_bonus", 0, 0.5)
     # config.trainer.env_kwargs.reward_params.madness_per_turn_coef = trial.suggest_float("madness_per_turn_coef", 0, 1)
     
+    # # rl params
+    # config.agent.gamma = trial.suggest_float("gamma", 0.0, 0.99)
+    # config.agent.gae_lambda = trial.suggest_float("gae_lambda", 0.0, 0.99)
+
     # competitor params
     # config.competitor.epsilon_params.start = trial.suggest_float("epsilon_start", 0, 1)
     config.competitor.wrapper_params.epsilon = trial.suggest_float("epsilon", 0.0, 1.0)
     config.competitor.wrapper_params.explicit_change = trial.suggest_categorical("explicit_change", [True, False])
-    config.competitor.wrapper_params.mode = trial.suggest_categorical("mode", ["sample", "random"])
+    config.competitor.wrapper_params.mode = trial.suggest_categorical("mode", ["sample", "random", "top2"])
     config.competitor.wrapper_params.actions_mask = trial.suggest_categorical(
         "actions_mask",
         [
             None,
             "default",
             "no_yell",
+            "wait",
         ]
     )
 
@@ -79,10 +84,6 @@ def suggest_hyperparameters(trial: optuna.Trial, base_config: DictConfig) -> Dic
     # config.agent.lr = trial.suggest_float("lr", 0.0001, 0.1, log=True)
     # config.agent.mini_batch_size = trial.suggest_categorical("mini_batch_size", [8, 16, 32, 64])
     # config.agent.ppo_epochs = trial.suggest_int("ppo_epochs", 1, 10)
-
-    # # rl params
-    # config.agent.gamma = trial.suggest_float("gamma", 0.9, 0.99999)
-    # config.agent.gae_lambda = trial.suggest_float("gae_lambda", 0.9, 0.99999)
 
     # # reward params
     # # config.agent.reward_params.gamma = trial.suggest_float("gamma", 0.9, 0.99999, log=True)

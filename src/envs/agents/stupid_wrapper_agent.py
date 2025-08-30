@@ -45,20 +45,26 @@ class StupidAgentWrapper:
             
             if self.explicit_change:
                 valid_actions[output['action']] = False
-                
-            if self.mode == 'random':
-                ps = valid_actions
-            else:
-                assert self.mode == 'sample'
+
+            if self.mode == 'top2':
                 if self.softmax:
                     model_output = sp.softmax(model_output)
                 ps = np.ma.array(model_output, mask=~valid_actions).filled(0)
+                # is sum(valid_actions) < 2 so we can choose everything exepto for top1
+                action = np.argsort(ps)[-2].item()
+            else:   
+                if self.mode == 'random':
+                    ps = valid_actions
+                else:
+                    assert self.mode == 'sample'
+                    if self.softmax:
+                        model_output = sp.softmax(model_output)
+                    ps = np.ma.array(model_output, mask=~valid_actions).filled(0)
 
-            if ps.sum() == 0:
-                action = np.random.randint(action_space_n)
-            else:
-                action = np.random.choice(np.arange(action_space_n), p=ps / ps.sum())
-            action = action.item()
+                if ps.sum() == 0:
+                    action = np.random.randint(action_space_n)
+                else:
+                    action = np.random.choice(np.arange(action_space_n), p=ps / ps.sum()).item()
         else:
             action = output['action']
         return {
