@@ -13,8 +13,8 @@ trainer:
   seed: 42
   env_kwargs:
     reward_params:
-      sanity_coef: 0.40
-      reward_for_win: 0.50
+      sanity_coef: 0.025
+      reward_for_win: 0.55
       reward_for_lose: -1.25
-      step_bonus: 0.35
+      step_bonus: 0.4
       madness_per_turn_coef: 0.65
