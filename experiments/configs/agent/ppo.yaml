@@ -9,7 +9,7 @@ model_params:
   size: 3
 
 # Training parameters
-gamma: 0.80
+gamma: 0.85
 lr: 0.001
 optimizer: adamw
 scheduler_params:
@@ -19,13 +19,13 @@ scheduler_params:
 # PPO specific parameters
 entropy_coef: 1.4
 value_loss_coef: 0.5
-terminate_loss_coef: 0.1
+terminate_loss_coef: 0.0
 clip_ratio: 0.04
 ppo_epochs: 4
 mini_batch_size: 16
 target_kl: 0.15
 max_grad_norm: 0.15
-gae_lambda: 0.43
+gae_lambda: 0.23
 explicit_action_mask: null
 
 # Reward shaping parameters
