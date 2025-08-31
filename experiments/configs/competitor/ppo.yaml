@@ -11,9 +11,9 @@ explicit_action_mask: null
 
 checkpoint_dir: ${oc.env:HOME}/projects/kutulu_artifacts/mlflow_artifacts/05abe073de06428e896fcd880c9f3eac/artifacts/models/agent_0/final
 wrapper_params:
-  mode: random
+  mode: sample
   actions_mask: no_yell
-  epsilon: 0.3
+  epsilon: 0.15
   seed: 1001
   softmax: false
   explicit_change: true
