@@ -19,9 +19,6 @@ from src.envs.agents.actor_agent import (
 from src.envs.agents.dqn_agent_conv import (
     DQNStateEncoderConv,
 )
-from src.envs.kutulu_observer import (
-    KutuluConvObserver,
-)
 from src.envs.models.conv_a2c_model import ConvA2CModel
 from src.envs.reward_shaper import PotentialRewardShaper, RewardShaper
 
@@ -147,15 +144,21 @@ class PPOAgent(ActorAgent):
             max_grad_norm: Maximum gradient norm for clipping
             gae_lambda: Lambda parameter for GAE (Generalized Advantage Estimation)
         """
-        assert state_type == 'conv', "PPO agent only supports 'conv' state type"
+        if state_type == 'conv':
+            self.state_encoder = DQNStateEncoderConv(is_ext=False)
+        elif state_type == 'conv_ext':
+            self.state_encoder = DQNStateEncoderConv(is_ext=True)
+        else:
+            raise ValueError("PPO agent only supports 'conv' and 'conv_ext' state type")
+
         action_space_n = len(actions)
         self.size = model_params.pop('size', 3)
         model = ConvA2CModel(
             num_classes=action_space_n,
             size=self.size,
+            in_channels=self.state_encoder.layers_count(),
             **model_params
         )
-        
         super(PPOAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -164,7 +167,7 @@ class PPOAgent(ActorAgent):
             train=train,
             verbose=verbose,
             model=model,
-            state_encoder=DQNStateEncoderConv(),
+            state_encoder=self.state_encoder,
             **kw,
         )
         
@@ -174,7 +177,7 @@ class PPOAgent(ActorAgent):
         self.reward_params = reward_params
         self.need_aug = need_aug
         # Initialize with PPO-specific buffer
-        ppo_buffer = PPOBuffer(DQNStateEncoderConv(), self.actions, need_aug=self.need_aug,
+        ppo_buffer = PPOBuffer(self.state_encoder, self.actions, need_aug=self.need_aug,
                                verbose=self.verbose, reward_params=self.reward_params)
         # Replace the episode buffer with PPO buffer
         self.episode_buffer = ppo_buffer
@@ -204,7 +207,7 @@ class PPOAgent(ActorAgent):
         if num_envs > 1:
             # Create separate buffers for each environment
             self.env_buffers = [
-                PPOBuffer(DQNStateEncoderConv(), self.actions, need_aug=self.need_aug,
+                PPOBuffer(self.state_encoder, self.actions, need_aug=self.need_aug,
                           verbose=self.verbose, reward_params=self.reward_params)
                 for _ in range(num_envs)
             ]
@@ -213,9 +216,9 @@ class PPOAgent(ActorAgent):
             if self.verbose:
                 print(f"PPO Agent initialized with {num_envs} environments")
 
-    def set_env(self, env):
-        assert self.state_type == 'conv'
-        self.observer = KutuluConvObserver(env, self.size)
+    # def set_env(self, env):
+    #     assert self.state_type == 'conv'
+    #     self.observer = KutuluConvObserver(env, self.size)
 
     def generate_state_and_step(self, player_id, need_update=True):
         output = super().generate_state_and_step(player_id, need_update, True)

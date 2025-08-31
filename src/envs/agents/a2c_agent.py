@@ -12,9 +12,6 @@ from src.envs.agents.actor_agent import (
 from src.envs.agents.dqn_agent_conv import (
     DQNStateEncoderConv,
 )
-from src.envs.kutulu_observer import (
-    KutuluConvObserver,
-)
 from src.envs.models.conv_a2c_model import ConvA2CModel
 
 
@@ -64,8 +61,8 @@ class A2CAgent(ActorAgent):
         self.batch_size = batch_size
 
     def set_env(self, env):
-        assert self.state_type == 'conv'
-        self.observer = KutuluConvObserver(env, self.size)
+        assert self.state_type in ('conv', 'conv_ext')
+        super().set_env(self, env)
 
     def train_step(self):
         if self.train and len(self.episode_buffer.buffer) > 0:

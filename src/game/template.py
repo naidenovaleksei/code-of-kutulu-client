@@ -350,6 +350,317 @@ def get_state_conv(player_id, entities, lines, size):
             data[f'{kind}_{feature}'] = curr_map
     return data
 
+def get_state_conv_ext(player_id, entities, lines, size):
+    """
+    Возвращает dict карт (окно (2*size+1)x(2*size+1) вокруг агента):
+      - 'map'                         : базовая карта (через MAP_MAP)
+      - 'ALLY_COUNT'                  : нормированная count-карта союзников (клип до 3)
+      - 'ENEMY_COUNT'                 : нормированная count-карта врагов (wanderer+slasher, клип до 3)
+      - 'ALLY_MIN_DIST'               : мин. расстояние (BFS с учётом стен) до ближайшего союзника
+      - 'ENEMY_MIN_DIST'              : мин. расстояние (BFS с учётом стен) до ближайшего врага
+      - 'SLASHER_LOS'                 : 1, если клетка сейчас в прямой видимости хоть одного слэшера
+      - 'SLASHER_TIME_TO_LAND'        : нормированное (инвертированное) минимальное время для любого слэшера
+                                         «вывести клетку на LOS и сделать рывок» с учётом его состояния (FSM)
+      - а также ваши прежние каналы по FEATURE_ENTITY_DICT (без бага с клиппингом на границе)
+    Предполагается наличие глобальных:
+      MAP_MAP: dict[char->int] для клеток карты
+      FEATURE_ENTITY_DICT: dict[kind->list[feature]]
+    """
+    from collections import deque
+    from functools import lru_cache
+
+    # ---------- константы состояний SLASHER ----------
+    STATE_SPAWNING = 0
+    STATE_WANDERING = 1
+    STATE_STALKING = 2
+    STATE_RUSHING  = 3
+    STATE_STUNNED  = 4
+
+    # минимальная задержка до попытки «подвести на линию + дэш»
+    STATE_OFFSET = {
+        STATE_SPAWNING: 6,
+        STATE_WANDERING: 0,  # можно поставить 1, если хотите добавить «тик на вход в stalking»
+        STATE_STALKING:  2,  # нет трекинга прогресса -> худший случай
+        STATE_RUSHING:   0,
+        STATE_STUNNED:   6,
+    }
+
+    # ---------- хелперы ----------
+    def in_window(ax, ay, bx, by, r):
+        return abs(ax - bx) <= r and abs(ay - by) <= r
+
+    def crop_symbol_map(lines_, cx, cy, r):
+        H, W = len(lines_), len(lines_[0])
+        S = 2 * r + 1
+        out = [[MAP_MAP['#'] for _ in range(S)] for __ in range(S)]
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                x, y = cx + dx, cy + dy
+                if 0 <= y < H and 0 <= x < W:
+                    out[dy + r][dx + r] = MAP_MAP[lines_[y][x]]
+        return out
+
+    def crop_numeric_map(full_map, agent_pos, r, pad_val):
+        H, W = len(full_map), len(full_map[0])
+        S = 2 * r + 1
+        out = [[pad_val for _ in range(S)] for __ in range(S)]
+        ax, ay = agent_pos
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                x, y = ax + dx, ay + dy
+                if 0 <= y < H and 0 <= x < W:
+                    out[dy + r][dx + r] = full_map[y][x]
+        return out
+
+    def count_map(entities_xy, agent_pos, r, clip=3):
+        S = 2 * r + 1
+        ax, ay = agent_pos
+        mp = [[0 for _ in range(S)] for __ in range(S)]
+        for (x, y) in entities_xy:
+            if in_window(x, y, ax, ay, r):
+                dx, dy = x - ax, y - ay
+                v = mp[dy + r][dx + r] + 1
+                mp[dy + r][dx + r] = v if v < clip else clip
+        return mp  # ints 0..clip
+
+    def norm01_map(int_map, denom, invert=False):
+        S = len(int_map)
+        out = [[0.0 for _ in range(S)] for __ in range(S)]
+        d = float(max(1, denom))
+        for y in range(S):
+            for x in range(S):
+                v = int_map[y][x] / d
+                if v < 0.0: v = 0.0
+                if v > 1.0: v = 1.0
+                out[y][x] = (1.0 - v) if invert else v
+        return out
+
+    def bfs_min_dist_in_window(lines_, sources_xy, r, agent_pos, max_d=None):
+        """BFS по окну вокруг агента (учёт стен '#'). Возвращает int-карту min-дистанций (клип до max_d)."""
+        if max_d is None:
+            max_d = 2 * r + 1
+        S = 2 * r + 1
+        INF = 10**9
+        dist = [[INF for _ in range(S)] for __ in range(S)]
+
+        ax, ay = agent_pos
+        # локальная проходимость по окну
+        passable = [[True for _ in range(S)] for __ in range(S)]
+        H, W = len(lines_), len(lines_[0])
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                x, y = ax + dx, ay + dy
+                cell = '#'
+                if 0 <= y < H and 0 <= x < W:
+                    cell = lines_[y][x]
+                passable[dy + r][dx + r] = (cell != '#')
+
+        q = deque()
+        for (sx, sy) in sources_xy:
+            if not in_window(sx, sy, ax, ay, r):
+                continue
+            lx, ly = sx - ax + r, sy - ay + r
+            if passable[ly][lx]:
+                dist[ly][lx] = 0
+                q.append((lx, ly))
+
+        while q:
+            x, y = q.popleft()
+            d = dist[y][x] + 1
+            if d > max_d:
+                continue
+            for nx, ny in ((x+1,y),(x-1,y),(x,y+1),(x,y-1)):
+                if 0 <= nx < S and 0 <= ny < S and passable[ny][nx] and dist[ny][nx] > d:
+                    dist[ny][nx] = d
+                    q.append((nx, ny))
+
+        for y in range(S):
+            for x in range(S):
+                if dist[y][x] > max_d:
+                    dist[y][x] = max_d
+        return dist  # ints [0..max_d]
+
+    def bfs_dist_whole_grid(lines_, src):
+        """Полный BFS от точки src по всей карте; стены '#'. Недостижимые -> INF."""
+        H, W = len(lines_), len(lines_[0])
+        INF = 10**9
+        dist = [[INF for _ in range(W)] for __ in range(H)]
+        x0, y0 = src
+        if not (0 <= y0 < H and 0 <= x0 < W) or lines_[y0][x0] == '#':
+            return dist
+        q = deque()
+        dist[y0][x0] = 0
+        q.append((x0, y0))
+        while q:
+            x, y = q.popleft()
+            d = dist[y][x] + 1
+            for nx, ny in ((x+1,y),(x-1,y),(x,y+1),(x,y-1)):
+                if 0 <= nx < W and 0 <= ny < H and lines_[ny][nx] != '#' and dist[ny][nx] > d:
+                    dist[ny][nx] = d
+                    q.append((nx, ny))
+        return dist
+
+    def los_cells_from(lines_, sx, sy):
+        """Все клетки в прямой видимости из (sx,sy) (строка/столбец до стен)."""
+        H, W = len(lines_), len(lines_[0])
+        cells = {(sx, sy)}
+        # вправо
+        x = sx + 1
+        while x < W and lines_[sy][x] != '#':
+            cells.add((x, sy)); x += 1
+        # влево
+        x = sx - 1
+        while x >= 0 and lines_[sy][x] != '#':
+            cells.add((x, sy)); x -= 1
+        # вниз
+        y = sy + 1
+        while y < H and lines_[y][sx] != '#':
+            cells.add((sx, y)); y += 1
+        # вверх
+        y = sy - 1
+        while y >= 0 and lines_[y][sx] != '#':
+            cells.add((sx, y)); y -= 1
+        return cells
+
+    # @lru_cache(maxsize=None)
+    def rowcol_segment(lines_key, W, H, cx, cy):
+        """Все клетки на «отрезках видимости» клетки (cx,cy) по строке и столбцу (до стен)."""
+        seg = set()
+        # строка
+        x = cx
+        while x - 1 >= 0 and lines_key[cy][x-1] != '#':
+            x -= 1
+        while x < W and lines_key[cy][x] != '#':
+            seg.add((x, cy)); x += 1
+        # столбец
+        y = cy
+        while y - 1 >= 0 and lines_key[y-1][cx] != '#':
+            y -= 1
+        while y < H and lines_key[y][cx] != '#':
+            seg.add((cx, y)); y += 1
+        return seg
+
+    def build_slasher_los_map(lines_, slashers_xy):
+        H, W = len(lines_), len(lines_[0])
+        los = [[0 for _ in range(W)] for __ in range(H)]
+        for (sx, sy) in slashers_xy:
+            for (x, y) in los_cells_from(lines_, sx, sy):
+                los[y][x] = 1
+        return los  # 0/1 по всей карте
+
+    def build_slasher_time_to_land(lines_, slashers_full):
+        """
+        Для каждой клетки c: T(c) = min_sl [ offset(state_sl) + min_{p in seg(c)} dist(sl -> p) + 1 ],
+        где seg(c) — отрезки видимости самой клетки (по строке/столбцу до стен).
+        """
+        H, W = len(lines_), len(lines_[0])
+        INF = 10**6
+        key = tuple(lines_) if isinstance(lines_[0], str) else tuple(''.join(row) for row in lines_)
+
+        # BFS от каждого слэшера + его оффсет по состоянию
+        pre = []
+        for s in slashers_full:
+            dmap = bfs_dist_whole_grid(lines_, (s['x'], s['y']))
+            off = STATE_OFFSET.get(s.get('param1', STATE_WANDERING), 0)
+            pre.append((dmap, off))
+
+        out = [[INF for _ in range(W)] for __ in range(H)]
+        for cy in range(H):
+            for cx in range(W):
+                if lines_[cy][cx] == '#':
+                    continue
+                seg = rowcol_segment(key, W, H, cx, cy)
+                best = INF
+                for (px, py) in seg:
+                    for dmap, off in pre:
+                        d = dmap[py][px]
+                        if d >= INF:
+                            continue
+                        t = off + d + 1  # +1 на сам «дэш»
+                        if t < best:
+                            best = t
+                            if best == 1:  # быстрее не будет
+                                break
+                    if best == 1:
+                        break
+                out[cy][cx] = best
+        return out  # ints или INF
+
+    # ---------- основная логика ----------
+    data = {}
+
+    # агент
+    agent = None
+    for e in entities:
+        if e['id'] == player_id:
+            agent = e
+            break
+    assert agent is not None, f"Agent with id {player_id} not found in entities"
+    ax, ay = agent['x'], agent['y']
+    agent_pos = (ax, ay)
+
+    # базовая карта (окно)
+    data['map'] = crop_symbol_map(lines, ax, ay, size)
+
+    # разбор сущностей
+    allies_xy, wanderers_xy = [], []
+    slashers_xy = []
+    slashers_full = []  # [{'x':..,'y':..,'param1':state}, ...]
+
+    for e in entities:
+        k = e.get('kind', '')
+        if k == 'EXPLORER' and e['id'] != player_id:
+            allies_xy.append((e['x'], e['y']))
+        elif k == 'WANDERER':
+            wanderers_xy.append((e['x'], e['y']))
+        elif k == 'SLASHER':
+            slashers_xy.append((e['x'], e['y']))
+            slashers_full.append({'x': e['x'], 'y': e['y'], 'param1': e.get('param1', STATE_WANDERING)})
+
+    # агрегаты: COUNT
+    data['ALLY_COUNT']  = norm01_map(count_map(allies_xy, agent_pos, size, clip=3), denom=3.0, invert=False)
+    data['ENEMY_COUNT'] = norm01_map(count_map(wanderers_xy + slashers_xy, agent_pos, size, clip=3), denom=3.0, invert=False)
+
+    # агрегаты: MIN-DIST (локальный BFS в окне)
+    max_d = 2 * size + 1
+    ally_md  = bfs_min_dist_in_window(lines, allies_xy,  size, agent_pos, max_d=max_d)
+    enemy_md = bfs_min_dist_in_window(lines, wanderers_xy + slashers_xy, size, agent_pos, max_d=max_d)
+    data['ALLY_MIN_DIST']  = norm01_map(ally_md,  denom=max_d, invert=False)
+    data['ENEMY_MIN_DIST'] = norm01_map(enemy_md, denom=max_d, invert=False)
+
+    # слэшеры: LOS прямо сейчас
+    sl_los_full = build_slasher_los_map(lines, slashers_xy)
+    sl_los_crop = crop_numeric_map(sl_los_full, agent_pos, size, pad_val=0)
+    data['SLASHER_LOS'] = norm01_map(sl_los_crop, denom=1.0, invert=False)  # уже 0/1
+
+    # слэшеры: минимальное время приземления с учётом FSM
+    sl_time_full = build_slasher_time_to_land(lines, slashers_full)
+    # нормируем в пределах локального контекста: «дойти до края окна и дэш» + запас
+    max_t_norm = (2 * size + 1) + 7  # 7 ~ max(STATE_OFFSET)+1
+    sl_time_crop = crop_numeric_map(sl_time_full, agent_pos, size, pad_val=max_t_norm)
+    data['SLASHER_TIME_TO_LAND'] = norm01_map(sl_time_crop, denom=float(max_t_norm), invert=False)
+    # invert=True: малое время -> высокий «heat» (опаснее)
+
+    # ваши прежние каналы по FEATURE_ENTITY_DICT (без клиппинга координат!)
+    S = 2 * size + 1
+    for kind, features in FEATURE_ENTITY_DICT.items():
+        for feature in features:
+            feat_map = [[0] * S for _ in range(S)]
+            if kind == 'EXPLORER':
+                feat_map[size][size] = agent.get(feature, 0)
+            for e in entities:
+                if kind == 'EXPLORER' and e['id'] == agent['id']:
+                    continue
+                if e.get('kind') != kind:
+                    continue
+                ex, ey = e['x'], e['y']
+                if in_window(ex, ey, ax, ay, size):
+                    dx, dy = ex - ax, ey - ay
+                    feat_map[dy + size][dx + size] = e.get(feature, 0)
+            data[f'{kind}_{feature}'] = feat_map
+
+    return data
+
 
 def getActionGreedyMasked(state, Q, action_space_n, mask):
     mask = mask[:action_space_n]
@@ -649,6 +960,64 @@ class ConvEncoder:
         
         return x
 
+class ConvExtEncoder:
+    def __init__(self):
+        self.inference_helper = InferenceHelper()
+
+    def _encode(self, state, weights):
+        features = []
+        for k in [
+            'map',
+            'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
+            'WANDERER_param0', 'WANDERER_param1',
+            'SLASHER_param0', 'SLASHER_param1',
+            'EFFECT_PLAN_param0',
+            'EFFECT_LIGHT_param0',
+            'EFFECT_SHELTER_param0',
+            'EFFECT_YELL_param0',
+            'ALLY_COUNT',
+            'ALLY_MIN_DIST',
+            'ENEMY_COUNT',
+            'ENEMY_MIN_DIST',
+            'SLASHER_LOS',
+            'SLASHER_TIME_TO_LAND'
+            ]:
+            features.append(state[k])
+        data = np.array([features])
+
+        conv1 = weights['conv1.weight']
+        conv1_b = weights['conv1.bias']
+        conv2 = weights['conv2.weight']
+        conv2_b = weights['conv2.bias']
+        fc1 = weights['fc.weight']
+        fc1_b = weights['fc.bias']
+        bn1 = weights['bn1.weight']
+        bn1_b = weights['bn1.bias']
+        bn1_mean = weights['bn1.running_mean']
+        bn1_var = weights['bn1.running_var']
+        bn2 = weights['bn2.weight']
+        bn2_b = weights['bn2.bias']
+        bn2_mean = weights['bn2.running_mean']
+        bn2_var = weights['bn2.running_var']
+
+        x = data
+        x = self.inference_helper._conv2d(x, conv1, conv1_b)
+        x = self.inference_helper._batchnorm2d(x, bn1_mean, bn1_var, bn1, bn1_b)
+        x = self.inference_helper._relu(x)
+        x = self.inference_helper._conv2d(x, conv2, conv2_b)
+        x = self.inference_helper._batchnorm2d(x, bn2_mean, bn2_var, bn2, bn2_b)
+        x = self.inference_helper._relu(x)
+        x = self.inference_helper._maxpool2d(x)
+
+        # # Flatten
+        N = x.shape[0]
+        x = x.reshape(N, -1)
+
+        # # FC layers
+        x = self.inference_helper._relu(np.dot(x, fc1.T) + fc1_b)
+        
+        return x
+
 
 class DQNConvSolver(NNSolver):
     def __init__(self, info, actions, weights, size=3):
@@ -743,6 +1112,30 @@ class PPOConvSolver(NNSolver):
         return x[0]
 
 
+class PPOConvExtSolver(NNSolver):
+    def __init__(self, info, actions, weights, size=3):
+        super(PPOConvExtSolver, self).__init__(info, actions, weights)
+        self.size = size
+        self.conv_encoder = ConvExtEncoder()
+
+    def _assert_weights(self, actions):
+        assert self.weights['actor.weight'].shape[0] == len(actions)
+
+    def _calculate_output(self, entities, player_pos):
+        # player_pos is already provided as a parameter, so we don't need to extract it from entities
+        player_id = entities[0]['id']
+        state = get_state_conv_ext(player_id, entities, self.info['lines'], self.size)
+
+        a = self.weights['actor.weight']
+        a_b = self.weights['actor.bias']
+
+        x = self.conv_encoder._encode(state, self.weights)
+        x = self.conv_encoder.inference_helper._relu(x)
+        x = np.dot(x, a.T) + a_b
+        x = sp.softmax(x)
+        return x[0]
+
+
 def main():
     vals = pkl.loads(zlib.decompress(base64.b64decode(data1)))
     vals = [np.load(io.BytesIO(byte_data)) for byte_data in vals]
@@ -759,6 +1152,8 @@ def main():
         solver = DQNConvSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
     elif mode == 'ppo_conv':
         solver = PPOConvSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
+    elif mode == 'ppo_conv_ext':
+        solver = PPOConvExtSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     

@@ -5,6 +5,7 @@ from src.game.template import (
     get_state_ext,
     REL_POSITIONS,
     get_state_conv,
+    get_state_conv_ext,
 )
 
 
@@ -110,4 +111,17 @@ class KutuluConvObserver(BaseKutuluClosestObserver):
         assert entities[0].id == player_id
         entities = [e.to_dict() for e in entities]
         state = get_state_conv(player_id, entities, self.env.map, self.size)
+        return state
+
+
+class KutuluConvExtObserver(BaseKutuluClosestObserver):
+    def __init__(self, env: KutuluWorldEnv, size: int):
+        super(KutuluConvExtObserver, self).__init__(env)
+        self.size = size
+
+    def get_state(self, player_id: int):
+        entities = self.env.get_obs(player_id).entities
+        assert entities[0].id == player_id
+        entities = [e.to_dict() for e in entities]
+        state = get_state_conv_ext(player_id, entities, self.env.map, self.size)
         return state

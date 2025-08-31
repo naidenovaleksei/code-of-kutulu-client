@@ -2,9 +2,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from src.envs.kutulu_observer import (
-    KutuluConvObserver,
-)
 from src.envs.buffers import (
     BaseStateEncoder,
 )
@@ -16,20 +13,35 @@ from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel, Dueli
 
 
 class DQNStateEncoderConv(BaseStateEncoder):
+    def __init__(self, is_ext=False):
+        self.layer_keys = [
+            'map',
+            'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
+            'WANDERER_param0', 'WANDERER_param1',
+            'SLASHER_param0', 'SLASHER_param1',
+            'EFFECT_PLAN_param0',
+            'EFFECT_LIGHT_param0',
+            'EFFECT_SHELTER_param0',
+            'EFFECT_YELL_param0'
+        ]
+        if is_ext:
+            self.layer_keys += [
+                'ALLY_COUNT',
+                'ALLY_MIN_DIST',
+                'ENEMY_COUNT',
+                'ENEMY_MIN_DIST',
+                'SLASHER_LOS',
+                'SLASHER_TIME_TO_LAND'
+            ]
+    
+    def layers_count(self):
+        return len(self.layer_keys)
+
     def encode_states(self, states, return_tensors=True):
         data = []
         for state in states:
             features = []
-            for k in [
-                'map',
-                'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
-                'WANDERER_param0', 'WANDERER_param1',
-                'SLASHER_param0', 'SLASHER_param1',
-                'EFFECT_PLAN_param0',
-                'EFFECT_LIGHT_param0',
-                'EFFECT_SHELTER_param0',
-                'EFFECT_YELL_param0'
-                ]:
+            for k in self.layer_keys:
                 features.append(state[k])
             data.append(features)
         if return_tensors:
