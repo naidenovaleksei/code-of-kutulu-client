@@ -72,7 +72,7 @@ class PPOBuffer:
         experiences = [item['experience'] for item in augmented_data]
         log_probs = [item['log_prob'] for item in augmented_data]
         values = [item['value'] for item in augmented_data]
-        turns_to_death = np.arange(len(augmented_data))[::-1]
+        turns_to_death = np.arange(len(augmented_data))[::-1] + 1
         
         states, actions, rewards, dones, other_rewards, observations = zip(*experiences)
         
