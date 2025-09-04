@@ -159,6 +159,8 @@ class KutuluWorldEnv(gym.Env):
                 curr_map[e.y][e.x] = str(e.id)
                 if e.id == agent_id:
                     agent_pos = (e.x, e.y)
+            else:
+                curr_map[e.y][e.x] = e.kind[0]
         if action is not None:
             rel_pos = REL_POSITIONS[action]
             x = agent_pos[0] + rel_pos[0]

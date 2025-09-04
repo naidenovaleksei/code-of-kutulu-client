@@ -126,7 +126,7 @@ class NNAgent(BaseAgent):
         
         output = {
             'state': state,
-            'action': action.item(),
+            'action': action if isinstance(action, int) else action.item(),
             'model_output': model_output,
             'valid_actions': valid_actions,
         }
