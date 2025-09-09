@@ -353,6 +353,10 @@ class Trainer:
             av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_types=('normal', 'coridor', 'corner'))
             for agent in self.agents
         ]
+        metrics['check_slsh'] = [
+            av.check_entity_nearby(agent, 'SLASHER', n_min=2, n_max=3, env_types=('normal',))
+            for agent in self.agents
+        ]
         # metrics['check_exp_normal'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
         # metrics['check_wan_normal'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
         metrics['check_exp_normal_plan1'] = [av_plan.check_entity_nearby(agent, 'EXPLORER', n_min=1, n_max=2) for agent in self.agents]
@@ -419,6 +423,7 @@ class Trainer:
             agent.writer.add_scalar('Check/acc_weighted', metrics['acc_weighted'][i], step)
             agent.writer.add_scalar('Check/Explorer/acc', metrics['check_exp'][i][0], step)
             agent.writer.add_scalar('Check/Wanderer/acc', metrics['check_wan'][i][0], step)
+            agent.writer.add_scalar('Check/Slasher/acc', metrics['check_slsh'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_plan0', metrics['check_exp_normal_plan0'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_plan1', metrics['check_exp_normal_plan1'][i][0], step)
             # agent.writer.add_scalar('Check/Explorer/acc_coridor', metrics['check_exp_coridor'][i][0], step)
@@ -433,6 +438,7 @@ class Trainer:
                 agent.writer.add_scalar('Train/lr', metrics['lr_list'][i], step)
             agent.writer.add_scalar('Check/Explorer/top_a', metrics['check_exp'][i][2], step)
             agent.writer.add_scalar('Check/Wanderer/top_a', metrics['check_wan'][i][2], step)
+            agent.writer.add_scalar('Check/Slasher/top_a', metrics['check_slsh'][i][2], step)
             # agent.writer.add_scalar('Check/Explorer/max', metrics['check_exp_normal'][i][3], step)
             # agent.writer.add_scalar('Check/Wanderer/max', metrics['check_wan_normal'][i][3], step)
             # agent.writer.add_scalar('Check/Explorer/mean', metrics['check_exp_normal'][i][4], step)

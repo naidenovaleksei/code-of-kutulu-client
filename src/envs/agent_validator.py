@@ -61,7 +61,8 @@ def get_corner_env(actions):
 
 class AgentValidator:
     def __init__(self, actions, player_pos=(4, 4), player_params=(100,0,0),
-                 explorers_params=(100,0,0), wanderers_params=(10,1,0)):
+                 explorers_params=(100,0,0), wanderers_params=(10,1,0),
+                 slasher_params=(1,2,0)):
         self.normal_env = get_normal_env(actions)
         self.horizontal_coridor_env = self._rotate_env(get_coridor_env(actions), 0) 
         self.vertical_coridor_env = self._rotate_env(get_coridor_env(actions), 1)  
@@ -73,6 +74,7 @@ class AgentValidator:
         self.player_params = player_params
         self.explorers_params = explorers_params
         self.wanderers_params = wanderers_params
+        self.slasher_params = slasher_params
         self.plan_action = EXTENDED_KUTULU_ACTIONS.index('PLAN')
     
     def check_entity_nearby(self, agent, entity_kind, n_min=1, n_max=3, env_types=['normal'], verbose=False):
@@ -121,8 +123,8 @@ class AgentValidator:
             else:
                 raise ValueError(f'wrong type: {env_type}')
             for env, params in zip(env_list, params_list):
-                for answer, explorers, wanderers in params:
-                    self._set_env(env, agent, explorers, wanderers)
+                for answer, explorers, wanderers, slashers in params:
+                    self._set_env(env, agent, explorers, wanderers, slashers)
                     action = agent.inference_step(0)['action']
                     last_action = agent.get_last_action()
                     output_stds.append(last_action.std())
@@ -152,6 +154,8 @@ class AgentValidator:
                 next_params = self._generate_exporer_nearby(i, actions)
             elif entity_kind == 'WANDERER':
                 next_params = self._generate_wanderer_nearby(i, actions)
+            elif entity_kind == 'SLASHER':
+                next_params = self._generate_slasher_nearby(i, actions)
             else:
                 raise ValueError(f'unknown entity_kind: {entity_kind}')
             params += next_params
@@ -165,14 +169,16 @@ class AgentValidator:
         env.height = len(env.map)
         return env
 
-    def _set_env(self, env, agent, explorers, wanderers):
+    def _set_env(self, env, agent, explorers, wanderers, slashers):
         player_pos = self.player_pos
         assert len(self.player_params) == 3
         assert len(self.explorers_params) == 3
         assert len(self.wanderers_params) == 3
+        assert len(self.slasher_params) == 3
         player_params = " ".join(map(str, self.player_params))
         explorers_params = " ".join(map(str, self.explorers_params))
         wanderers_params = " ".join(map(str, self.wanderers_params))
+        slasher_params = " ".join(map(str, self.slasher_params))
         obs = [
             None,
             f'EXPLORER 0 {player_pos[0]} {player_pos[1]} {player_params}'
@@ -182,6 +188,9 @@ class AgentValidator:
         ] + [
             f'WANDERER {i + 10} {player_pos[0] + x} {player_pos[1] + y} {wanderers_params}'
             for i, (x, y) in enumerate(wanderers) 
+        ] + [
+            f'SLASHER {i + 20} {player_pos[0] + x} {player_pos[1] + y} {slasher_params}'
+            for i, (x, y) in enumerate(slashers) 
         ]
         env._set_entities(obs)
         env._set_players(obs, set_ids=True)
@@ -192,7 +201,7 @@ class AgentValidator:
         has_plan = self.player_params[1] > 0
         plan_actions = [self.plan_action] if has_plan and n_step <= 2 else []
         return [
-            (set([answer] + plan_actions), [(tuple(x * n_step for x in rel_pos))], [])
+            (set([answer] + plan_actions), [(tuple(x * n_step for x in rel_pos))], [], [])
             for answer, rel_pos in enumerate(REL_POSITIONS)
             if rel_pos in moves
         ]
@@ -201,7 +210,16 @@ class AgentValidator:
         moves = set([MOVE_REL_POS[move] for move in moves])
         all_answers = set(range(4))
         return [
-            (all_answers - set([answer]), [], [(tuple(x * n_step for x in rel_pos))])
+            (all_answers - set([answer]), [], [(tuple(x * n_step for x in rel_pos))], [])
+            for answer, rel_pos in enumerate(REL_POSITIONS)
+            if rel_pos in moves
+        ]
+
+    def _generate_slasher_nearby(self, n_step, moves):
+        moves = set([MOVE_REL_POS[move] for move in moves])
+        all_answers = set(range(4))
+        return [
+            (all_answers - set([answer, (answer + 2) % 4]), [], [], [(tuple(x * n_step for x in rel_pos))])
             for answer, rel_pos in enumerate(REL_POSITIONS)
             if rel_pos in moves
         ]
