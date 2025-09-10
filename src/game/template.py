@@ -6,6 +6,7 @@ import scipy.special as sp
 from scipy.signal import correlate2d
 import heapq
 from collections import defaultdict
+import warnings
 
 import pickle as pkl
 import zlib
@@ -98,6 +99,14 @@ MAP_MAP = {
     's': 1,
     'S': 1,
     'U': 2,
+}
+MAP_MAP_NEW = {
+    '#': 0,
+    '.': 1,
+    'w': 1,
+    's': 1,
+    'S': 1,
+    'U': 1,
 }
 FEATURE_ENTITY_DICT = {
     'EXPLORER': ['param0', 'param1', 'param2'],
@@ -354,10 +363,10 @@ def get_state_conv_ext(player_id, entities, lines, size):
     """
     Возвращает dict карт (окно (2*size+1)x(2*size+1) вокруг агента):
       - 'map'                         : базовая карта (через MAP_MAP)
-      - 'ALLY_COUNT'                  : нормированная count-карта союзников (клип до 3)
-      - 'ENEMY_COUNT'                 : нормированная count-карта врагов (wanderer+slasher, клип до 3)
-      - 'ALLY_MIN_DIST'               : мин. расстояние (BFS с учётом стен) до ближайшего союзника
-      - 'ENEMY_MIN_DIST'              : мин. расстояние (BFS с учётом стен) до ближайшего врага
+      - 'EXPLORER_COUNT'                  : нормированная count-карта союзников (клип до 3)
+      - 'WANDERER_COUNT'                 : нормированная count-карта врагов (wanderer+slasher, клип до 3)
+      - 'EXPLORER_MIN_DIST'               : мин. расстояние (BFS с учётом стен) до ближайшего союзника
+      - 'WANDERER_MIN_DIST'              : мин. расстояние (BFS с учётом стен) до ближайшего врага
       - 'SLASHER_LOS'                 : 1, если клетка сейчас в прямой видимости хоть одного слэшера
       - 'SLASHER_TIME_TO_LAND'        : нормированное (инвертированное) минимальное время для любого слэшера
                                          «вывести клетку на LOS и сделать рывок» с учётом его состояния (FSM)
@@ -376,47 +385,42 @@ def get_state_conv_ext(player_id, entities, lines, size):
     STATE_RUSHING  = 3
     STATE_STUNNED  = 4
 
-    # минимальная задержка до попытки «подвести на линию + дэш»
-    STATE_OFFSET = {
-        STATE_SPAWNING: 6,
-        STATE_WANDERING: 0,  # можно поставить 1, если хотите добавить «тик на вход в stalking»
-        STATE_STALKING:  2,  # нет трекинга прогресса -> худший случай
-        STATE_RUSHING:   0,
-        STATE_STUNNED:   6,
-    }
+    # # минимальная задержка до попытки «подвести на линию + дэш»
+    # STATE_OFFSET = {
+    #     STATE_SPAWNING: 6,
+    #     STATE_WANDERING: 0,  # можно поставить 1, если хотите добавить «тик на вход в stalking»
+    #     STATE_STALKING:  2,  # нет трекинга прогресса -> худший случай
+    #     STATE_RUSHING:   0,
+    #     STATE_STUNNED:   6,
+    # }
 
     # ---------- хелперы ----------
     def in_window(ax, ay, bx, by, r):
         return abs(ax - bx) <= r and abs(ay - by) <= r
 
-    def crop_symbol_map(lines_, cx, cy, r):
-        H, W = len(lines_), len(lines_[0])
-        S = 2 * r + 1
-        out = [[MAP_MAP['#'] for _ in range(S)] for __ in range(S)]
-        for dy in range(-r, r + 1):
-            for dx in range(-r, r + 1):
-                x, y = cx + dx, cy + dy
-                if 0 <= y < H and 0 <= x < W:
-                    out[dy + r][dx + r] = MAP_MAP[lines_[y][x]]
-        return out
-
-    def crop_numeric_map(full_map, agent_pos, r, pad_val):
+    def crop_map(full_map, agent_pos, r, pad_val, cells_map=None):
         H, W = len(full_map), len(full_map[0])
         S = 2 * r + 1
+        if cells_map is not None:
+            pad_val = cells_map[pad_val]
         out = [[pad_val for _ in range(S)] for __ in range(S)]
         ax, ay = agent_pos
         for dy in range(-r, r + 1):
             for dx in range(-r, r + 1):
                 x, y = ax + dx, ay + dy
                 if 0 <= y < H and 0 <= x < W:
-                    out[dy + r][dx + r] = full_map[y][x]
+                    cell_value = full_map[y][x]
+                    if cells_map is not None:
+                        cell_value = cells_map[cell_value]
+                    out[dy + r][dx + r] = cell_value
         return out
 
-    def count_map(entities_xy, agent_pos, r, clip=3):
+    def count_map(entities, agent_pos, r, clip=3):
         S = 2 * r + 1
         ax, ay = agent_pos
         mp = [[0 for _ in range(S)] for __ in range(S)]
-        for (x, y) in entities_xy:
+        for e in entities:
+            (x, y) = (e['x'], e['y'])
             if in_window(x, y, ax, ay, r):
                 dx, dy = x - ax, y - ay
                 v = mp[dy + r][dx + r] + 1
@@ -424,6 +428,7 @@ def get_state_conv_ext(player_id, entities, lines, size):
         return mp  # ints 0..clip
 
     def norm01_map(int_map, denom, invert=False):
+        # return int_map
         S = len(int_map)
         out = [[0.0 for _ in range(S)] for __ in range(S)]
         d = float(max(1, denom))
@@ -435,7 +440,7 @@ def get_state_conv_ext(player_id, entities, lines, size):
                 out[y][x] = (1.0 - v) if invert else v
         return out
 
-    def bfs_min_dist_in_window(lines_, sources_xy, r, agent_pos, max_d=None):
+    def bfs_min_dist_in_window(lines_, sources_, r, agent_pos, max_d=None):
         """BFS по окну вокруг агента (учёт стен '#'). Возвращает int-карту min-дистанций (клип до max_d)."""
         if max_d is None:
             max_d = 2 * r + 1
@@ -456,7 +461,8 @@ def get_state_conv_ext(player_id, entities, lines, size):
                 passable[dy + r][dx + r] = (cell != '#')
 
         q = deque()
-        for (sx, sy) in sources_xy:
+        for s in sources_:
+            (sx, sy) = (s['x'], s['y'])
             if not in_window(sx, sy, ax, ay, r):
                 continue
             lx, ly = sx - ax + r, sy - ay + r
@@ -478,113 +484,109 @@ def get_state_conv_ext(player_id, entities, lines, size):
             for x in range(S):
                 if dist[y][x] > max_d:
                     dist[y][x] = max_d
-        return dist  # ints [0..max_d]
-
-    def bfs_dist_whole_grid(lines_, src):
-        """Полный BFS от точки src по всей карте; стены '#'. Недостижимые -> INF."""
-        H, W = len(lines_), len(lines_[0])
-        INF = 10**9
-        dist = [[INF for _ in range(W)] for __ in range(H)]
-        x0, y0 = src
-        if not (0 <= y0 < H and 0 <= x0 < W) or lines_[y0][x0] == '#':
-            return dist
-        q = deque()
-        dist[y0][x0] = 0
-        q.append((x0, y0))
-        while q:
-            x, y = q.popleft()
-            d = dist[y][x] + 1
-            for nx, ny in ((x+1,y),(x-1,y),(x,y+1),(x,y-1)):
-                if 0 <= nx < W and 0 <= ny < H and lines_[ny][nx] != '#' and dist[ny][nx] > d:
-                    dist[ny][nx] = d
-                    q.append((nx, ny))
         return dist
 
-    def los_cells_from(lines_, sx, sy):
-        """Все клетки в прямой видимости из (sx,sy) (строка/столбец до стен)."""
-        H, W = len(lines_), len(lines_[0])
-        cells = {(sx, sy)}
-        # вправо
-        x = sx + 1
-        while x < W and lines_[sy][x] != '#':
-            cells.add((x, sy)); x += 1
-        # влево
-        x = sx - 1
-        while x >= 0 and lines_[sy][x] != '#':
-            cells.add((x, sy)); x -= 1
-        # вниз
-        y = sy + 1
-        while y < H and lines_[y][sx] != '#':
-            cells.add((sx, y)); y += 1
-        # вверх
-        y = sy - 1
-        while y >= 0 and lines_[y][sx] != '#':
-            cells.add((sx, y)); y -= 1
-        return cells
-
-    # @lru_cache(maxsize=None)
-    def rowcol_segment(lines_key, W, H, cx, cy):
-        """Все клетки на «отрезках видимости» клетки (cx,cy) по строке и столбцу (до стен)."""
-        seg = set()
-        # строка
-        x = cx
-        while x - 1 >= 0 and lines_key[cy][x-1] != '#':
-            x -= 1
-        while x < W and lines_key[cy][x] != '#':
-            seg.add((x, cy)); x += 1
-        # столбец
-        y = cy
-        while y - 1 >= 0 and lines_key[y-1][cx] != '#':
-            y -= 1
-        while y < H and lines_key[y][cx] != '#':
-            seg.add((cx, y)); y += 1
-        return seg
-
-    def build_slasher_los_map(lines_, slashers_xy):
+    def build_wanderer_spawning_map(lines_, wanderers):
         H, W = len(lines_), len(lines_[0])
         los = [[0 for _ in range(W)] for __ in range(H)]
-        for (sx, sy) in slashers_xy:
-            for (x, y) in los_cells_from(lines_, sx, sy):
-                los[y][x] = 1
-        return los  # 0/1 по всей карте
+        for w in wanderers:
+            state = w['param1']
+            if state != STATE_SPAWNING:
+                continue
+            time_to_spawn = w['param0']
+            wx, wy = w['x'], w['y']
+            los[wy][wx] = max(1 / time_to_spawn, los[wy][wx])
+        return los
 
-    def build_slasher_time_to_land(lines_, slashers_full):
-        """
-        Для каждой клетки c: T(c) = min_sl [ offset(state_sl) + min_{p in seg(c)} dist(sl -> p) + 1 ],
-        где seg(c) — отрезки видимости самой клетки (по строке/столбцу до стен).
-        """
+    def get_straight_line_cells(lines_, sx, sy, tx, ty):
         H, W = len(lines_), len(lines_[0])
-        INF = 10**6
-        key = tuple(lines_) if isinstance(lines_[0], str) else tuple(''.join(row) for row in lines_)
+        cells = set([(sx, sy)])
+        if tx == sx:
+            dy = np.sign(ty - sy)
+            y = sy + dy
+            while y < H and y >= 0 and (tx, ty) not in cells and lines_[y][sx] != '#':
+                cells.add((sx, y))
+                y += dy
+        elif ty == sy:
+            dx = np.sign(tx - sx)
+            x = sx + dx
+            while x < W and x >= 0 and (tx, ty) not in cells and lines_[sy][x] != '#':
+                cells.add((x, sy))
+                x += dx
+        else:
+            raise ValueError("target and slasher must stand on the straight line")
+        return cells
 
-        # BFS от каждого слэшера + его оффсет по состоянию
-        pre = []
-        for s in slashers_full:
-            dmap = bfs_dist_whole_grid(lines_, (s['x'], s['y']))
-            off = STATE_OFFSET.get(s.get('param1', STATE_WANDERING), 0)
-            pre.append((dmap, off))
+    def build_slasher_stalking_los_map(lines_, slashers, explorers):
+        H, W = len(lines_), len(lines_[0])
+        los = [[0 for _ in range(W)] for __ in range(H)]
+        for s in slashers:
+            state = s['param1']
+            if state != STATE_STALKING:
+                continue
+            time_to_rush = s['param0']
+            sx, sy = s['x'], s['y']
+            target_id = s['param2']
+            line_cells = None
+            for e in explorers:
+                if e['id'] == target_id:
+                    line_cells = get_straight_line_cells(lines_, sx, sy, e['x'], e['y'])
+                    break
+            if line_cells is not None:
+                for (x, y) in line_cells:
+                    los[y][x] = max(1 / time_to_rush, los[y][x])
+            else:
+                warnings.warn("LOS line_cells is None")
+        return los
 
-        out = [[INF for _ in range(W)] for __ in range(H)]
-        for cy in range(H):
-            for cx in range(W):
-                if lines_[cy][cx] == '#':
-                    continue
-                seg = rowcol_segment(key, W, H, cx, cy)
-                best = INF
-                for (px, py) in seg:
-                    for dmap, off in pre:
-                        d = dmap[py][px]
-                        if d >= INF:
-                            continue
-                        t = off + d + 1  # +1 на сам «дэш»
-                        if t < best:
-                            best = t
-                            if best == 1:  # быстрее не будет
-                                break
-                    if best == 1:
-                        break
-                out[cy][cx] = best
-        return out  # ints или INF
+    def build_slasher_spawning_los_map(lines_, slashers):
+        H, W = len(lines_), len(lines_[0])
+        los = [[0 for _ in range(W)] for __ in range(H)]
+        for s in slashers:
+            state = s['param1']
+            if state != STATE_SPAWNING:
+                continue
+            time_to_spawn = s['param0']
+            sx, sy = s['x'], s['y']
+            line_cells = set()
+            for x, y in [(sx, 0), (sx, H), (0, sy), (W, sy)]:
+                line_cells |= get_straight_line_cells(lines_, sx, sy, x, y)
+            if line_cells is not None:
+                for (x, y) in line_cells:
+                    los[y][x] = max(1 / time_to_spawn, los[y][x])
+            else:
+                warnings.warn("LOS line_cells is None")
+        return los
+
+    def build_slasher_wandering_los_map(lines_, slashers):
+        H, W = len(lines_), len(lines_[0])
+        los = [[0 for _ in range(W)] for __ in range(H)]
+        for s in slashers:
+            state = s['param1']
+            if state != STATE_WANDERING:
+                continue
+            sx, sy = s['x'], s['y']
+            line_cells = set()
+            for x, y in [(sx, 0), (sx, H), (0, sy), (W, sy)]:
+                line_cells |= get_straight_line_cells(lines_, sx, sy, x, y)
+            if line_cells is not None:
+                for (x, y) in line_cells:
+                    los[y][x] = 1
+            else:
+                warnings.warn("LOS line_cells is None")
+        return los
+
+    def build_slasher_stunned_map(lines_, slashers):
+        H, W = len(lines_), len(lines_[0])
+        los = [[0 for _ in range(W)] for __ in range(H)]
+        for s in slashers:
+            state = s['param1']
+            if state != STATE_STUNNED:
+                continue
+            time_to_wander = s['param0']
+            sx, sy = s['x'], s['y']
+            los[sy][sx] = max(1 / time_to_wander, los[sy][sx])
+        return los
 
     # ---------- основная логика ----------
     data = {}
@@ -600,52 +602,102 @@ def get_state_conv_ext(player_id, entities, lines, size):
     agent_pos = (ax, ay)
 
     # базовая карта (окно)
-    data['map'] = crop_symbol_map(lines, ax, ay, size)
+    
+    # data['map'] = crop_symbol_map(lines, ax, ay, size)
+    data['map'] = crop_map(lines, agent_pos, size, '#', MAP_MAP_NEW)
 
     # разбор сущностей
-    allies_xy, wanderers_xy = [], []
+    other_explorers, wanderers = [], []
     slashers_xy = []
-    slashers_full = []  # [{'x':..,'y':..,'param1':state}, ...]
+    explorers = []
+    slashers = []
+    light_effects = []
+    plan_effects = []
 
     for e in entities:
         k = e.get('kind', '')
-        if k == 'EXPLORER' and e['id'] != player_id:
-            allies_xy.append((e['x'], e['y']))
+        if k == 'EXPLORER':
+            if e['id'] != player_id:
+                other_explorers.append(e)
+            explorers.append(e)
         elif k == 'WANDERER':
-            wanderers_xy.append((e['x'], e['y']))
+            wanderers.append(e)
+        elif k == 'EFFECT_LIGHT':
+            light_effects.append(e)
+        elif k == 'EFFECT_PLAN':
+            plan_effects.append(e)
         elif k == 'SLASHER':
             slashers_xy.append((e['x'], e['y']))
-            slashers_full.append({'x': e['x'], 'y': e['y'], 'param1': e.get('param1', STATE_WANDERING)})
+            slashers.append(e)
+
+    w_wanderers = [w for w in wanderers if w['param1'] == STATE_WANDERING]
+    s_wanderers = [w for w in wanderers if w['param1'] == STATE_SPAWNING]
+    del wanderers
 
     # агрегаты: COUNT
-    data['ALLY_COUNT']  = norm01_map(count_map(allies_xy, agent_pos, size, clip=3), denom=3.0, invert=False)
-    data['ENEMY_COUNT'] = norm01_map(count_map(wanderers_xy + slashers_xy, agent_pos, size, clip=3), denom=3.0, invert=False)
+    data['EXPLORER_COUNT']  = norm01_map(count_map(other_explorers, agent_pos, size, clip=3), denom=3.0, invert=False)
+    data['WANDERER_COUNT'] = norm01_map(count_map(w_wanderers, agent_pos, size, clip=3), denom=3.0, invert=False)
+    data['SLASHER_COUNT'] = norm01_map(count_map(slashers, agent_pos, size, clip=3), denom=3.0, invert=False)
 
     # агрегаты: MIN-DIST (локальный BFS в окне)
     max_d = 2 * size + 1
-    ally_md  = bfs_min_dist_in_window(lines, allies_xy,  size, agent_pos, max_d=max_d)
-    enemy_md = bfs_min_dist_in_window(lines, wanderers_xy + slashers_xy, size, agent_pos, max_d=max_d)
-    data['ALLY_MIN_DIST']  = norm01_map(ally_md,  denom=max_d, invert=False)
-    data['ENEMY_MIN_DIST'] = norm01_map(enemy_md, denom=max_d, invert=False)
+    # ally_md  = bfs_min_dist_in_window(lines, other_explorers,  size, agent_pos, max_d=max_d)
+    # enemy_md = bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d)
+    # slashers_md = bfs_min_dist_in_window(lines, slashers_xy, size, agent_pos, max_d=max_d)
+    data['EXPLORER_MIN_DIST']  = norm01_map(
+        bfs_min_dist_in_window(lines, other_explorers,  size, agent_pos, max_d=max_d),
+        denom=max_d, invert=False
+    )
+    data['WANDERER_MIN_DIST'] = norm01_map(
+        bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d),
+        denom=max_d, invert=False
+    )
+    # data['SLASHER_MIN_DIST'] = norm01_map(slashers_md, denom=max_d, invert=False)
+
+    data['WANDERER_SPAWNING'] = crop_map(
+        build_wanderer_spawning_map(lines, s_wanderers),
+        agent_pos, size, pad_val=0,
+    )
 
     # слэшеры: LOS прямо сейчас
-    sl_los_full = build_slasher_los_map(lines, slashers_xy)
-    sl_los_crop = crop_numeric_map(sl_los_full, agent_pos, size, pad_val=0)
-    data['SLASHER_LOS'] = norm01_map(sl_los_crop, denom=1.0, invert=False)  # уже 0/1
+    # sl_los_crop = crop_numeric_map(sl_los_full, agent_pos, size, pad_val=0)
+    # data['SLASHER_LOS'] = norm01_map(sl_los_crop, denom=1.0, invert=False)  # уже 0/1
+    data['SLASHER_STALKING'] = crop_map(
+        build_slasher_stalking_los_map(lines, slashers, explorers),
+        agent_pos, size, pad_val=0,
+    )
 
-    # слэшеры: минимальное время приземления с учётом FSM
-    sl_time_full = build_slasher_time_to_land(lines, slashers_full)
-    # нормируем в пределах локального контекста: «дойти до края окна и дэш» + запас
-    max_t_norm = (2 * size + 1) + 7  # 7 ~ max(STATE_OFFSET)+1
-    sl_time_crop = crop_numeric_map(sl_time_full, agent_pos, size, pad_val=max_t_norm)
-    data['SLASHER_TIME_TO_LAND'] = norm01_map(sl_time_crop, denom=float(max_t_norm), invert=False)
-    # invert=True: малое время -> высокий «heat» (опаснее)
+    data['SLASHER_WANDERING'] = crop_map(
+        build_slasher_wandering_los_map(lines, slashers),
+        agent_pos, size, pad_val=0,
+    )
+
+    data['SLASHER_SPAWNING'] = crop_map(
+        build_slasher_spawning_los_map(lines, slashers),
+        agent_pos, size, pad_val=0,
+    )
+
+    data['SLASHER_STUNNED'] = crop_map(
+        build_slasher_stunned_map(lines, slashers),
+        agent_pos, size, pad_val=0,
+    )
+    
+    data['EFFECT_LIGHT'] = norm01_map(
+        bfs_min_dist_in_window(lines, light_effects, size, agent_pos, max_d=6),
+        denom=6, invert=True
+    )
+    
+    data['EFFECT_PLAN'] = norm01_map(
+        bfs_min_dist_in_window(lines, plan_effects, size, agent_pos, max_d=3),
+        denom=3, invert=True
+    )
 
     # ваши прежние каналы по FEATURE_ENTITY_DICT (без клиппинга координат!)
     S = 2 * size + 1
     for kind, features in FEATURE_ENTITY_DICT.items():
         for feature in features:
             feat_map = [[0] * S for _ in range(S)]
+            border_map = [[0] * S for _ in range(S)]
             if kind == 'EXPLORER':
                 feat_map[size][size] = agent.get(feature, 0)
             for e in entities:
@@ -656,9 +708,35 @@ def get_state_conv_ext(player_id, entities, lines, size):
                 ex, ey = e['x'], e['y']
                 if in_window(ex, ey, ax, ay, size):
                     dx, dy = ex - ax, ey - ay
-                    feat_map[dy + size][dx + size] = e.get(feature, 0)
+                    feat_map[dy + size][dx + size] = max(
+                        e[feature],
+                        feat_map[dy + size][dx + size]
+                    )
+                else:
+                    dx, dy = ex - ax, ey - ay
+                    dx = max(min(dx, size), -size)
+                    dy = max(min(dy, size), -size)
+                    border_map[dy + size][dx + size] = int(e[feature] > 0)
             data[f'{kind}_{feature}'] = feat_map
+            if f'{kind}_{feature}' in [
+                'EXPLORER_param0',
+                'WANDERER_param0',
+                'SLASHER_param0',
+                'EFFECT_SHELTER_param0',
+            ]:
+                data[f'{kind}_{feature}_border'] = border_map
 
+    data['EXPLORER_param0'] = norm01_map(data['EXPLORER_param0'], denom=250.0, invert=False)
+    data['EXPLORER_param1'] = norm01_map(data['EXPLORER_param1'], denom=3.0, invert=False)
+    data['EXPLORER_param2'] = norm01_map(data['EXPLORER_param2'], denom=3.0, invert=False)
+    data['WANDERER_param0'] = norm01_map(data['WANDERER_param0'], denom=30.0, invert=False)
+    data['EFFECT_SHELTER_param0'] = norm01_map(data['EFFECT_SHELTER_param0'], denom=10.0, invert=False)
+    del data['WANDERER_param1']
+    del data['SLASHER_param0']
+    del data['SLASHER_param1']
+    del data['EFFECT_PLAN_param0']
+    del data['EFFECT_LIGHT_param0']
+    del data['EFFECT_YELL_param0']
     return data
 
 
@@ -975,12 +1053,15 @@ class ConvExtEncoder:
             'EFFECT_LIGHT_param0',
             'EFFECT_SHELTER_param0',
             'EFFECT_YELL_param0',
-            'ALLY_COUNT',
-            'ALLY_MIN_DIST',
-            'ENEMY_COUNT',
-            'ENEMY_MIN_DIST',
-            'SLASHER_LOS',
-            'SLASHER_TIME_TO_LAND'
+            'EXPLORER_COUNT',
+            'EXPLORER_MIN_DIST',
+            'WANDERER_COUNT',
+            'WANDERER_MIN_DIST',
+            'SLASHER_COUNT',
+            'SLASHER_STALKING',
+            'SLASHER_WANDERING',
+            'SLASHER_SPAWNING',
+            'SLASHER_STUNNED',
             ]:
             features.append(state[k])
         data = np.array([features])

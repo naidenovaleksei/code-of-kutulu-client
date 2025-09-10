@@ -25,13 +25,32 @@ class DQNStateEncoderConv(BaseStateEncoder):
             'EFFECT_YELL_param0'
         ]
         if is_ext:
-            self.layer_keys += [
-                'ALLY_COUNT',
-                'ALLY_MIN_DIST',
-                'ENEMY_COUNT',
-                'ENEMY_MIN_DIST',
-                'SLASHER_LOS',
-                'SLASHER_TIME_TO_LAND'
+            self.layer_keys = [
+                'map',
+                'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
+                'WANDERER_param0', #'WANDERER_param1',
+                # 'SLASHER_param0', 'SLASHER_param1',
+                # 'EFFECT_PLAN_param0',
+                # 'EFFECT_LIGHT_param0',
+                'EFFECT_SHELTER_param0',
+                # 'EFFECT_YELL_param0',
+                'EXPLORER_COUNT',
+                'EXPLORER_MIN_DIST',
+                'WANDERER_COUNT',
+                'WANDERER_MIN_DIST',
+                'WANDERER_SPAWNING',
+                'SLASHER_COUNT',
+                'SLASHER_STALKING',
+                'SLASHER_WANDERING',
+                'SLASHER_SPAWNING',
+                'SLASHER_STUNNED',
+                'EFFECT_LIGHT',
+                'EFFECT_PLAN',
+                'EXPLORER_param0_border',
+                'WANDERER_param0_border',
+                'SLASHER_param0_border',
+                'EFFECT_SHELTER_param0_border',
+                # 'SLASHER_TIME_TO_LAND'
             ]
     
     def layers_count(self):
