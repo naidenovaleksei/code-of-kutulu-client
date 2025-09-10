@@ -18,6 +18,9 @@ data2 = b'data2data2data2'
 
 mode = 'mode'
 SIZE = 3
+"""
+experiment: ''
+"""
 
 
 MOVE_REL_POS = {
@@ -517,6 +520,21 @@ def get_state_conv_ext(player_id, entities, lines, size):
             raise ValueError("target and slasher must stand on the straight line")
         return cells
 
+    def get_close_target_cells(lines_, sx, sy, tx, ty):
+        H, W = len(lines_), len(lines_[0])
+        cells = set()
+        if tx == sx:
+            for y in [ty + 1, ty - 1]:
+                if lines_[y][tx] != '#':
+                    cells.add((tx, y))
+        elif ty == sy:
+            for x in [tx + 1, tx - 1]:
+                if lines_[ty][x] != '#':
+                    cells.add((x, ty))
+        else:
+            raise ValueError("target and slasher must stand on the straight line")
+        return cells
+
     def build_slasher_stalking_los_map(lines_, slashers, explorers):
         H, W = len(lines_), len(lines_[0])
         los = [[0 for _ in range(W)] for __ in range(H)]
@@ -530,13 +548,11 @@ def get_state_conv_ext(player_id, entities, lines, size):
             line_cells = None
             for e in explorers:
                 if e['id'] == target_id:
-                    line_cells = get_straight_line_cells(lines_, sx, sy, e['x'], e['y'])
-                    break
-            if line_cells is not None:
-                for (x, y) in line_cells:
-                    los[y][x] = max(1 / time_to_rush, los[y][x])
-            else:
-                warnings.warn("LOS line_cells is None")
+                    tx, ty = e['x'], e['y']
+                    los[ty][tx] = max(1 / time_to_rush, los[ty][tx])
+                    line_cells = get_close_target_cells(lines_, sx, sy, tx, ty)
+                    for (x, y) in line_cells:
+                        los[y][x] = max(1 / (time_to_rush + 1), los[y][x])
         return los
 
     def build_slasher_spawning_los_map(lines_, slashers):
@@ -551,11 +567,8 @@ def get_state_conv_ext(player_id, entities, lines, size):
             line_cells = set()
             for x, y in [(sx, 0), (sx, H), (0, sy), (W, sy)]:
                 line_cells |= get_straight_line_cells(lines_, sx, sy, x, y)
-            if line_cells is not None:
-                for (x, y) in line_cells:
-                    los[y][x] = max(1 / time_to_spawn, los[y][x])
-            else:
-                warnings.warn("LOS line_cells is None")
+            for (x, y) in line_cells:
+                los[y][x] = max(1 / time_to_spawn, los[y][x])
         return los
 
     def build_slasher_wandering_los_map(lines_, slashers):
@@ -569,11 +582,8 @@ def get_state_conv_ext(player_id, entities, lines, size):
             line_cells = set()
             for x, y in [(sx, 0), (sx, H), (0, sy), (W, sy)]:
                 line_cells |= get_straight_line_cells(lines_, sx, sy, x, y)
-            if line_cells is not None:
-                for (x, y) in line_cells:
-                    los[y][x] = 1
-            else:
-                warnings.warn("LOS line_cells is None")
+            for (x, y) in line_cells:
+                los[y][x] = 1
         return los
 
     def build_slasher_stunned_map(lines_, slashers):
@@ -1047,21 +1057,24 @@ class ConvExtEncoder:
         for k in [
             'map',
             'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
-            'WANDERER_param0', 'WANDERER_param1',
-            'SLASHER_param0', 'SLASHER_param1',
-            'EFFECT_PLAN_param0',
-            'EFFECT_LIGHT_param0',
+            'WANDERER_param0',
             'EFFECT_SHELTER_param0',
-            'EFFECT_YELL_param0',
             'EXPLORER_COUNT',
             'EXPLORER_MIN_DIST',
             'WANDERER_COUNT',
             'WANDERER_MIN_DIST',
+            'WANDERER_SPAWNING',
             'SLASHER_COUNT',
             'SLASHER_STALKING',
             'SLASHER_WANDERING',
             'SLASHER_SPAWNING',
             'SLASHER_STUNNED',
+            'EFFECT_LIGHT',
+            'EFFECT_PLAN',
+            'EXPLORER_param0_border',
+            'WANDERER_param0_border',
+            'SLASHER_param0_border',
+            'EFFECT_SHELTER_param0_border',
             ]:
             features.append(state[k])
         data = np.array([features])
