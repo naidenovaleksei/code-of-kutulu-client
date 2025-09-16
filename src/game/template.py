@@ -650,18 +650,29 @@ def get_state_conv_ext(player_id, entities, lines, size):
     data['SLASHER_COUNT'] = norm01_map(count_map(slashers, agent_pos, size, clip=3), denom=3.0, invert=False)
 
     # агрегаты: MIN-DIST (локальный BFS в окне)
-    max_d = 2 * size + 1
+    # max_d = 2 * size + 1
+    max_d = 20
     # ally_md  = bfs_min_dist_in_window(lines, other_explorers,  size, agent_pos, max_d=max_d)
     # enemy_md = bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d)
     # slashers_md = bfs_min_dist_in_window(lines, slashers_xy, size, agent_pos, max_d=max_d)
     data['EXPLORER_MIN_DIST']  = norm01_map(
-        bfs_min_dist_in_window(lines, other_explorers,  size, agent_pos, max_d=max_d),
+        crop_map(
+            bfs_min_dist_in_window(lines, other_explorers,  7, agent_pos, max_d=max_d),
+            (7, 7), size, pad_val=0,
+        ),
         denom=max_d, invert=False
     )
-    data['WANDERER_MIN_DIST'] = norm01_map(
-        bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d),
+    data['WANDERER_MIN_DIST']  = norm01_map(
+        crop_map(
+            bfs_min_dist_in_window(lines, w_wanderers,  7, agent_pos, max_d=max_d),
+            (7, 7), size, pad_val=1,
+        ),
         denom=max_d, invert=False
     )
+    # data['WANDERER_MIN_DIST'] = norm01_map(
+    #     bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d),
+    #     denom=max_d, invert=False
+    # )
     # data['SLASHER_MIN_DIST'] = norm01_map(slashers_md, denom=max_d, invert=False)
 
     data['WANDERER_SPAWNING'] = crop_map(

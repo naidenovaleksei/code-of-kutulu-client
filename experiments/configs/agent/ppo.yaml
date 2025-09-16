@@ -1,6 +1,7 @@
 train: true
 type: ppo
 state_type: conv
+use_deep: false
 
 # Model parameters
 model_params:
@@ -20,6 +21,7 @@ scheduler_params:
 entropy_coef: 1.4
 value_loss_coef: 0.5
 terminate_loss_coef: 0.0
+occupation_loss_coef: 0.0
 clip_ratio: 0.04
 ppo_epochs: 4
 mini_batch_size: 16
