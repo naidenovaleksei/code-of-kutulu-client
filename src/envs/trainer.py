@@ -384,7 +384,7 @@ class Trainer:
                 for loss in self.agents[0].get_metric_names():
                     if loss not in metrics:
                         metrics[loss] = [None] * len(self.agents)
-                    metrics[loss][i] = agent_metrics[loss]
+                    metrics[loss][i] = agent_metrics.get(loss)
             else:
                 for loss in self.agents[0].get_metric_names():
                     if loss not in metrics:

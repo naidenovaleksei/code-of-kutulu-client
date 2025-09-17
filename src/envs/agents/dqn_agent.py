@@ -117,6 +117,8 @@ class DQNAgentBase(NNAgent):
         # Move models to device
         self.model = self.model.to(self.device)
         self.tgt_net = copy.deepcopy(self.model).to(self.device)
+        self.game_over = False
+        self.episode_idx = 0
         
         if loss == 'mse':
             self.criterion = nn.MSELoss(reduction='none')
@@ -151,12 +153,16 @@ class DQNAgentBase(NNAgent):
                 self.scheduler.step()
         else:
             new_state = self.get_state(player_id)
+        self.game_over = game_over
         exp = Experience(state, action, reward, game_over, new_state, observation)
         self.episode_buffer.append(exp)
 
     def train_step(self):
         if self.train and len(self.episode_buffer) >= self.replay_start_size:
             self._train_model()
+            if self.game_over:
+                self.metrics_aggregator.save_metrics(self.episode_idx)
+                self.episode_idx += 1
 
     def _train_model(self):
         if self.frame_idx >= self.sync_target_frames:
@@ -216,14 +222,20 @@ class DQNAgentBase(NNAgent):
             # Get absolute TD errors as priorities
             priorities = losses.detach().cpu().numpy()
             self.episode_buffer.update_priorities(indices, priorities)
-        
-        if self.last_loss == np.inf:
-            self.last_loss = loss.item()
-        else:
-            self.last_loss = 0.05 * loss.item() + (1 - 0.05) * self.last_loss
+
+        self.metrics_aggregator.add_metrics({
+            'loss': loss.item(),
+            'eps': self.eps,
+        })
 
         if self.verbose:
             print(f"Loss: {loss.item():.4f}")
+
+    def get_metric_names(self):
+        return [
+            'loss',
+            'eps',
+        ]
 
 
 class DQNAgent(DQNAgentBase):

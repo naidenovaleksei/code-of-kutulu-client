@@ -1,0 +1,39 @@
+train: true
+type: qdn_conv
+action_space_n: 8
+state_type: conv
+
+# Model parameters
+size: 3
+model_params:
+  fc_dim: 16
+  conv_dim: 8
+
+# Buffer parameters
+prioritized_replay: true
+buffer_params:
+  alpha: 0.6
+  beta: 0.4
+  capacity: 10000
+  need_aug: true
+
+# Training parameters
+replay_start_size: 1000
+batch_size: 32
+sync_target_frames: 1000
+gamma: 0.99
+lr: 1e-6
+optimizer: adamw
+scheduler_params:
+  type: cosine
+  T_max: ${trainer.num_experiments}
+
+epsilon_params:
+  start: 1
+  final: 0.05
+  reset: 10000
+  reset_coef: 1.5
+  decay: ${eval:'${trainer.num_experiments} * ${trainer.num_envs} * 50'}
+
+explicit_random: false
+# checkpoint_dir: ${oc.env:HOME}/projects/kutulu_artifacts/experiments/outputs/2025-06-22/20250622-045641/agent0/1000
