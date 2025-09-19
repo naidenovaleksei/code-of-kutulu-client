@@ -3,6 +3,7 @@ from src.game.template import (
     get_state,
     get_distances,
     get_state_ext,
+    get_state_ext_v2,
     REL_POSITIONS,
     get_state_conv,
     get_state_conv_ext,
@@ -121,6 +122,19 @@ class KutuluClosestExtObserver(KutuluClosestObserver):
         player_pos = (entities[0].x, entities[0].x)
         entities = [e.to_dict() for e in entities]
         state = get_state_ext(player_pos, entities, self.env.map,
+                          get_distances_func=self.get_distances_cached())
+        return state
+
+
+class KutuluClosestExtv2Observer(KutuluClosestObserver):
+    def __init__(self, env: KutuluWorldEnv):
+        super(KutuluClosestExtv2Observer, self).__init__(env)
+
+    def get_state(self, player_id: int):
+        entities = self.env.get_obs(player_id).entities
+        assert entities[0].id == player_id
+        entities = [e.to_dict() for e in entities]
+        state = get_state_ext_v2(player_id, entities, self.env.map,
                           get_distances_func=self.get_distances_cached())
         return state
 

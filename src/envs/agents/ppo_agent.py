@@ -19,8 +19,12 @@ from src.envs.agents.actor_agent import (
 from src.envs.agents.dqn_agent_conv import (
     DQNStateEncoderConv,
 )
+from src.envs.agents.dqn_agent_ext import (
+    DQNStateEncoderExtv2,
+)
 from src.envs.agents import AgentObservation
 from src.envs.models.conv_a2c_model import ConvA2CModel, ConvA2CDeepModel
+from src.envs.models.ext_state_v2_model import ExtStatev2A2AModel
 from src.envs.reward_shaper import PotentialRewardShaper, RewardShaper
 
 
@@ -73,18 +77,19 @@ class PPOBuffer:
         turns_to_death = np.arange(len(augmented_data))[::-1] + 1
         
         states, actions, rewards, dones, other_rewards, observations = zip(*experiences)
-        size = len(states[0]['WANDERER_COUNT'])
-        sanity_diffs = np.diff(np.array([obs.obs.entities[0].param0 for obs in observations]))
-        is_occupied = [
-            int(
-                max(
-                    state['WANDERER_COUNT'][size // 2][size // 2],
-                    state['SLASHER_COUNT'][size // 2][size // 2],
-                ) > 0 or \
-                sanity_diff < -20
-            )
-            for state, sanity_diff in zip(states[1:], sanity_diffs)
-        ] + [-1]
+        is_occupied = np.zeros(len(states), dtype=np.bool)
+        # size = len(states[0]['WANDERER_COUNT'])
+        # sanity_diffs = np.diff(np.array([obs.obs.entities[0].param0 for obs in observations]))
+        # is_occupied = [
+        #     int(
+        #         max(
+        #             state['WANDERER_COUNT'][size // 2][size // 2],
+        #             state['SLASHER_COUNT'][size // 2][size // 2],
+        #         ) > 0 or \
+        #         sanity_diff < -20
+        #     )
+        #     for state, sanity_diff in zip(states[1:], sanity_diffs)
+        # ] + [-1]
 
         # Get recalculated rewards and bonus averages
         result = self.reward_shaper.recalculate_rewards(
@@ -137,7 +142,8 @@ class PPOAgent(ActorAgent):
                  terminate_loss_coef=0, occupation_loss_coef=0,
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5, use_deep=False,
-                 gae_lambda=0.95, reward_params=None, need_aug=False, **kw):
+                 gae_lambda=0.95, reward_params=None, need_aug=False,
+                 encode_states_first=True, **kw):
         """
         PPO (Proximal Policy Optimization) Agent with Clipped Objective
 
@@ -158,30 +164,36 @@ class PPOAgent(ActorAgent):
             max_grad_norm: Maximum gradient norm for clipping
             gae_lambda: Lambda parameter for GAE (Generalized Advantage Estimation)
         """
-        if state_type == 'conv':
-            self.state_encoder = DQNStateEncoderConv(is_ext=False)
-        elif state_type == 'conv_ext':
-            self.state_encoder = DQNStateEncoderConv(is_ext=True)
-        else:
-            raise ValueError("PPO agent only supports 'conv' and 'conv_ext' state type")
-
         action_space_n = len(actions)
-        self.size = model_params.pop('size', 3)
-        self.use_deep = use_deep
-        if use_deep:
-            model = ConvA2CDeepModel(
+        if state_type in ['conv', 'conv_ext']:
+            if state_type == 'conv':
+                self.state_encoder = DQNStateEncoderConv(is_ext=False)
+            elif state_type == 'conv_ext':
+                self.state_encoder = DQNStateEncoderConv(is_ext=True)
+            self.size = model_params.pop('size', 3)
+            if use_deep:
+                model = ConvA2CDeepModel(
+                    num_classes=action_space_n,
+                    size=self.size,
+                    in_channels=self.state_encoder.layers_count(),
+                    **model_params
+                )
+            else:
+                model = ConvA2CModel(
+                    num_classes=action_space_n,
+                    size=self.size,
+                    in_channels=self.state_encoder.layers_count(),
+                    **model_params
+                )
+        elif state_type == 'closest_ext_v2':
+            self.state_encoder = DQNStateEncoderExtv2()
+            model = ExtStatev2A2AModel(
                 num_classes=action_space_n,
-                size=self.size,
-                in_channels=self.state_encoder.layers_count(),
                 **model_params
             )
         else:
-            model = ConvA2CModel(
-                num_classes=action_space_n,
-                size=self.size,
-                in_channels=self.state_encoder.layers_count(),
-                **model_params
-            )
+            raise ValueError("PPO agent only supports 'conv', 'conv_ext' and 'closest_ext_v2' state type")
+
         super(PPOAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -205,6 +217,7 @@ class PPOAgent(ActorAgent):
         # Replace the episode buffer with PPO buffer
         self.episode_buffer = ppo_buffer
         self.episode_buffer.start_episode()
+        self.encode_states_first = encode_states_first
         
         # PPO-specific parameters
         self.entropy_coef = entropy_coef
@@ -368,7 +381,10 @@ class PPOAgent(ActorAgent):
         self.model.train()
 
         # Encode states
-        states_tensor = self.episode_buffer.encode_states(states)
+        if self.encode_states_first:
+            states_tensor = self.episode_buffer.encode_states(states)
+        else:
+            states = np.array(states)
         actions_tensor = torch.tensor(actions, dtype=torch.long)
         old_log_probs_tensor = torch.tensor(old_log_probs, dtype=torch.float32)
         turns_to_death_tensor = torch.tensor(turns_to_death, dtype=torch.float32)
@@ -398,7 +414,10 @@ class PPOAgent(ActorAgent):
                     continue
                 
                 # Get mini-batch data
-                batch_states = states_tensor[batch_indices]
+                if self.encode_states_first:
+                    batch_states = states_tensor[batch_indices]
+                else:
+                    batch_states = self.episode_buffer.encode_states(states[batch_indices.tolist()])
                 batch_actions = actions_tensor[batch_indices]
                 batch_old_log_probs = old_log_probs_tensor[batch_indices]
                 batch_returns = returns_tensor[batch_indices]

@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from src.envs.agents.dqn_agent import (
     DQNAgentBase,
 )
@@ -8,6 +9,7 @@ from src.envs.buffers import (
 from src.envs.models.ext_state_model import ExtStateModel
 from src.game.template import (
     parse_state,
+    parse_state_v2,
     ENTITY_TOKENS,
 )
 
@@ -26,6 +28,31 @@ class DQNStateEncoderExt(BaseStateEncoder):
             data['entity_dir'].append(dir_list)
         if return_tensors:
             data = {k: torch.tensor(v) for k,v in data.items()}
+        return data
+
+
+def listdict_to_dictnp(list_of_dicts, return_tensors):
+    if not list_of_dicts:
+        return {}
+
+    def recurse(values):
+        # all values are from the same key across items
+        first = values[0]
+        if isinstance(first, dict):
+            # nested dict -> recurse per key
+            return {k: recurse([v[k] for v in values]) for k in first.keys()}
+        else:
+            # assume scalar, list, or np.array -> convert to np.array and stack
+            if return_tensors:
+                return torch.stack([torch.tensor(v, dtype=torch.float32) for v in values])
+            return np.stack([np.array(v) for v in values])
+
+    return {k: recurse([d[k] for d in list_of_dicts]) for k in list_of_dicts[0].keys()}
+
+
+class DQNStateEncoderExtv2(BaseStateEncoder):
+    def encode_states(self, states, return_tensors=True):
+        data = listdict_to_dictnp([parse_state_v2(state) for state in states], return_tensors)
         return data
 
 

@@ -120,6 +120,10 @@ FEATURE_ENTITY_DICT = {
     'EFFECT_SHELTER': ['param0'],
     'EFFECT_YELL': ['param0']
 }
+STATE_MAP = {
+    'WANDERER': np.arange(5),
+    'SLASHER': np.arange(5) + 5,
+}
 
 class UnreachedPositionError(Exception):
     pass
@@ -189,13 +193,13 @@ def parse_desc(line):
         "param2": int(eparam2),
     }
 
-def parse_dist_dir(e):
-    encoded_dir = e['dir']
+def parse_dir(e, dir_feature='dir'):
+    encoded_dir = e[dir_feature]
     if encoded_dir is None:
         return [0., 0., 0., 0., 0.]
     result = [0., 0., 0., 0., 0.]
     for _dir in encoded_dir:
-        result[_dir] = 1
+        result[_dir] = 1.
     return result
 
 def parse_kind(e):
@@ -224,7 +228,7 @@ def parse_state(state, max_entity_count=MAX_ENTITY_COUNT):
         parse_kind(e) for e in state
     ]
     features_list = [parse_features(e) for e in state]
-    dir_list = [parse_dist_dir(e) for e in state]
+    dir_list = [parse_dir(e) for e in state]
     for _ in range(max_entity_count - len(state)):
         kind_list.append(0)
         features_list.append([0., 0., 0., 0., 0., 0., 0., 0.])
@@ -242,6 +246,114 @@ def parse_state_by_kind(state, kinds=[
             state_by_kind, MAX_ENTITY_COUNT_BY_KIND[kind])
         result[kind] = (kind_list, features_list, dir_list)
     return result
+
+def parse_dist_dir(e, dir_field, dist_field):
+    if e is None:
+        return np.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+    return np.array(parse_dir(e, dir_field) + [1 / (e[dist_field] + 1)]) 
+
+def parse_features_v2(e, fields):
+    if e is None:
+        return np.ones(len(fields))
+    return np.array([e[field] for field in fields], dtype=np.float32)
+
+def parse_minions(state, max_entity_count):
+    wanderers_features = sorted(state['wanderers_features'], key=lambda e: e['dist'])
+    slashers_features = state['slashers_features'] # cnt <= 4
+
+    for e in slashers_features:
+        e['common_state'] = STATE_MAP['SLASHER'][e['state']]
+    for e in wanderers_features:
+        e['common_state'] = STATE_MAP['WANDERER'][e['state']]
+
+    minions = (slashers_features + wanderers_features)[:max_entity_count]
+    n_minions = len(minions)
+    if n_minions < max_entity_count:
+        minions.extend([None] * (max_entity_count - n_minions))
+
+    return {
+        'features': np.array([
+            1 / parse_features_v2(e, ['left']) for e in minions
+        ]),
+        'dirs': np.array([
+            parse_dist_dir(e, 'dir', 'dist') for e in minions
+        ]),
+        'target_dirs': np.array([
+            parse_dist_dir(e, 'target_dir', 'target_dist') for e in minions
+        ]),
+        'kind_states': np.array([
+            parse_features_v2(e, ['common_state']) for e in minions
+        ]),
+        'mask': np.concatenate((np.ones(n_minions), np.zeros(max_entity_count - n_minions))),
+    }
+
+def parse_explorers(state, max_entity_count=4):
+    explorers = list(state['explorers_features'])
+    for e in explorers:
+        e['common_state'] = 0
+    n_explorers = len(explorers)
+    if n_explorers < max_entity_count:
+        explorers.extend([None] * (max_entity_count - n_explorers))
+    return {
+        'features': np.array([
+            parse_features_v2(e, ['sanity', 'plans_left', 'lights_left', 'can_yell']) for e in explorers
+        ]),
+        'dirs': np.array([
+            parse_dist_dir(e, 'dir', 'dist') for e in explorers
+        ]),
+        'kind_states': np.array([
+            parse_features_v2(e, ['common_state']) for e in explorers
+        ]),
+        'mask': np.concatenate((np.ones(n_explorers), np.zeros(max_entity_count - n_explorers))),
+    }
+
+def parse_shelters(state, max_entity_count=4):
+    shelters = list(state['shelters_features'])
+    n_shelters = len(shelters)
+    if n_shelters < max_entity_count:
+        shelters.extend([None] * (max_entity_count - n_shelters))
+    return {
+        'features': np.array([
+            parse_features_v2(e, ['left']) for e in shelters
+        ]),
+        'dirs': np.array([
+            parse_dist_dir(e, 'dir', 'dist') for e in shelters
+        ]),
+        'mask': np.concatenate((np.ones(n_shelters), np.zeros(max_entity_count - n_shelters))),
+    }
+
+def parse_effects(state, max_entity_count=4):
+    for e in state['plans_features']:
+        e['common_state'] = 0
+    for e in state['lights_features']:
+        e['common_state'] = 1
+
+    effects = sorted(state['plans_features'] + state['lights_features'], key=lambda e: e['dist'])[:max_entity_count]
+
+    n_effects = len(effects)
+    if n_effects < max_entity_count:
+        effects.extend([None] * (max_entity_count - n_effects))
+    return {
+        'features': np.array([
+            parse_features_v2(e, ['left', 'by_me']) for e in effects
+        ]),
+        'dirs': np.array([
+            parse_dist_dir(e, 'dir', 'dist') for e in effects
+        ]),
+        'kind_states': np.array([
+            parse_features_v2(e, ['common_state']) for e in effects
+        ]),
+        'mask': np.concatenate((np.ones(n_effects), np.zeros(max_entity_count - n_effects))),
+    }
+
+def parse_state_v2(state, max_minion_count=10):
+    return {
+        'minions': parse_minions(state, max_minion_count),
+        'explorers': parse_explorers(state),
+        'effects': parse_effects(state),
+#         'shelters': parse_shelters(state),
+        'player': parse_features_v2(state['player_features'], ['sanity', 'plans_left', 'lights_left', 'effect_left', 'can_yell'])
+    }
 
 def get_all_distances(entities, player_pos, lines, find_path_func=find_path):
     all_distances = defaultdict(list)
@@ -309,21 +421,122 @@ def get_state(player_pos, entities, lines, get_distances_func=get_distances):
     )
 
 
-def get_state_ext(player_pos, entities, lines, get_distances_func=get_distances):
-    ENTITY_FIELDS = ['kind', 'rel_x', 'rel_y', 'param0', 'param1', 'param2', 'dist', 'dir', 'raw_dist', 'on_los']
-    
+def get_state_ext(player_pos, entities, lines, get_distances_func=get_distances,
+                  skip_unreachable=False,
+                  entity_fields = [
+                      'kind',
+                      'rel_x', 'rel_y',
+                      'param0', 'param1', 'param2',
+                      'dist', 'dir', 'raw_dist',
+                      'on_los']):
     entities_features = []
     for e in entities[1:]:
         distances = get_distances_func([e], player_pos, lines)
         _dir, _dist = get_min_direction_and_distance(distances)
+        if _dist is None and skip_unreachable:
+            continue
+        e = dict(e)
         e['rel_x'] = e['x'] - player_pos[0]
         e['rel_y'] = e['y'] - player_pos[1]
         e['dist'] = _dist
         e['dir'] = _dir
         e['raw_dist'] = abs(e['rel_x']) + abs(e['rel_y'])
         e['on_los'] = (e['rel_x'] == 0 or e['rel_y'] == 0) and e['raw_dist'] == e['dist']
-        e = {k: v for k,v in e.items() if k in ENTITY_FIELDS}
+        e['can_yell'] = e.get('can_yell', False)
+        e['id'] = e.get('id', -1)
+        e = {k: v for k,v in e.items() if k in entity_fields}
         entities_features.append(e)
+    return entities_features
+
+
+def get_state_ext_v2(player_id, entities, lines, get_distances_func=get_distances):
+    entity_fields = [
+        'kind',
+        'rel_x', 'rel_y',
+        'param0', 'param1', 'param2',
+        'dist', 'dir', 'raw_dist',
+        'on_los',
+        'can_yell', 'id'
+    ]
+    agent_entity = None
+    for e in entities:
+        if e['id'] == player_id:
+            agent_entity = e
+            break
+    assert agent_entity is not None
+    player_pos = agent_entity['x'], agent_entity['y']
+    state_v1 = get_state_ext(player_pos, entities, lines,
+                             get_distances_func=get_distances_func,
+                             skip_unreachable=True,
+                             entity_fields=entity_fields)
+    explorers = {e['id']: e for e in state_v1 if e['kind'] == 'EXPLORER'}
+    entities_features = {}
+    entities_features['player_features'] = {
+        'sanity': agent_entity['param0'],
+        'plans_left': agent_entity['param1'],
+        'lights_left': agent_entity['param2'],
+        'effect_left': agent_entity['effect_left'],
+        'can_yell': agent_entity['can_yell'],
+    }
+    entities_features['explorers_features'] = [
+        {
+            'sanity': e['param0'],
+            'plans_left': e['param1'],
+            'lights_left': e['param2'],
+            'can_yell': e['can_yell'],
+            'dist': e['dist'],
+            'dir': e['dir'],
+        }
+        for e in state_v1 if e['kind'] == 'EXPLORER'
+    ]
+    entities_features['wanderers_features'] = [
+        {
+            'left': e['param0'],
+            'state': e['param1'],
+            'target_dist': explorers[e['param2']]['dist'] if e['param2'] in explorers else 100,
+            'target_dir': explorers[e['param2']]['dir'] if e['param2'] in explorers else (4,),
+            'dist': e['dist'],
+            'dir': e['dir'],
+        }
+        for e in state_v1 if e['kind'] == 'WANDERER'
+    ]
+    entities_features['slashers_features'] = [
+        {
+            'left': e['param0'],
+            'state': e['param1'],
+            'target_dist': explorers[e['param2']]['dist'] if e['param2'] in explorers else 100,
+            'target_dir': explorers[e['param2']]['dir'] if e['param2'] in explorers else (4,),
+            'dist': e['dist'],
+            'dir': e['dir'],
+        }
+        for e in state_v1 if e['kind'] == 'SLASHER'
+    ]
+    entities_features['plans_features'] = [
+        {
+            'left': e['param0'],
+            'by_me': e['param1'] == player_id,
+            'dist': e['dist'],
+            'dir': e['dir'],
+        }
+        for e in state_v1 if e['kind'] == 'EFFECT_PLAN'
+    ]
+    entities_features['lights_features'] = [
+        {
+            'left': e['param0'],
+            'by_me': e['param1'] == player_id,
+            'dist': e['dist'],
+            'dir': e['dir'],
+        }
+        for e in state_v1 if e['kind'] == 'EFFECT_LIGHT'
+    ]
+    entities_features['shelters_features'] = [
+        {
+            'left': e['param0'],
+            'dist': e['dist'],
+            'dir': e['dir'],
+        }
+        for e in state_v1 if e['kind'] == 'EFFECT_SHELTER'
+    ]
     return entities_features
 
 

@@ -6,6 +6,7 @@ import numpy as np
 from src.envs.kutulu_observer import (
     KutuluClosestObserver,
     KutuluClosestExtObserver,
+    KutuluClosestExtv2Observer,
     KutuluConvObserver,
     KutuluConvExtObserver
 )
@@ -37,6 +38,8 @@ class BaseAgent:
             self.observer = KutuluClosestObserver(env)
         elif self.state_type == 'closest_ext':
             self.observer = KutuluClosestExtObserver(env)
+        elif self.state_type == 'closest_ext_v2':
+            self.observer = KutuluClosestExtv2Observer(env)
         elif self.state_type == 'conv':
             self.observer = KutuluConvObserver(env, self.size)
         elif self.state_type == 'conv_ext':
