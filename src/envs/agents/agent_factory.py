@@ -10,6 +10,7 @@ from src.envs.agents.dqn_agent_conv import DQNAgentConv
 from src.envs.agents.ppo_agent import PPOAgent
 from src.envs.agents.rule_based_agent import EpsilonConstAgent
 from src.envs.agents.stupid_wrapper_agent import StupidAgentWrapper
+from src.envs.agents.dummy_agent import DummyAgent
 from src.envs.strategy import RandomStrategy
 
 
@@ -27,6 +28,8 @@ def get_agent(agent_info):
         agent = QlearningAgent(**agent_info)
     elif _type == 'epsilon_wait':
         agent = EpsilonConstAgent(**agent_info)
+    elif _type == 'dummy':
+        agent = DummyAgent(**agent_info)
     elif _type == 'cross_entropy':
         agent = CrossEntropyAgent(**agent_info)
     elif _type == 'qdn':

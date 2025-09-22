@@ -1,0 +1,3 @@
+type: dummy
+action_space_n: 8
+state_type: closest
