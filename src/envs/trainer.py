@@ -62,7 +62,7 @@ class Trainer:
                  agents=None,
                  env_kwargs=None, shuffle=True,
                  log_dir='../../../runs', output_dir='../../../output',
-                 exp_name=None,
+                 exp_name=None, use_master_agent=False,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True, metrics_int=10, seed=None):
         self.num_experiments = num_experiments
@@ -76,6 +76,7 @@ class Trainer:
         self.asc_difficulty = asc_difficulty
         self.use_tqdm = use_tqdm
         self.metrics_int = metrics_int
+        self.use_master_agent = use_master_agent
 
         self.num_envs = num_envs
 
@@ -115,6 +116,12 @@ class Trainer:
                 agent_info['verbose'] = self.verbose
                 agent = get_agent(agent_info)
                 self.agents.append(agent)
+        
+        if self.use_master_agent:
+            master_agent: PPOAgent = self.agents[0]
+            for agent in self.agents[1:]:
+                agent.model = master_agent.model
+                agent.train = False
 
         if not self.silent:
             for i, agent in enumerate(self.agents):
@@ -267,12 +274,21 @@ class Trainer:
             rollout_rewards = self.play_single_rollout(env_seed, maze_name, env_idx, step)
             env_rollout_rewards[env_idx] = rollout_rewards
 
+
         # Trigger training for multi-environment agents after all environments complete
-        for agent in self.agents:
-            if agent.train and hasattr(agent, 'train_multi_env_step'):
-                if self.verbose:
-                    print(f"Training agent {self.agents.index(agent)} with multi-env data")
-                agent.train_multi_env_step()
+        if self.use_master_agent:
+            master_agent: PPOAgent = self.agents[0]
+            for agent in self.agents[1:]:
+                master_agent.env_buffers += agent.env_buffers
+            if self.verbose:
+                print(f"Training master agent {self.agents.index(agent)} with multi-env data")
+            master_agent.train_multi_env_step()
+        else:
+            for i, agent in enumerate(self.agents):
+                if agent.train and hasattr(agent, 'train_multi_env_step'):
+                    if self.verbose:
+                        print(f"Training agent {self.agents.index(agent)} with multi-env data")
+                    agent.train_multi_env_step()
 
         # Combine rewards from all environments
         # For compatibility, return the average rewards across environments

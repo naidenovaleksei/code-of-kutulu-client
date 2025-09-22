@@ -10,6 +10,8 @@ experiment:
   num_agents: 4
   training_agent_id: 0
 
+use_master_agent: false
+
 # MLflow configuration
 mlflow:
   tracking_uri: "file:${oc.env:HOME}/projects/kutulu_artifacts/mlruns"

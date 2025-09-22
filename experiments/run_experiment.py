@@ -71,23 +71,26 @@ def create_agents_info(cfg: DictConfig) -> list:
     # Create training agent
     training_agent = OmegaConf.to_container(cfg.agent, resolve=True)
     agents_info.append(training_agent)
-
-    # Create random agents for remaining slots
-    random_agent_template = OmegaConf.to_container(cfg.competitor, resolve=True)
     
-    if 'wrapper_params' in random_agent_template:
-        if 'actions_mask' in random_agent_template['wrapper_params']:
-            actions_mask = random_agent_template['wrapper_params']['actions_mask']
-            if actions_mask is not None:
-                if actions_mask == 'default':
-                    actions = DEFAULT_KUTULU_ACTIONS
-                elif actions_mask == 'no_yell':
-                    actions = DEFAULT_KUTULU_ACTIONS + ["PLAN", "LIGHT"]
-                elif actions_mask == 'wait':
-                    actions = ["WAIT"]
-                else:
-                    raise ValueError()
-                random_agent_template['wrapper_params']['actions_mask'] = actions
+    if cfg.use_master_agent:
+        random_agent_template = OmegaConf.to_container(cfg.agent, resolve=True)
+    else:
+        # Create random agents for remaining slots
+        random_agent_template = OmegaConf.to_container(cfg.competitor, resolve=True)
+        
+        if 'wrapper_params' in random_agent_template:
+            if 'actions_mask' in random_agent_template['wrapper_params']:
+                actions_mask = random_agent_template['wrapper_params']['actions_mask']
+                if actions_mask is not None:
+                    if actions_mask == 'default':
+                        actions = DEFAULT_KUTULU_ACTIONS
+                    elif actions_mask == 'no_yell':
+                        actions = DEFAULT_KUTULU_ACTIONS + ["PLAN", "LIGHT"]
+                    elif actions_mask == 'wait':
+                        actions = ["WAIT"]
+                    else:
+                        raise ValueError()
+                    random_agent_template['wrapper_params']['actions_mask'] = actions
     # Fill remaining agent slots
     num_agents = cfg.experiment.get('num_agents', 4)
     for i in range(len(agents_info), num_agents):
@@ -210,6 +213,7 @@ def run_experiment(cfg: DictConfig) -> None:
             # Create trainer
             trainer_config = OmegaConf.to_container(cfg.trainer, resolve=True)
             trainer_config['agents_info'] = agents_info
+            trainer_config['use_master_agent'] = cfg.use_master_agent
             # trainer_config['env_kwargs'] = OmegaConf.to_container(cfg.env, resolve=True)
             
             # Override paths to use Hydra output directory
