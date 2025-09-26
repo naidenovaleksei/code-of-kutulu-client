@@ -359,8 +359,6 @@ class Trainer:
         metrics['rewards'] = np.mean(total_reward_list, axis=0)
         winner_list = np.argmax(total_reward_list, 1)
         metrics['winner_list'] = [np.sum(winner_list == i) / len(winner_list) for i, agent in enumerate(self.agents)]
-        # metrics['check_policy'] = [agent.check_policy() for agent in self.agents]
-        # metrics['eps'] = [agent.get_eps() for agent in self.agents]
         metrics['check_exp'] = [
             av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_types=('normal', 'coridor', 'corner'))
             for agent in self.agents
@@ -373,14 +371,8 @@ class Trainer:
             av.check_entity_nearby(agent, 'SLASHER', n_min=2, n_max=3, env_types=('normal',))
             for agent in self.agents
         ]
-        # metrics['check_exp_normal'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3) for agent in self.agents]
-        # metrics['check_wan_normal'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2) for agent in self.agents]
         metrics['check_exp_normal_plan1'] = [av_plan.check_entity_nearby(agent, 'EXPLORER', n_min=1, n_max=2) for agent in self.agents]
         metrics['check_exp_normal_plan0'] = [av_plan.check_entity_nearby(agent, 'EXPLORER', n_min=3, n_max=3) for agent in self.agents]
-        # metrics['check_exp_coridor'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='coridor') for agent in self.agents]
-        # metrics['check_wan_coridor'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='coridor') for agent in self.agents]
-        # metrics['check_exp_corner'] = [av.check_entity_nearby(agent, 'EXPLORER', n_min=2, n_max=3, env_type='corner') for agent in self.agents]
-        # metrics['check_wan_corner'] = [av.check_entity_nearby(agent, 'WANDERER', n_min=1, n_max=2, env_type='corner') for agent in self.agents]
         metrics['frame_ids'] = [agent.frame_idx if isinstance(agent, DQNAgentBase) else None for agent in self.agents]
         metrics['lr_list'] = [agent.get_lr() if isinstance(agent, NNAgent) else None for agent in self.agents]
 
@@ -418,12 +410,13 @@ class Trainer:
             if 'acc_weighted_full' not in metrics:
                 metrics['acc_weighted_full'] = [None] * len(self.agents)
             metrics['acc_weighted_full'][i] = sum([
-                0.4 * metrics['check_exp'][i][0],
-                0.05 * metrics['check_exp'][i][2],
-                0.05 * metrics['check_wan'][i][2],
-                0.05 * metrics['check_exp_normal_plan0'][i][0],
-                0.05 * metrics['check_exp_normal_plan1'][i][0],
-                0.4 * metrics['check_wan'][i][0],
+                0.3 * metrics['check_exp'][i][0], # 0-1
+                0.2 * metrics['check_wan'][i][0], # 0-1
+                0.3 * metrics['check_slsh'][i][0], # 0-1
+                0.05 / 4 * metrics['check_exp'][i][2], # 1-4
+                0.05 / 4 * metrics['check_wan'][i][2], # 1-4
+                0.05 * metrics['check_exp_normal_plan0'][i][0], # 0-1
+                0.05 * metrics['check_exp_normal_plan1'][i][0], # 0-1
             ])
         return metrics
 
@@ -442,12 +435,6 @@ class Trainer:
             agent.writer.add_scalar('Check/Slasher/acc', metrics['check_slsh'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_plan0', metrics['check_exp_normal_plan0'][i][0], step)
             agent.writer.add_scalar('Check/Explorer/acc_plan1', metrics['check_exp_normal_plan1'][i][0], step)
-            # agent.writer.add_scalar('Check/Explorer/acc_coridor', metrics['check_exp_coridor'][i][0], step)
-            # agent.writer.add_scalar('Check/Wanderer/acc_coridor', metrics['check_wan_coridor'][i][0], step)
-            # agent.writer.add_scalar('Check/Explorer/acc_corner', metrics['check_exp_corner'][i][0], step)
-            # agent.writer.add_scalar('Check/Wanderer/acc_corner', metrics['check_wan_corner'][i][0], step)
-            # agent.writer.add_scalar('Check/Explorer/std', metrics['check_exp_normal'][i][1], step)
-            # agent.writer.add_scalar('Check/Wanderer/std', metrics['check_wan_normal'][i][1], step)
             if metrics['frame_ids'][i] is not None:
                 agent.writer.add_scalar('Check/frame_id', metrics['frame_ids'][i], step)
             if metrics['lr_list'][i] is not None:
@@ -455,11 +442,6 @@ class Trainer:
             agent.writer.add_scalar('Check/Explorer/top_a', metrics['check_exp'][i][2], step)
             agent.writer.add_scalar('Check/Wanderer/top_a', metrics['check_wan'][i][2], step)
             agent.writer.add_scalar('Check/Slasher/top_a', metrics['check_slsh'][i][2], step)
-            # agent.writer.add_scalar('Check/Explorer/max', metrics['check_exp_normal'][i][3], step)
-            # agent.writer.add_scalar('Check/Wanderer/max', metrics['check_wan_normal'][i][3], step)
-            # agent.writer.add_scalar('Check/Explorer/mean', metrics['check_exp_normal'][i][4], step)
-            # agent.writer.add_scalar('Check/Wanderer/mean', metrics['check_wan_normal'][i][4], step)
-            
             
             # Log reward bonus metrics
             bonus_types = [

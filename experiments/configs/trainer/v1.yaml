@@ -14,7 +14,7 @@ trainer:
   env_kwargs:
     reward_params:
       sanity_coef: 0.025
-      reward_for_win: 0.45
-      reward_for_lose: -0.45
-      step_bonus: 0.08
-      madness_per_turn_coef: 0.38
+      reward_for_win: 0.55
+      reward_for_lose: -1.25
+      step_bonus: 0.4
+      madness_per_turn_coef: 0.65
