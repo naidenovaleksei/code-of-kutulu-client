@@ -3,11 +3,18 @@ source ~/.local/share/virtualenvs/kutulu-_n6nfavE/bin/activate
 source ~/kutulu-env/bin/activate
 conda deactivate
 
+jupyter notebook --port 9999
+
 # mlflow
-mlflow ui --backend-store-uri file:$HOME/projects/kutulu_artifacts/mlruns --port 5001
+mlflow ui --backend-store-uri file:$HOME/projects/kutulu_artifacts/mlruns --port 5002
 
 # tensorboard
 tensorboard --logdir $HOME/projects/kutulu_artifacts/experiments/outputs --port 6007
+tensorboard --logdir $HOME/projects/kutulu_artifacts/experiments/optimization --port 6007
+
+# server
+cd ../code-of-kutulu
+./run-server.sh 
 
 # experiment
 python experiments/run_experiment.py \
@@ -45,6 +52,10 @@ python experiments/optimize_hyperparameters.py \
     optimization.n_trials=100 \
     optimization.objective_metric=acc_weighted_full_avg100 \
     optimization.direction=maximize \
-    optimization.study_name=ppo_study_env4 \
-    base_experiment.experiment.name=ppo_env4 \
-    trainer.num_experiments=1000
+    optimization.study_name=ppo_ext_study_1 \
+    base_experiment.experiment.name=ppo_ext_1 \
+    trainer.num_experiments=1000 \
+    agent.state_type=conv_ext \
+    agent.model_params.size=3 \
+    agent.value_loss_coef=0.1 \
+    competitor=qdn_conv
