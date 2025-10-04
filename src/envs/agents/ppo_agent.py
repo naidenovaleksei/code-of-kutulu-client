@@ -23,7 +23,7 @@ from src.envs.agents.dqn_agent_ext import (
     DQNStateEncoderExtv2,
 )
 from src.envs.agents import AgentObservation
-from src.envs.models.conv_a2c_model import ConvA2CModel, ConvA2CDeepModel
+from src.envs.models.conv_a2c_model import ConvA2CModel, ConvA2CDeepModel, ConvA2CGRUModel
 from src.envs.models.ext_state_v2_model import ExtStatev2A2AModel
 from src.envs.reward_shaper import PotentialRewardShaper, RewardShaper
 
@@ -50,13 +50,14 @@ class PPOBuffer:
     def start_episode(self):
         self.buffer = []
 
-    def append(self, experience, log_prob, value):
+    def append(self, experience, log_prob, value, hidden_state=None):
         """Append experience with additional PPO-specific data"""
         # Store the experience along with log probability and value
         ppo_experience = {
             'experience': experience,
             'log_prob': log_prob,
-            'value': value
+            'value': value,
+            'hidden_state': hidden_state,
         }
         self.buffer.append(ppo_experience)
         
@@ -73,6 +74,7 @@ class PPOBuffer:
         # Extract components
         experiences = [item['experience'] for item in augmented_data]
         log_probs = [item['log_prob'] for item in augmented_data]
+        hidden_states = [item['hidden_state'] for item in augmented_data]
         values = [item['value'] for item in augmented_data]
         turns_to_death = np.arange(len(augmented_data))[::-1] + 1
         
@@ -104,7 +106,7 @@ class PPOBuffer:
         else:
             rewards = result
         
-        return states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied
+        return states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states
 
     def encode_states(self, states):
         return self.state_encoder.encode_states(states)
@@ -125,12 +127,11 @@ class PPOBuffer:
             exp.new_state,
             exp.observation,
         )
+        
+        ppo_item = dict(ppo_item)
+        ppo_item['experience'] = augmented_exp
 
-        return {
-            'experience': augmented_exp,
-            'log_prob': ppo_item['log_prob'],
-            'value': ppo_item['value']
-        }
+        return ppo_item
 
 
 class PPOAgent(ActorAgent):
@@ -142,7 +143,8 @@ class PPOAgent(ActorAgent):
                  terminate_loss_coef=0, occupation_loss_coef=0,
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5, use_deep=False,
-                 gae_lambda=0.95, reward_params=None, need_aug=False,
+                 gae_lambda=0.95, reward_params=None, need_aug=False, use_gru=False,
+                 segment_length=20,
                  encode_states_first=True, **kw):
         """
         PPO (Proximal Policy Optimization) Agent with Clipped Objective
@@ -178,6 +180,13 @@ class PPOAgent(ActorAgent):
                     in_channels=self.state_encoder.layers_count(),
                     **model_params
                 )
+            elif use_gru:
+                model = ConvA2CGRUModel(
+                    num_classes=action_space_n,
+                    size=self.size,
+                    in_channels=self.state_encoder.layers_count(),
+                    **model_params
+                )
             else:
                 model = ConvA2CModel(
                     num_classes=action_space_n,
@@ -203,6 +212,8 @@ class PPOAgent(ActorAgent):
             verbose=verbose,
             model=model,
             state_encoder=self.state_encoder,
+            use_gru=use_gru,
+            segment_length=segment_length,
             **kw,
         )
         
@@ -300,11 +311,19 @@ class PPOAgent(ActorAgent):
             buffer = self.episode_buffer
         
         # Append with log probability and value
-        buffer.append(
-            exp, 
-            self.current_log_prob, 
-            self.current_value
-        )
+        if self.use_gru:
+            buffer.append(
+                exp, 
+                self.current_log_prob, 
+                self.current_value,
+                self.hidden_state.cpu().tolist(),
+            )
+        else:
+            buffer.append(
+                exp, 
+                self.current_log_prob, 
+                self.current_value,
+            )
 
     def collect_all_data_from_buffers(self):
         # Collect data from all environment buffers
@@ -312,6 +331,7 @@ class PPOAgent(ActorAgent):
         all_log_probs, all_values = [], []
         all_turns_to_death = []
         all_is_occupied = []
+        all_hidden_states = []
         
         # Collect bonus averages from all buffers
         bonus_sums = {}
@@ -319,7 +339,7 @@ class PPOAgent(ActorAgent):
 
         for env_buffer in self.env_buffers:
             if len(env_buffer.buffer) > 0:
-                states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied = env_buffer.end_episode()
+                states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states = env_buffer.end_episode()
                 all_states.extend(states)
                 all_actions.extend(actions)
                 all_rewards.extend(rewards)
@@ -328,6 +348,7 @@ class PPOAgent(ActorAgent):
                 all_values.extend(values)
                 all_turns_to_death.extend(turns_to_death)
                 all_is_occupied.extend(is_occupied)
+                all_hidden_states.extend(hidden_states)
                 
                 # Collect bonus averages if available
                 if env_buffer.latest_bonus_averages is not None:
@@ -346,7 +367,10 @@ class PPOAgent(ActorAgent):
                 bonus_type: total / max(1, bonus_counts[bonus_type])
                 for bonus_type, total in bonus_sums.items()
             }
-        return all_states, all_actions, all_rewards, all_dones, all_log_probs, all_values, all_turns_to_death, all_is_occupied
+        return (
+            all_states, all_actions, all_rewards, all_dones, all_log_probs, all_values,
+            all_turns_to_death, all_is_occupied, all_hidden_states
+        )
 
     def train_step(self):
         if self.train and len(self.episode_buffer.buffer) > 0:
@@ -368,12 +392,15 @@ class PPOAgent(ActorAgent):
         
         all_data = self.collect_all_data_from_buffers()
         # Use the combined data for training
-        self._train_model_with_data(*all_data)
+        if self.use_gru:
+            self._train_model_with_data_reccurent(*all_data)
+        else:
+            self._train_model_with_data(*all_data)
         
         if self.scheduler:
             self.scheduler.step()
     
-    def _train_model_with_data(self, states, actions, rewards, dones, old_log_probs, values, turns_to_death, is_occupied):
+    def _train_model_with_data(self, states, actions, rewards, dones, old_log_probs, values, turns_to_death, is_occupied, hidden_states=None):
         """Train the PPO model with provided data"""
         if len(states) == 0:
             return
@@ -432,74 +459,407 @@ class PPOAgent(ActorAgent):
                 pred_turns_to_death = output['turns_to_death'].view(-1)
                 pred_is_occupied = output['is_occupied'].view(-1)
                 
-                # Get current log probabilities
-                log_probs = torch.log(policy + 1e-8)
-                current_log_probs = log_probs[range(len(batch_actions)), batch_actions]
-                
-                # Calculate probability ratio
-                ratio = torch.exp(current_log_probs - batch_old_log_probs)
-                
-                # Calculate surrogate losses
-                surr1 = ratio * batch_advantages
-                surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * batch_advantages
-                
-                # PPO clipped objective (we want to maximize, so minimize negative)
-                policy_loss = -torch.min(surr1, surr2).mean()
-                
-                # Value loss
-                value_loss = F.mse_loss(current_values, batch_returns)
-
-                # Aux terminate loss
-                terminate_loss = F.l1_loss(
-                    pred_turns_to_death,
-                    torch.log1p(batch_turns_to_death)
+                early_stop = self._backward_propagation(
+                    policy, current_values, pred_turns_to_death, pred_is_occupied,
+                    batch_actions, batch_advantages, batch_old_log_probs, batch_returns,
+                    batch_turns_to_death, batch_is_occupied, epoch
                 )
-
-                occupation_loss = self.occupation_criterion(
-                    pred_is_occupied[batch_is_occupied >= 0],
-                    batch_is_occupied[batch_is_occupied >= 0],
-                )
-
-                # Entropy for exploration
-                entropy = -(log_probs * policy).sum(dim=1).mean()
-                
-                # Total loss
-                loss = policy_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
-                loss += self.terminate_loss_coef * terminate_loss
-                loss += self.occupation_loss_coef * occupation_loss
-                
-                # Backpropagation
-                self.optimizer.zero_grad()
-                loss.backward()
-                
-                # Gradient clipping
-                if self.max_grad_norm > 0:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
-                
-                self.optimizer.step()
-                
-                # Calculate KL divergence for early stopping
-                with torch.no_grad():
-                    kl_div = (batch_old_log_probs - current_log_probs).mean()
-                
-                self.metrics_aggregator.add_metrics({
-                    'policy_loss': policy_loss.item(),
-                    'value_loss': value_loss.item(),
-                    'terminate_loss': terminate_loss.item(),
-                    'occupation_loss': occupation_loss.item(),
-                    'entropy': entropy.item(),
-                    'loss': loss.item(),
-                    'kl_div': kl_div.item(),
-                })
-
-                # Early stopping if KL divergence is too high
-                if abs(kl_div) > self.target_kl:
-                    if self.verbose:
-                        print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {kl_div:.6f}")
-                    early_stop = True
-                    break
 
         self.metrics_aggregator.save_metrics(self.episode_idx)
+    
+    def _backward_propagation(self, policy, current_values, pred_turns_to_death, pred_is_occupied,
+                              batch_actions, batch_advantages, batch_old_log_probs, batch_returns,
+                              batch_turns_to_death, batch_is_occupied, epoch):
+        # Get current log probabilities
+        log_probs = torch.log(policy + 1e-8)
+        current_log_probs = log_probs[range(len(batch_actions)), batch_actions]
+        
+        # Calculate probability ratio
+        ratio = torch.exp(current_log_probs - batch_old_log_probs)
+        
+        # Calculate surrogate losses
+        surr1 = ratio * batch_advantages
+        surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * batch_advantages
+        
+        # PPO clipped objective (we want to maximize, so minimize negative)
+        policy_loss = -torch.min(surr1, surr2).mean()
+        
+        # Value loss
+        value_loss = F.mse_loss(current_values, batch_returns)
+
+        # Aux terminate loss
+        terminate_loss = F.l1_loss(
+            pred_turns_to_death,
+            torch.log1p(batch_turns_to_death)
+        )
+
+        occupation_loss = self.occupation_criterion(
+            pred_is_occupied[batch_is_occupied >= 0],
+            batch_is_occupied[batch_is_occupied >= 0],
+        )
+
+        # Entropy for exploration
+        entropy = -(log_probs * policy).sum(dim=1).mean()
+        
+        # Total loss
+        loss = policy_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy
+        loss += self.terminate_loss_coef * terminate_loss
+        loss += self.occupation_loss_coef * occupation_loss
+        
+        # Backpropagation
+        self.optimizer.zero_grad()
+        loss.backward()
+        
+        # Gradient clipping
+        if self.max_grad_norm > 0:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+        
+        self.optimizer.step()
+        
+        # Calculate KL divergence for early stopping
+        with torch.no_grad():
+            kl_div = (batch_old_log_probs - current_log_probs).mean()
+        
+        self.metrics_aggregator.add_metrics({
+            'policy_loss': policy_loss.item(),
+            'value_loss': value_loss.item(),
+            'terminate_loss': terminate_loss.item(),
+            'occupation_loss': occupation_loss.item(),
+            'entropy': entropy.item(),
+            'loss': loss.item(),
+            'kl_div': kl_div.item(),
+        })
+
+        # Early stopping if KL divergence is too high
+        if abs(kl_div) > self.target_kl:
+            if self.verbose:
+                print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {kl_div:.6f}")
+            return True
+
+        return False
+
+    
+    def _train_model_with_data_reccurent(self, states, actions, rewards, dones,
+                                         old_log_probs, values,
+                                         turns_to_death, is_occupied, hidden_states):
+        """Train the PPO model with TBPTT (Truncated Backpropagation Through Time)"""
+        if len(states) == 0:
+            return
+    
+        self.model.train()
+
+        # Step 1: Split all lists by dones to create sequences
+        sequences = self._split_by_dones(
+            states, actions, rewards, dones,
+            old_log_probs, values,
+            turns_to_death, is_occupied, hidden_states
+        )
+        
+        if len(sequences) == 0:
+            return
+        
+        # Step 2: Pad sequences to have same length
+        padded_sequences = self._pad_sequences(sequences)
+        
+        # Step 3: Stack and transform to tensors with shape (batch_size, max_seq_length)
+        batch_data = self._stack_sequences_to_tensors(padded_sequences)
+        
+        # Step 4: Calculate masks for all sequences
+        masks = batch_data['masks']
+        
+        # Step 5: Encode states if needed
+        if self.encode_states_first:
+            batch_data['states'] = self._encode_padded_states(batch_data['states'], masks)
+        
+        # Calculate returns and advantages using GAE for each sequence
+        batch_data['returns'], batch_data['advantages'] = self._calculate_gae_sequences(
+            batch_data['rewards'], batch_data['values'], batch_data['dones'], masks
+        )
+        
+        # Normalize advantages across all sequences using masks
+        all_advantages = batch_data['advantages'][masks]
+        if len(all_advantages) > 1:
+            mean_adv = all_advantages.mean()
+            std_adv = all_advantages.std()
+            batch_data['advantages'] = (batch_data['advantages'] - mean_adv) / (std_adv + 1e-8)
+
+        # Step 6: Each epoch runs along all calculated data once
+        early_stop = False
+
+        for epoch in range(self.ppo_epochs):
+            if early_stop:
+                break
+                
+            # Get sequence length (number of valid timesteps)
+            seq_len = batch_data['states'].shape[1]
+            
+            # Process all sequences in segments for TBPTT
+            for segment_start in range(0, seq_len, self.segment_length):
+                segment_end = min(segment_start + self.segment_length, seq_len)
+                
+                # Extract segment data from all sequences
+                segment_data = self._extract_batch_segment_data(batch_data, masks, segment_start, segment_end)
+                
+                # Step 8: Calculate loss in segment and process backpropagation
+                early_stop = self._train_batch_segment(segment_data, epoch)
+            
+            if early_stop:
+                break
+
+        self.metrics_aggregator.save_metrics(self.episode_idx)
+    
+    def _split_by_dones(self, states, actions, rewards, dones,
+                        old_log_probs, values,
+                        turns_to_death, is_occupied, hidden_state):
+        """Split all data by done flags to create individual sequences"""
+        sequences = []
+        current_seq = {
+            'states': [], 'actions': [], 'rewards': [], 'dones': [],
+            'old_log_probs': [], 'values': [],
+            'turns_to_death': [], 'is_occupied': [], 'hidden_state': [],
+        }
+        
+        for i in range(len(states)):
+            current_seq['states'].append(states[i])
+            current_seq['actions'].append(actions[i])
+            current_seq['rewards'].append(rewards[i])
+            current_seq['dones'].append(dones[i])
+            current_seq['old_log_probs'].append(old_log_probs[i])
+            current_seq['values'].append(values[i])
+            current_seq['turns_to_death'].append(turns_to_death[i])
+            current_seq['is_occupied'].append(is_occupied[i])
+            current_seq['hidden_state'].append(hidden_state[i])
+            
+            # If episode is done, finish current sequence and start new one
+            if dones[i]:
+                if len(current_seq['states']) > 0:
+                    sequences.append(current_seq)
+                current_seq = {
+                    'states': [], 'actions': [], 'rewards': [], 'dones': [],
+                    'old_log_probs': [], 'values': [],
+                    'turns_to_death': [], 'is_occupied': [], 'hidden_state': [],
+                }
+        
+        # Add remaining sequence if not empty
+        if len(current_seq['states']) > 0:
+            sequences.append(current_seq)
+        
+        return sequences
+    
+    def _pad_sequences(self, sequences):
+        """Pad all sequences to have the same length"""
+        if not sequences:
+            return sequences
+        
+        # Find maximum sequence length
+        max_length = max(len(seq['states']) for seq in sequences)
+        
+        padded_sequences = []
+        for seq in sequences:
+            padded_seq = {}
+            seq_len = len(seq['states'])
+            
+            for key in seq.keys():
+                padded_list = seq[key].copy()
+                
+                # Pad with appropriate values
+                if key in ['states', 'hidden_state']:
+                    # Pad states with zeros or last state
+                    pad_value = seq[key][-1] if seq[key] else None
+                    for _ in range(max_length - seq_len):
+                        padded_list.append(pad_value)
+                elif key in ['actions', 'turns_to_death']:
+                    # Pad with zeros
+                    for _ in range(max_length - seq_len):
+                        padded_list.append(0)
+                elif key in ['rewards', 'old_log_probs', 'values']:
+                    # Pad with zeros
+                    for _ in range(max_length - seq_len):
+                        padded_list.append(0.0)
+                elif key == 'dones':
+                    # Pad with True (episode done)
+                    for _ in range(max_length - seq_len):
+                        padded_list.append(True)
+                elif key == 'is_occupied':
+                    # Pad with -1 (ignore index)
+                    for _ in range(max_length - seq_len):
+                        padded_list.append(-1)
+                
+                padded_seq[key] = padded_list
+            
+            # Create mask for valid timesteps
+            mask = [True] * seq_len + [False] * (max_length - seq_len)
+            padded_seq['mask'] = mask
+            
+            padded_sequences.append(padded_seq)
+        
+        return padded_sequences
+    
+    def _stack_sequences_to_tensors(self, padded_sequences):
+        """Stack padded sequences into tensors with shape (batch_size, max_seq_length)"""
+        if not padded_sequences:
+            return {}
+        
+        # Stack all sequences
+        batch_data = {}
+        
+        # Handle states separately (they might not be tensors yet)
+        batch_data['states'] = [seq['states'] for seq in padded_sequences]
+        
+        # Convert other data to tensors
+        batch_data['actions'] = torch.tensor([seq['actions'] for seq in padded_sequences], dtype=torch.long)
+        batch_data['rewards'] = torch.tensor([seq['rewards'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['dones'] = torch.tensor([seq['dones'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['old_log_probs'] = torch.tensor([seq['old_log_probs'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['values'] = torch.tensor([seq['values'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['turns_to_death'] = torch.tensor([seq['turns_to_death'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['is_occupied'] = torch.tensor([seq['is_occupied'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['hidden_state'] = torch.tensor([seq['hidden_state'] for seq in padded_sequences], dtype=torch.float32)
+        batch_data['masks'] = torch.tensor([seq['mask'] for seq in padded_sequences], dtype=torch.bool)
+        
+        return batch_data
+    
+    def _encode_padded_states(self, states_list, masks):
+        """Encode padded states while respecting masks"""
+        batch_size = len(states_list)
+        max_seq_length = len(states_list[0])
+        
+        # Flatten all states for encoding
+        all_states = []
+        for seq_states in states_list:
+            all_states.extend(seq_states)
+        
+        # Encode all states at once
+        encoded_states = self.episode_buffer.encode_states(all_states)
+        
+        # Reshape back to (batch_size, max_seq_length, ...)
+        state_shape = encoded_states.shape[1:]  # Get feature dimensions
+        encoded_states = encoded_states.view(batch_size, max_seq_length, *state_shape)
+        
+        return encoded_states
+    
+    def _calculate_gae_sequences(self, rewards, values, dones, masks):
+        """Calculate GAE for sequences with masks"""
+        batch_size, max_seq_length = rewards.shape
+        
+        returns = torch.zeros_like(rewards)
+        advantages = torch.zeros_like(rewards)
+        
+        for seq_idx in range(batch_size):
+            if not masks[seq_idx].any():
+                continue
+                
+            # Get valid length for this sequence
+            seq_len = masks[seq_idx].sum().item()
+            
+            # Extract valid parts of the sequence
+            seq_rewards = rewards[seq_idx, :seq_len]
+            seq_values = values[seq_idx, :seq_len]
+            seq_dones = dones[seq_idx, :seq_len]
+            
+            # Add final value (0 for terminal states)
+            seq_values_extended = torch.cat([seq_values, torch.zeros(1)])
+            
+            # Calculate GAE for this sequence
+            seq_advantages = torch.zeros(seq_len)
+            last_gae = 0
+            
+            for t in reversed(range(seq_len)):
+                non_terminal = 1.0 - seq_dones[t]
+                delta = seq_rewards[t] + self.gamma * seq_values_extended[t + 1] * non_terminal - seq_values_extended[t]
+                last_gae = delta + self.gamma * self.gae_lambda * non_terminal * last_gae
+                seq_advantages[t] = last_gae
+            
+            seq_returns = seq_advantages + seq_values
+            
+            # Store back in the batch tensors
+            returns[seq_idx, :seq_len] = seq_returns
+            advantages[seq_idx, :seq_len] = seq_advantages
+        
+        return returns, advantages
+    
+    def _extract_batch_segment_data(self, batch_data, masks, segment_start, segment_end):
+        """Extract segment data from all sequences for batch processing"""
+        segment_data = {}
+        
+        # Extract segments from all sequences
+        if self.encode_states_first:
+            segment_data['states'] = batch_data['states'][:, segment_start:segment_end]
+        else:
+            # For non-encoded states, extract from each sequence
+            segment_states = []
+            for seq_idx in range(len(batch_data['states'])):
+                segment_states.append(batch_data['states'][seq_idx][segment_start:segment_end])
+            segment_data['states'] = segment_states
+        
+        segment_data['actions'] = batch_data['actions'][:, segment_start:segment_end]
+        segment_data['old_log_probs'] = batch_data['old_log_probs'][:, segment_start:segment_end]
+        segment_data['returns'] = batch_data['returns'][:, segment_start:segment_end]
+        segment_data['advantages'] = batch_data['advantages'][:, segment_start:segment_end]
+        segment_data['turns_to_death'] = batch_data['turns_to_death'][:, segment_start:segment_end]
+        segment_data['is_occupied'] = batch_data['is_occupied'][:, segment_start:segment_end]
+        segment_data['hidden_state'] = batch_data['hidden_state'][:, segment_start:segment_end]
+        segment_data['masks'] = masks[:, segment_start:segment_end]
+        
+        return segment_data
+    
+    def _train_batch_segment(self, segment_data, epoch):
+        """Train on a batch of segments with TBPTT"""
+        assert self.use_gru
+        
+        batch_size = segment_data['actions'].shape[0]
+        segment_length = segment_data['actions'].shape[1]
+
+        # Filter out sequences that have no valid data in this segment
+        segment_states = segment_data['states']
+        hidden_states = segment_data['hidden_state']
+        padded_mask = segment_data['masks'].flatten()
+        batch_actions = segment_data['actions'].flatten()[padded_mask]
+        batch_old_log_probs = segment_data['old_log_probs'].flatten()[padded_mask]
+        batch_advantages = segment_data['advantages'].flatten()[padded_mask]
+        batch_returns = segment_data['returns'].flatten()[padded_mask]
+        batch_turns_to_death = segment_data['turns_to_death'].flatten()[padded_mask]
+        batch_is_occupied = segment_data['is_occupied'].flatten()[padded_mask]
+        
+        # Encode states if needed
+        if not self.encode_states_first:
+            # Flatten states for encoding
+            all_states = []
+            for seq_idx in range(batch_size):
+                all_states.extend(segment_data['states'][seq_idx])
+            segment_states = self.episode_buffer.encode_states(all_states)
+            # Reshape back to (batch_size, segment_length, ...)
+            state_shape = segment_states.shape[1:]
+            segment_states = segment_states.view(batch_size, segment_length, *state_shape)
+        else:
+            segment_states = segment_data['states']
+        
+        policy_list, v_list, turns_to_death_list, is_occupied_list = [], [], [], []
+        hidden_state = hidden_states[:, 0, 0, 0].unsqueeze(0)
+        for l in range(segment_data['states'].shape[1]):
+            output = self.model(segment_states[:, l], hidden_state)
+            _policy = output['policy']
+            _current_values = output['value']
+            _pred_turns_to_death = output['turns_to_death']
+            _pred_is_occupied = output['is_occupied']
+            hidden_state = output['hidden_state']
+            hidden_state *= segment_data['masks'][:, l].unsqueeze(1)
+            
+            policy_list.append(_policy)
+            v_list.append(_current_values)
+            turns_to_death_list.append(_pred_turns_to_death)
+            is_occupied_list.append(_pred_is_occupied)
+        
+        policy = torch.stack(policy_list, dim=1).reshape(-1, policy_list[0].shape[1])[padded_mask]
+        current_values = torch.stack(v_list, dim=1).flatten()[padded_mask]
+        pred_turns_to_death = torch.stack(turns_to_death_list, dim=1).flatten()[padded_mask]
+        pred_is_occupied = torch.stack(is_occupied_list, dim=1).flatten()[padded_mask]
+
+        return self._backward_propagation(
+            policy, current_values, pred_turns_to_death, pred_is_occupied,
+            batch_actions, batch_advantages, batch_old_log_probs, batch_returns,
+            batch_turns_to_death, batch_is_occupied, epoch
+        )
 
     def get_metric_names(self):
         return [

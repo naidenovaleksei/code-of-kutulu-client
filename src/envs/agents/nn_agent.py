@@ -31,7 +31,7 @@ class NNAgent(BaseAgent):
                  episode_buffer,
                  train, verbose=False, checkpoint_dir=None, drop_layers=None,
                  optimizer='adam', scheduler_params=None, explicit_random=False,
-                 explicit_action_mask=DEFAULT_ACTION_MASK):
+                 explicit_action_mask=DEFAULT_ACTION_MASK, use_gru=False, segment_length=20):
         super(NNAgent, self).__init__(
             state_type,
             action_space_n,
@@ -52,6 +52,12 @@ class NNAgent(BaseAgent):
         self.lr = lr
         self.explicit_random = explicit_random
         self.metrics_aggregator = AgentMetricsAggregator(self.verbose)
+        
+        # GRU support - check if model has GRU capability
+        self.use_gru = use_gru
+        self.segment_length = segment_length
+        if self.use_gru:
+            self.hidden_state = None
         if explicit_action_mask is not None:
             self.explicit_action_mask = np.array(explicit_action_mask)
         else:
@@ -72,6 +78,11 @@ class NNAgent(BaseAgent):
 
         if checkpoint_dir is not None:
             self.load_agent(checkpoint_dir, drop_layers)
+
+    def set_env(self, env):
+        super().set_env(env)
+        if self.use_gru:
+            self.hidden_state = None
 
     def get_eps(self):
         return max(
@@ -107,12 +118,21 @@ class NNAgent(BaseAgent):
 
         self.model.eval()
         with torch.no_grad():
-            if return_value:
-                output = self.model(data)
+            if self.use_gru:
+                output = self.model(data, self.hidden_state)
                 policy = output['policy']
-                value = output['value']
+                self.hidden_state = output['hidden_state']
+                # For GRU models, pass hidden state and update it
+                if return_value:
+                    value = output['value']
             else:
-                policy = self.model.get_policy(data)
+                # For non-GRU models, use original logic
+                if return_value:
+                    output = self.model(data)
+                    policy = output['policy']
+                    value = output['value']
+                else:
+                    policy = self.model.get_policy(data)
         model_output = policy[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
 
@@ -155,7 +175,12 @@ class NNAgent(BaseAgent):
 
         self.model.eval()
         with torch.no_grad():
-            policy = self.model.get_policy(data)
+            if self.use_gru:
+                output = self.model(data, self.hidden_state)
+                policy = output['policy']
+                self.hidden_state = output['hidden_state']
+            else:
+                policy = self.model.get_policy(data)
         model_output = policy[0].detach().cpu().numpy()
         actions_masked = np.ma.array(model_output, mask=player_mask)
         action = actions_masked.argmax()

@@ -89,6 +89,7 @@ EXTENDED_KUTULU_ACTIONS = DEFAULT_KUTULU_ACTIONS + [
 ]
 
 USED_ACTIONS = DEFAULT_KUTULU_ACTIONS
+ACTION_MASK = np.ones_like(USED_ACTIONS)
 
 CELL_EMPTY = '.'
 CELL_WALL = '#'
@@ -1142,10 +1143,11 @@ class QlearningSolver(Solver):
 
 
 class NNSolver(Solver):
-    def __init__(self, info, actions, weights: dict):
+    def __init__(self, info, actions, weights, explicit_action_mask):
         super(NNSolver, self).__init__(info, actions)
         self.weights = weights
         self._assert_weights(actions)
+        self.explicit_action_mask = explicit_action_mask
 
     def _assert_weights(self, actions):
         raise NotImplementedError
@@ -1156,6 +1158,7 @@ class NNSolver(Solver):
     def calculate_action(self, entities, player_pos, player_mask):
         model_output = self._calculate_output(entities, player_pos)
         player_mask = player_mask[:len(self.actions)]
+        player_mask |= ~self.explicit_action_mask
         q_vals_v = np.ma.array(model_output, mask=player_mask)
         action_id = q_vals_v.argmax()
         return action_id
@@ -1431,8 +1434,8 @@ class PPOConvSolver(NNSolver):
 
 
 class PPOConvExtSolver(NNSolver):
-    def __init__(self, info, actions, weights, size=3):
-        super(PPOConvExtSolver, self).__init__(info, actions, weights)
+    def __init__(self, info, actions, weights, size, explicit_action_mask):
+        super(PPOConvExtSolver, self).__init__(info, actions, weights, explicit_action_mask)
         self.size = size
         self.conv_encoder = ConvExtEncoder()
 
@@ -1471,7 +1474,7 @@ def main():
     elif mode == 'ppo_conv':
         solver = PPOConvSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
     elif mode == 'ppo_conv_ext':
-        solver = PPOConvExtSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
+        solver = PPOConvExtSolver(info, USED_ACTIONS, checkpoint_data, SIZE, ACTION_MASK)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     
