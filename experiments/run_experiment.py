@@ -6,6 +6,7 @@ from pathlib import Path
 from copy import deepcopy
 
 import hydra
+from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 import mlflow
 import mlflow.pytorch
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.envs.trainer import Trainer, get_actions_by_league, DEFAULT_KUTULU_ACTIONS
 from src.envs.agents.agent_factory import get_agent
+from src.envs.league.agent_description import AgentDescription
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -129,6 +131,7 @@ def calculate_final_metrics(results, training_agent_id) -> dict:
         final_metrics['acc_explorer_plan0'] = last_metrics['check_exp_normal_plan0'][training_agent_id][0]
         final_metrics['acc_explorer_plan1'] = last_metrics['check_exp_normal_plan1'][training_agent_id][0]
         final_metrics['acc_wanderer'] = last_metrics['check_wan'][training_agent_id][0]
+        final_metrics['acc_slasher'] = last_metrics['check_slsh'][training_agent_id][0]
         final_metrics['acc_weighted'] = last_metrics['acc_weighted'][training_agent_id]
         final_metrics['acc_weighted_full'] = last_metrics['acc_weighted_full'][training_agent_id]
         final_metrics['loss'] = last_metrics['loss'][training_agent_id]
@@ -183,6 +186,26 @@ def log_model_artifacts(trainer: Trainer, run_id: str):
         logger.error(f"Error logging model artifacts: {e}")
 
 
+def _get_hydra_agent_info(experiment, train=False):
+    config_path = f'../../kutulu_artifacts/mlflow_artifacts/{experiment}/artifacts/hydra_config'
+    checkpoint_dir = f'/home/kutulu/projects/kutulu_artifacts/mlflow_artifacts/{experiment}/artifacts/models/agent_0/final'
+    GlobalHydra.instance().clear()
+    with hydra.initialize(version_base=None, config_path=config_path):
+        cfg = hydra.compose(config_name="config")
+    info = OmegaConf.to_container(cfg.agent, resolve=True)
+    # del info['type']
+    info['train'] = train
+    info['checkpoint_dir'] = checkpoint_dir
+    return info
+
+
+def get_agent_info(experiment, best_iter=None, agent_id=None, new_experiment=True):
+    if new_experiment:
+        return _get_hydra_agent_info(experiment)
+    else:
+        return AgentDescription('20250622-045641', 1000, 0, output_dir='../../output').agent_info
+
+
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def run_experiment(cfg: DictConfig) -> None:
     """Main experiment runner."""
@@ -221,6 +244,16 @@ def run_experiment(cfg: DictConfig) -> None:
             trainer_config['output_dir'] = os.path.join(output_dir, "models")
             trainer_config['exp_name'] = run.info.run_name
             
+            if cfg.use_challenge:
+                competitors = {}
+                for competitor_type, competitor_config, new_experiment in [
+                    ('ppo', '05abe073de06428e896fcd880c9f3eac', True),
+                    ('qdn_conv', '20250622-045641', False),
+                ]:
+                    agent_info = get_agent_info(competitor_config, new_experiment=new_experiment)
+                    competitors[competitor_type] = agent_info
+                trainer_config['competitors'] = competitors
+
             logger.info(f"Creating trainer with {len(agents_info)} agents")
             trainer = Trainer(**trainer_config)
             

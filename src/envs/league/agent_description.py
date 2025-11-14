@@ -2,10 +2,11 @@
 from src.envs.experiments import _get_agent_info
 
 class AgentDescription:
-    def __init__(self, exp_name, best_iter, agent_id):
+    def __init__(self, exp_name, best_iter, agent_id, output_dir='../../../output'):
         self.exp_name = exp_name
         self.best_iter = best_iter
         self.agent_id = agent_id
+        self.output_dir = output_dir
 
     def __eq__(self, other):
         if not isinstance(other, AgentDescription):
@@ -27,7 +28,7 @@ class AgentDescription:
 
     @property
     def agent_info(self):
-        return _get_agent_info(self.exp_name, self.best_iter, self.agent_id)
+        return _get_agent_info(self.exp_name, self.best_iter, self.agent_id, output_dir=self.output_dir)
 
     @classmethod
     def from_dict(cls, data):

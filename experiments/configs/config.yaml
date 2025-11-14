@@ -11,6 +11,7 @@ experiment:
   training_agent_id: 0
 
 use_master_agent: false
+use_challenge: false
 
 # MLflow configuration
 mlflow:

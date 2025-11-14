@@ -62,7 +62,7 @@ class Trainer:
                  agents=None,
                  env_kwargs=None, shuffle=True,
                  log_dir='../../../runs', output_dir='../../../output',
-                 exp_name=None, use_master_agent=False,
+                 exp_name=None, use_master_agent=False, competitors=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True, metrics_int=10, seed=None):
         self.num_experiments = num_experiments
@@ -136,12 +136,22 @@ class Trainer:
         self.players_count = len(self.agents)
         self.agent_map = np.arange(len(self.agents))
         
+        self.competitors = competitors
+        if self.competitors is not None:
+            self.competitors = {
+                competitor_name: get_agent(agent_info)
+                for competitor_name, agent_info in self.competitors.items()
+            }
+
         # Initialize multi-environment support for PPO agents
         if self.num_envs > 1:
             for agent in self.agents:
                 if isinstance(agent, PPOAgent):
                     agent.init_multi_env(self.num_envs)
-    
+        
+        for agent in self.agents:
+            agent.num_experiments = self.num_experiments
+
     def reset_env(self, seed=None, maze_name=None, step=None, port=8080):
         if maze_name is None:
             if seed is not None:
@@ -176,7 +186,6 @@ class Trainer:
             return self.play_multi_rollout(seed, step=step)
 
     def play_single_rollout(self, seed=None, maze_name=None, env_idx=None, step=None, only_eval=False):
-        print(maze_name)
         env = self.reset_env(seed, maze_name, step)
         if self.verbose:
             if env_idx is not None:
@@ -351,7 +360,7 @@ class Trainer:
                 agent.writer.close()
         return reward_list, model_dir_list, metrics_list
     
-    def _calculate_metrics(self, reward_list):
+    def _calculate_metrics(self, reward_list, use_challenge=True):
         metrics = {}
         av = self.agent_validator
         av_plan = self.agent_validator_plan
@@ -418,7 +427,35 @@ class Trainer:
                 0.05 * metrics['check_exp_normal_plan0'][i][0], # 0-1
                 0.05 * metrics['check_exp_normal_plan1'][i][0], # 0-1
             ])
+        if self.competitors is not None:
+            for competitor_type, competitor in self.competitors.items():
+                metrics[f'winner_score_{competitor_type}'] = [None] * len(self.agents)
+                for i, agent in enumerate(self.agents):
+                    if not agent.train:
+                        continue
+                    agent.train = False
+                    agents = [agent, competitor, competitor, competitor]
+                    n_exps = 20
+                    n_wins = 0
+                    for _ in range(n_exps):
+                        scores = self._play_round(agents)
+                        if scores[0] == np.max(scores):
+                            n_wins += 1
+                    agent.train = True
+                    metrics[f'winner_score_{competitor_type}'][i] = n_wins / n_exps
         return metrics
+
+    def _play_round(self, agents, league_level=4, num_envs=1):
+        assert len(agents) == 4
+        trainer = Trainer(
+            num_experiments=1, agents_info=None, agents=agents, shuffle=True,
+            league_level=league_level, verbose=False, seed=17,
+            silent=True, num_envs=num_envs, only_train=False, use_tqdm=False,
+        )
+        result = trainer.play_single_rollout(only_eval=True)
+        # return result
+        scores = np.array([np.argwhere(~np.isnan(result[:,i])).max().item() for i in range(4)])
+        return scores
 
     def _log_metrics(self, step, metrics):
         for i, agent in enumerate(self.agents):
@@ -430,6 +467,7 @@ class Trainer:
             # agent.writer.add_scalar('Train/Policy', metrics['check_policy'][i], step)
             # agent.writer.add_scalar('Train/Epsilon', metrics['eps'][i], step)
             agent.writer.add_scalar('Check/acc_weighted', metrics['acc_weighted'][i], step)
+            agent.writer.add_scalar('Check/acc_weighted_full', metrics['acc_weighted_full'][i], step)
             agent.writer.add_scalar('Check/Explorer/acc', metrics['check_exp'][i][0], step)
             agent.writer.add_scalar('Check/Wanderer/acc', metrics['check_wan'][i][0], step)
             agent.writer.add_scalar('Check/Slasher/acc', metrics['check_slsh'][i][0], step)
@@ -456,6 +494,10 @@ class Trainer:
             for loss in self.agents[0].get_metric_names():
                 if metrics[loss][i] is not None:
                     agent.writer.add_scalar(f'Train/{loss}', metrics[loss][i], step)
+            
+            if self.competitors is not None:
+                for competitor_type, _ in self.competitors.items():
+                    agent.writer.add_scalar(f'Challenge/{competitor_type}', metrics[f'winner_score_{competitor_type}'][i], step)
 
     def close(self):
         """Close resources used by the trainer"""
