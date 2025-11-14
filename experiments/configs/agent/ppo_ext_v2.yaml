@@ -2,16 +2,17 @@ train: true
 type: ppo
 state_type: closest_ext_v2
 encode_states_first: false
+need_aug: true
 
 # Model parameters
 model_params:
-  fc_dim: 32
+  fc_dim: 16
   hidden_dim: 16
   inner_dim: 16
   out_linear_bias: false
 
 # Training parameters
-gamma: 0.85
+gamma: 0.52
 lr: 0.001
 optimizer: adamw
 scheduler_params:
@@ -19,17 +20,16 @@ scheduler_params:
   T_max: ${trainer.num_experiments}
 
 # PPO specific parameters
-entropy_coef: 1.4
-value_loss_coef: 0.5
-terminate_loss_coef: 0.0
+entropy_coef: 0.5
+value_loss_coef: 0.85
+terminate_loss_coef: 0.08
 occupation_loss_coef: 0.0
-clip_ratio: 0.04
+clip_ratio: 0.12
 ppo_epochs: 4
 mini_batch_size: 16
-target_kl: 0.15
-max_grad_norm: 0.15
-gae_lambda: 0.23
-explicit_action_mask: null
+target_kl: 0.77
+max_grad_norm: 0.96
+gae_lambda: 0.86
 
 # Reward shaping parameters
 reward_params:

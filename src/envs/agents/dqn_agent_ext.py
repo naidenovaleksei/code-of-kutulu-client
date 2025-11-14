@@ -1,3 +1,4 @@
+from copy import deepcopy
 import torch
 import numpy as np
 from src.envs.agents.dqn_agent import (
@@ -54,6 +55,22 @@ class DQNStateEncoderExtv2(BaseStateEncoder):
     def encode_states(self, states, return_tensors=True):
         data = listdict_to_dictnp([parse_state_v2(state) for state in states], return_tensors)
         return data
+
+    def _replace_dir(self, state, clockwise_dir):
+        for k in state:
+            if 'dir' in k and len(state[k]) > 0 and state[k][0] < 4:
+                state[k] = tuple(sorted([
+                    self.action_rotation_augment(x, clockwise_dir) for x in state[k]
+                ]))
+            elif isinstance(state[k], dict):
+                state[k] = self._replace_dir(state[k], clockwise_dir)
+            elif isinstance(state[k], list):
+                state[k] = [self._replace_dir(x, clockwise_dir) for x in state[k]]
+        return state
+
+    def state_rotation_augment(self, state, clockwise_dir):
+        state2 = deepcopy(state)
+        return self._replace_dir(state2, clockwise_dir)
 
 
 class DQNAgentExt(DQNAgentBase):

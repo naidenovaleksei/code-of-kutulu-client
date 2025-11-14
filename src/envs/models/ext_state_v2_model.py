@@ -9,9 +9,17 @@ class DummyPositionEncoder(nn.Module):
                  features_dim=6,
                 ):
         super(DummyPositionEncoder, self).__init__()
-        self.features_linear = nn.Linear(features_dim, outer_dim)
+        # self.features_dim = features_dim
+        # self.features_linear = nn.Linear(features_dim - 1, outer_dim)
+        # self.features_linear = nn.Linear(features_dim, outer_dim)
+        self.features_linear = nn.Sequential(
+            nn.Linear(features_dim, outer_dim),
+            # nn.Linear(inner_dim, inner_dim),
+            # nn.ReLU(),
+        )
 
     def forward(self, data):
+        # return self.features_linear(data[..., :-1]) * data[...,-1:]
         return self.features_linear(data)
 
 class EntityEncoder(nn.Module):
@@ -34,7 +42,11 @@ class EntityEncoder(nn.Module):
             cat_hidden_dim += hidden_dim
 
         self.features_field = features_field
-        self.features_linear = nn.Linear(features_dim, hidden_dim)
+        # self.features_linear = nn.Linear(features_dim, hidden_dim)
+        self.features_linear = nn.Sequential(
+            nn.Linear(features_dim, hidden_dim),
+            nn.ReLU()
+        )
         cat_hidden_dim += hidden_dim
 
         self.pos_encoder = pos_encoder
@@ -72,7 +84,7 @@ class EntityEncoder(nn.Module):
         return output, mask
 
 class ExtStatev2EncoderModel(nn.Module):
-    def __init__(self, outer_dim, hidden_dim=16, inner_dim=8, out_linear_bias=False):
+    def __init__(self, outer_dim, hidden_dim=16, inner_dim=8, out_linear_bias=True):
         super(ExtStatev2EncoderModel, self).__init__()
 
         self.pos_encoder = DummyPositionEncoder(hidden_dim)
@@ -110,12 +122,25 @@ class ExtStatev2EncoderModel(nn.Module):
         self.entity_linear = nn.Sequential(
             nn.Linear(inner_dim, inner_dim),
             nn.ReLU(),
+            nn.Linear(inner_dim, inner_dim),
         )
         self.entity_impact = nn.Sequential(
             nn.Linear(inner_dim, inner_dim),
-            nn.Sigmoid(),
+            nn.ReLU(),
+            nn.Linear(inner_dim, 1),
+            # nn.Sigmoid(),
         )
-        self.out_linear = nn.Linear(inner_dim, outer_dim, bias=out_linear_bias)
+        self.player_linear = nn.Sequential(
+            nn.Linear(5, inner_dim),
+            nn.ReLU(),
+            nn.Linear(inner_dim, inner_dim),
+        )
+        # self.out_linear = nn.Linear(inner_dim, outer_dim, bias=out_linear_bias)
+        self.out_linear = nn.Sequential(
+            nn.Linear(2 * inner_dim, inner_dim, bias=out_linear_bias),
+            nn.Linear(inner_dim, outer_dim, bias=out_linear_bias),
+            # nn.Sigmoid(),
+        )
 
     def forward(self, data):
         x_m, mask_m = self.minion_encoder(data['minions'])
@@ -124,11 +149,23 @@ class ExtStatev2EncoderModel(nn.Module):
         
         x = torch.concatenate((x_m, x_ex, x_ef), axis=1)
         mask = torch.concatenate((mask_m, mask_ex, mask_ef), axis=1)
+        
+        x_impact = self.entity_impact(x) * mask.unsqueeze(-1)
+        x_impact[mask.unsqueeze(-1) == 0] = - torch.inf
+        x_impact = torch.softmax(x_impact, -2)
+
         x = self.entity_linear(x)
         
-        x = self.entity_impact(x)
-
-        x = (x * mask.unsqueeze(-1)).sum(dim=1)
+        x = (x * x_impact).sum(dim=1)
+        
+        # idx = torch.argmax(x_impact, dim=-2)
+        # idx_expanded = idx.unsqueeze(-1).expand(-1, -1, x.size(-1))
+        # x = torch.gather(x, dim=1, index=idx_expanded).squeeze(1)
+        
+        x_player = self.player_linear(data['player'])
+        
+        x = torch.concatenate((x, x_player), dim=-1)
+        
         output = self.out_linear(x)
 
         return output

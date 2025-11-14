@@ -138,7 +138,7 @@ class ConvStateDeepEncoderModel(nn.Module):
             for size in range(1, self.max_size + 1)
         ])
         self.drop_list = nn.ModuleList([
-            nn.Dropout(0.1)
+            nn.Dropout(0.05)
             for size in range(1, self.max_size + 1)
         ])
 
@@ -165,8 +165,8 @@ class ConvStateDeepEncoderModel(nn.Module):
             x = torch.flatten(x, 1)
 #             print(x.shape)
             x = fc(x)
-            # x = drop(x)
-            x = x / (size ** 2)
+            x = drop(x)
+            x = x / (2 * size - 1) ** 2
             x_by_size.append(x.unsqueeze(1))
         x = torch.concatenate(x_by_size, axis=1)
         x = x.sum(dim=1)
