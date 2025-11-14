@@ -23,7 +23,8 @@ from src.envs.agents.dqn_agent_ext import (
     DQNStateEncoderExtv2,
 )
 from src.envs.agents import AgentObservation
-from src.envs.models.conv_a2c_model import ConvA2CModel, ConvA2CDeepModel, ConvA2CGRUModel
+# from src.envs.models.conv_a2c_model import ConvA2CModel, ConvA2CDeepModel, ConvA2CGRUModel
+from src.envs.models.conv_a2c_model import ConvA2CModel
 from src.envs.models.ext_state_v2_model import ExtStatev2A2AModel
 from src.envs.reward_shaper import PotentialRewardShaper, RewardShaper
 
@@ -61,7 +62,7 @@ class PPOBuffer:
         }
         self.buffer.append(ppo_experience)
         
-    def end_episode(self):
+    def end_episode(self, annealing_coef=None):
         """End episode and return all collected data"""
         assert len(self.buffer) > 0
         
@@ -105,7 +106,12 @@ class PPOBuffer:
             self.latest_bonus_averages = avg_bonuses
         else:
             rewards = result
-        
+
+        if annealing_coef is not None:
+            for i in range(len(rewards) - 1):
+                rewards[i] *= annealing_coef
+            # rewards[-1] *= min(1 / annealing_coef, 10)
+
         return states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states
 
     def encode_states(self, states):
@@ -144,7 +150,7 @@ class PPOAgent(ActorAgent):
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
                  target_kl=0.01, max_grad_norm=0.5, use_deep=False,
                  gae_lambda=0.95, reward_params=None, need_aug=False, use_gru=False,
-                 segment_length=20,
+                 segment_length=20, anneal_reward=False,
                  encode_states_first=True, **kw):
         """
         PPO (Proximal Policy Optimization) Agent with Clipped Objective
@@ -173,27 +179,14 @@ class PPOAgent(ActorAgent):
             elif state_type == 'conv_ext':
                 self.state_encoder = DQNStateEncoderConv(is_ext=True)
             self.size = model_params.pop('size', 3)
-            if use_deep:
-                model = ConvA2CDeepModel(
-                    num_classes=action_space_n,
-                    size=self.size,
-                    in_channels=self.state_encoder.layers_count(),
-                    **model_params
-                )
-            elif use_gru:
-                model = ConvA2CGRUModel(
-                    num_classes=action_space_n,
-                    size=self.size,
-                    in_channels=self.state_encoder.layers_count(),
-                    **model_params
-                )
-            else:
-                model = ConvA2CModel(
-                    num_classes=action_space_n,
-                    size=self.size,
-                    in_channels=self.state_encoder.layers_count(),
-                    **model_params
-                )
+            model = ConvA2CModel(
+                num_classes=action_space_n,
+                size=self.size,
+                in_channels=self.state_encoder.layers_count(),
+                use_deep=use_deep,
+                use_gru=use_gru,
+                **model_params
+            )
         elif state_type == 'closest_ext_v2':
             self.state_encoder = DQNStateEncoderExtv2()
             model = ExtStatev2A2AModel(
@@ -252,6 +245,7 @@ class PPOAgent(ActorAgent):
         
         # Initialize latest_bonus_averages to store reward shaper metrics
         self.latest_bonus_averages = None
+        self.anneal_reward = anneal_reward
         
         # Multi-environment support
         self.num_envs = 1
@@ -336,10 +330,16 @@ class PPOAgent(ActorAgent):
         # Collect bonus averages from all buffers
         bonus_sums = {}
         bonus_counts = {}
+        
+        if self.anneal_reward is not None:
+            assert self.episode_idx < self.num_experiments
+            annealing_coef = max(min(self.anneal_reward - self.episode_idx / self.num_experiments, 1), 0)
+        else:
+            annealing_coef = None
 
         for env_buffer in self.env_buffers:
             if len(env_buffer.buffer) > 0:
-                states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states = env_buffer.end_episode()
+                states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states = env_buffer.end_episode(annealing_coef)
                 all_states.extend(states)
                 all_actions.extend(actions)
                 all_rewards.extend(rewards)
@@ -378,8 +378,13 @@ class PPOAgent(ActorAgent):
 
     def _train_model(self):
         """Train the PPO model with clipped objective"""
+        if self.anneal_reward is not None:
+            assert self.episode_idx < self.num_experiments
+            annealing_coef = max(min(self.anneal_reward - self.episode_idx / self.num_experiments, 1), 0)
+        else:
+            annealing_coef = None
         # End the current episode and get the episode data
-        states, actions, rewards, dones, old_log_probs, values, turns_to_death, is_occupied = self.episode_buffer.end_episode()
+        states, actions, rewards, dones, old_log_probs, values, turns_to_death, is_occupied = self.episode_buffer.end_episode(annealing_coef)
         # Get bonus averages if available
         if self.episode_buffer.latest_bonus_averages is not None:
             self.latest_bonus_averages = self.episode_buffer.latest_bonus_averages

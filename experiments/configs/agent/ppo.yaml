@@ -4,6 +4,7 @@ state_type: conv_ext
 use_deep: false
 need_aug: true
 use_gru: false
+anneal_reward: 0
 
 # Model parameters
 model_params:
