@@ -151,6 +151,70 @@ def calculate_final_metrics(results, training_agent_id) -> dict:
     return final_metrics
 
 
+def run_training(cfg: DictConfig, output_dir: str = None, exp_name: str = None, 
+                 num_experiments_override: int = None) -> tuple:
+    """
+    Core training function that can be reused by both run_experiment and optimize_hyperparameters.
+    
+    Args:
+        cfg: Configuration with agent, trainer, and experiment settings
+        output_dir: Directory for outputs (defaults to Hydra output dir if available)
+        exp_name: Experiment name override
+        num_experiments_override: Override for number of training experiments
+        
+    Returns:
+        tuple: (results, trainer, final_metrics)
+    """
+    # Get output directory
+    if output_dir is None:
+        try:
+            hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
+            output_dir = hydra_cfg.runtime.output_dir
+        except Exception:
+            output_dir = "./output"
+    
+    # Create agents configuration
+    agents_info = create_agents_info(cfg)
+    
+    # Create trainer
+    trainer_config = OmegaConf.to_container(cfg.trainer, resolve=True)
+    trainer_config['agents_info'] = agents_info
+    trainer_config['use_master_agent'] = cfg.get('use_master_agent', False)
+    
+    # Override paths to use output directory
+    trainer_config['log_dir'] = os.path.join(output_dir, "tb")
+    trainer_config['output_dir'] = os.path.join(output_dir, "models")
+    trainer_config['exp_name'] = exp_name or cfg.experiment.name
+    
+    # Override number of experiments if specified
+    if num_experiments_override is not None:
+        trainer_config['num_experiments'] = num_experiments_override
+    
+    # Handle challenge mode if configured
+    if cfg.get('use_challenge', False):
+        competitors = {}
+        for competitor_type, competitor_config, new_experiment, legacy_encoder in [
+            ('ppo', '05abe073de06428e896fcd880c9f3eac', True, True),
+            ('qdn_conv', '20250622-045641', False, False),
+        ]:
+            agent_info = get_agent_info(competitor_config, new_experiment=new_experiment)
+            agent_info['legacy_encoder'] = legacy_encoder
+            competitors[competitor_type] = agent_info
+        trainer_config['competitors'] = competitors
+    
+    logger.info(f"Creating trainer with {len(agents_info)} agents")
+    trainer = Trainer(**trainer_config)
+    
+    # Run training
+    logger.info("Starting training...")
+    results = trainer.train()
+    
+    # Calculate final metrics
+    final_metrics = calculate_final_metrics(results, cfg.experiment.training_agent_id)
+    
+    return results, trainer, final_metrics
+
+
 def log_model_artifacts(trainer: Trainer, run_id: str):
     """Log model artifacts to MLflow."""
     try:
@@ -199,11 +263,11 @@ def _get_hydra_agent_info(experiment, train=False):
     return info
 
 
-def get_agent_info(experiment, best_iter=1000, agent_id=0, new_experiment=True):
+def get_agent_info(experiment, best_iter=1000, agent_id=0, new_experiment=True, output_dir='../../output'):
     if new_experiment:
         return _get_hydra_agent_info(experiment)
     else:
-        return AgentDescription(experiment, best_iter, agent_id, output_dir='../../output').agent_info
+        return AgentDescription(experiment, best_iter, agent_id, output_dir=output_dir).agent_info
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
@@ -230,46 +294,16 @@ def run_experiment(cfg: DictConfig) -> None:
             output_dir = hydra_cfg.runtime.output_dir
             mlflow.set_tag("hydra_output_dir", output_dir)
             
-            # Create agents configuration
-            agents_info = create_agents_info(cfg)
-            
-            # Create trainer
-            trainer_config = OmegaConf.to_container(cfg.trainer, resolve=True)
-            trainer_config['agents_info'] = agents_info
-            trainer_config['use_master_agent'] = cfg.use_master_agent
-            # trainer_config['env_kwargs'] = OmegaConf.to_container(cfg.env, resolve=True)
-            
-            # Override paths to use Hydra output directory
-            trainer_config['log_dir'] = os.path.join(output_dir, "tb")
-            trainer_config['output_dir'] = os.path.join(output_dir, "models")
-            trainer_config['exp_name'] = run.info.run_name
-            
-            if cfg.use_challenge:
-                competitors = {}
-                for competitor_type, competitor_config, new_experiment, legacy_encoder in [
-                    ('ppo', '05abe073de06428e896fcd880c9f3eac', True, True),
-                    ('qdn_conv', '20250622-045641', False, False),
-                ]:
-                    agent_info = get_agent_info(competitor_config, new_experiment=new_experiment)
-                    agent_info['legacy_encoder'] = legacy_encoder
-                    competitors[competitor_type] = agent_info
-                trainer_config['competitors'] = competitors
-
-            logger.info(f"Creating trainer with {len(agents_info)} agents")
-            trainer = Trainer(**trainer_config)
+            # Run training using shared function
+            results, trainer, final_metrics = run_training(cfg, output_dir, run.info.run_name)
             
             # Log experiment metadata
             mlflow.set_tag("experiment_name", cfg.experiment.name)
             mlflow.set_tag("experiment_description", cfg.experiment.get('description', ''))
-            mlflow.set_tag("num_agents", len(agents_info))
-            mlflow.set_tag("training_agent_type", agents_info[0]['type'])
+            mlflow.set_tag("num_agents", len(trainer.agents))
+            mlflow.set_tag("training_agent_type", trainer.agents_info[0]['type'])
             
-            # Run training
-            logger.info("Starting training...")
-            results = trainer.train()
-            
-            # Calculate and log final metrics
-            final_metrics = calculate_final_metrics(results, cfg.experiment.training_agent_id)
+            # Log final metrics
             if final_metrics:
                 mlflow.log_metrics(final_metrics)
             

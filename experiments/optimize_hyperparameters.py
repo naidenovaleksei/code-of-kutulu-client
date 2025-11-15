@@ -20,8 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.envs.trainer import Trainer, DEFAULT_KUTULU_ACTIONS
 from experiments.run_experiment import (
-    setup_mlflow, create_agents_info, log_system_info, 
-    calculate_final_metrics, flatten_config
+    setup_mlflow, log_system_info, flatten_config, run_training
 )
 
 # Register eval resolver if not already registered
@@ -131,37 +130,30 @@ def objective(trial: optuna.Trial, base_config: DictConfig, optimization_config:
                 
             hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
             output_dir = hydra_cfg.runtime.output_dir
-            # Create agents configuration
-            agents_info = create_agents_info(config)
             
-            # Create trainer
-            trainer_config = OmegaConf.to_container(config.trainer, resolve=True)
-            trainer_config['agents_info'] = agents_info
-            
-            # Set paths to temporary directory
-            trainer_config['log_dir'] = os.path.join(output_dir, "tb")
-            trainer_config['output_dir'] = os.path.join(output_dir, "models")
-            trainer_config['exp_name'] = f"trial_{trial.number}"
-            
-            # Reduce number of experiments for optimization (faster trials)
+            # Determine number of experiments for this trial
+            num_experiments_override = None
             if optimization_config.get('fast_trials', True):
-                trainer_config['num_experiments'] = min(
-                    trainer_config.get('num_experiments', 2000),
+                num_experiments_override = min(
+                    config.trainer.get('num_experiments', 2000),
                     optimization_config.get('max_experiments_per_trial', 500)
                 )
             
-            logger.info(f"Trial {trial.number}: Starting training with {len(agents_info)} agents")
-            trainer = Trainer(**trainer_config)
+            logger.info(f"Trial {trial.number}: Starting training")
+            
+            # Run training using shared function
+            results, trainer, final_metrics = run_training(
+                config, 
+                output_dir=output_dir, 
+                exp_name=f"trial_{trial.number}",
+                num_experiments_override=num_experiments_override
+            )
             
             # Log experiment metadata
-            mlflow.set_tag("num_agents", len(agents_info))
-            mlflow.set_tag("training_agent_type", agents_info[0]['type'])
+            mlflow.set_tag("num_agents", len(trainer.agents))
+            mlflow.set_tag("training_agent_type", trainer.agents_info[0]['type'])
             
-            # Run training
-            results = trainer.train()
-            
-            # Calculate final metrics
-            final_metrics = calculate_final_metrics(results, base_config.experiment.training_agent_id)
+            # Log final metrics
             if final_metrics:
                 mlflow.log_metrics(final_metrics)
             
@@ -179,7 +171,7 @@ def objective(trial: optuna.Trial, base_config: DictConfig, optimization_config:
             logger.info(f"Trial {trial.number} completed. Objective: {objective_value}")
             
             # Report intermediate value for pruning
-            trial.report(objective_value, step=trainer_config['num_experiments'])
+            trial.report(objective_value, step=num_experiments_override or config.trainer.get('num_experiments', 2000))
             
             return objective_value
                 
