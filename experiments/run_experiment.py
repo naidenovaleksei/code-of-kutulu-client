@@ -246,11 +246,12 @@ def run_experiment(cfg: DictConfig) -> None:
             
             if cfg.use_challenge:
                 competitors = {}
-                for competitor_type, competitor_config, new_experiment in [
-                    ('ppo', '05abe073de06428e896fcd880c9f3eac', True),
-                    ('qdn_conv', '20250622-045641', False),
+                for competitor_type, competitor_config, new_experiment, legacy_encoder in [
+                    ('ppo', '05abe073de06428e896fcd880c9f3eac', True, True),
+                    ('qdn_conv', '20250622-045641', False, False),
                 ]:
                     agent_info = get_agent_info(competitor_config, new_experiment=new_experiment)
+                    agent_info['legacy_encoder'] = legacy_encoder
                     competitors[competitor_type] = agent_info
                 trainer_config['competitors'] = competitors
 
