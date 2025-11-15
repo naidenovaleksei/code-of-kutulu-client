@@ -30,6 +30,7 @@ class NNAgent(BaseAgent):
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
                  train, verbose=False, checkpoint_dir=None, drop_layers=None,
+                 strict=True, legacy_encoder=False,
                  optimizer='adam', scheduler_params=None, explicit_random=False,
                  explicit_action_mask=DEFAULT_ACTION_MASK, use_gru=False, segment_length=20):
         super(NNAgent, self).__init__(
@@ -77,7 +78,7 @@ class NNAgent(BaseAgent):
             raise ValueError(f'wrong scheduler_params: {scheduler_params}')
 
         if checkpoint_dir is not None:
-            self.load_agent(checkpoint_dir, drop_layers)
+            self.load_agent(checkpoint_dir, drop_layers, strict, legacy_encoder)
 
     def set_env(self, env):
         super().set_env(env)
@@ -199,7 +200,7 @@ class NNAgent(BaseAgent):
     def save_agent(self, checkpoint_dir):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
 
-    def load_agent(self, checkpoint_dir, drop_layers=None):
+    def load_agent(self, checkpoint_dir, drop_layers=None, strict=True, legacy_encoder=False):
         if self.verbose:
             print(f"Loading agent from '{checkpoint_dir}'")
         # Load to CPU first, then move to device if needed
@@ -211,14 +212,25 @@ class NNAgent(BaseAgent):
             for layer in drop_layers:
                 if layer in weights:
                     del weights[layer]
-            self.model.load_state_dict(weights, strict=False)
+            self.model.load_state_dict(weights, strict=strict)
         else:
             weights = torch.load(f"{checkpoint_dir}/model.pt", map_location=map_location)
             if 'fc1.weight' in weights and hasattr(self.model, 'fc'):
                 weights['fc.weight'] = weights.pop('fc1.weight')
             if 'fc1.bias' in weights and hasattr(self.model, 'fc'):
                 weights['fc.bias'] = weights.pop('fc1.bias')
-            self.model.load_state_dict(weights, strict=False)
+            if legacy_encoder:
+                model_keys = list(dict(self.model.named_parameters()).keys()) + \
+                             list(dict(self.model.named_buffers()).keys())
+                weights = torch.load(f"{checkpoint_dir}/model.pt")
+                for key in model_keys:
+                    if key.startswith('encoder.'):
+                        legacy_key = key[len('encoder.'):]
+                        weights[key] = weights[legacy_key]
+                        if self.verbose:
+                            print(f"{legacy_key} -> {key}")
+                        del weights[legacy_key]
+            self.model.load_state_dict(weights, strict=strict)
         
         # Move model to device after loading
         if hasattr(self, 'device'):

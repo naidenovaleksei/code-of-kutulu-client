@@ -162,10 +162,14 @@ class KutuluWorldEnv(gym.Env):
             else:
                 curr_map[e.y][e.x] = e.kind[0]
         if action is not None:
-            rel_pos = REL_POSITIONS[action]
+            if action < len(REL_POSITIONS):
+                step = '^'
+            else:
+                step = EXTENDED_KUTULU_ACTIONS[action][0]
+            rel_pos = REL_POSITIONS[min(action, 4)]
             x = agent_pos[0] + rel_pos[0]
             y = agent_pos[1] + rel_pos[1]
-            curr_map[y][x] = '^'
+            curr_map[y][x] = step
         for line in curr_map:
             print(''.join(line))
         print()

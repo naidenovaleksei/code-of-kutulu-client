@@ -12,7 +12,7 @@ class ConvA2CModel(nn.Module):
     def __init__(self, size, in_channels=12, num_classes=5, conv_dim=32, fc_dim=64,
                  use_deep=False,
                  use_gru=False, hidden_size=None, num_gru_layers=None, gru_dropout=None,
-                 detach_actor=False,
+                 detach_actor=False, include_occupation_head=False,
                  return_softmax=False):
         # super(ConvA2CModel, self).__init__(
         #     size,
@@ -48,8 +48,11 @@ class ConvA2CModel(nn.Module):
         self.critic = nn.Linear(fc_dim, 1)
         # Aux turns_to_death head
         self.terminator = nn.Linear(fc_dim, 1)
-        # Aux occupation prediction head
-        self.occupation_head = nn.Linear(fc_dim, 1)
+
+        self.include_occupation_head = include_occupation_head
+        if self.include_occupation_head:
+            # Aux occupation prediction head
+            self.occupation_head = nn.Linear(fc_dim, 1)
         
         if self.use_gru:
             self.hidden_size = hidden_size
@@ -95,14 +98,14 @@ class ConvA2CModel(nn.Module):
         value = self.critic(shared_features)
         
         turns_to_death = self.terminator(shared_features)
-        is_occupied = self.occupation_head(shared_features)
 
         outputs = {
             'policy': policy,
             'value': value,
             'turns_to_death': turns_to_death,
-            'is_occupied': is_occupied,
         }
+        if self.include_occupation_head:
+            outputs['is_occupied'] = self.occupation_head(shared_features)
         if self.use_gru:
             outputs['hidden_state'] = new_hidden_state
         return outputs
