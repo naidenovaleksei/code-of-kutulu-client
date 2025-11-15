@@ -199,11 +199,11 @@ def _get_hydra_agent_info(experiment, train=False):
     return info
 
 
-def get_agent_info(experiment, best_iter=None, agent_id=None, new_experiment=True):
+def get_agent_info(experiment, best_iter=1000, agent_id=0, new_experiment=True):
     if new_experiment:
         return _get_hydra_agent_info(experiment)
     else:
-        return AgentDescription('20250622-045641', 1000, 0, output_dir='../../output').agent_info
+        return AgentDescription(experiment, best_iter, agent_id, output_dir='../../output').agent_info
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
