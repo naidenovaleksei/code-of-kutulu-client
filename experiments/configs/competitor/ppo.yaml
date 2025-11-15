@@ -8,6 +8,7 @@ model_params:
   size: 3
 
 explicit_action_mask: null
+legacy_encoder: true
 
 checkpoint_dir: ${oc.env:HOME}/projects/kutulu_artifacts/mlflow_artifacts/05abe073de06428e896fcd880c9f3eac/artifacts/models/agent_0/final
 wrapper_params:

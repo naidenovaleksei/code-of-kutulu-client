@@ -200,7 +200,7 @@ class NNAgent(BaseAgent):
     def save_agent(self, checkpoint_dir):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
 
-    def load_agent(self, checkpoint_dir, drop_layers=None, strict=True, legacy_encoder=False):
+    def load_agent(self, checkpoint_dir, drop_layers, strict, legacy_encoder):
         if self.verbose:
             print(f"Loading agent from '{checkpoint_dir}'")
         # Load to CPU first, then move to device if needed

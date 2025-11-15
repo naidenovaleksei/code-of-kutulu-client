@@ -11,6 +11,7 @@ model_params:
   fc_dim: 16
   conv_dim: 8
   size: 3
+  include_occupation_head: true
 
 # Training parameters
 gamma: 0.52
