@@ -135,13 +135,16 @@ def test_ppo_buffer_functionality():
     assert len(buffer.buffer) == 2
     
     # Test end_episode
-    states, actions, rewards, dones, log_probs, values = buffer.end_episode()
+    states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states = buffer.end_episode()
     
     assert len(states) == 2
     assert len(actions) == 2
     assert len(rewards) == 2
     assert len(log_probs) == 2
     assert len(values) == 2
+    assert len(turns_to_death) == 2
+    assert len(is_occupied) == 2
+    assert len(hidden_states) == 2
     
     assert log_probs == [0.5, 0.3]
     assert values == [0.8, 0.6]

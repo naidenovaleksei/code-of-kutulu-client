@@ -27,7 +27,9 @@ def test_conv_a2c_model_output():
     x = torch.rand(batch_size, in_channels, size*2, size*2)
     
     # Forward pass
-    policy, value = model(x)
+    output = model(x)
+    policy = output['policy']
+    value = output['value']
     
     # Check output dimensions
     assert policy.shape == (batch_size, 5)
@@ -40,7 +42,7 @@ def test_conv_a2c_model_output():
         # All probabilities should be >= 0
         assert (policy[i] >= 0).all().item()
     
-    # Test individual methods
+    # Test individual methods (these return the specific values from the dict)
     policy_only = model.get_policy(x)
     assert torch.allclose(policy_only, policy)
     

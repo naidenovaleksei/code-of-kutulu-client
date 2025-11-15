@@ -17,24 +17,21 @@ def agents_info():
         },
         {
             'train': False,
-            'type': 'qlearning',
+            'type': 'dummy',
             'action_space_n': 8,
             'state_type': 'closest',
-            'strategy': 'random',
         },
         {
             'train': False,
-            'type': 'qlearning',
+            'type': 'dummy',
             'action_space_n': 8,
             'state_type': 'closest',
-            'strategy': 'random',
         },
         {
             'train': False,
-            'type': 'qlearning',
+            'type': 'dummy',
             'action_space_n': 8,
             'state_type': 'closest',
-            'strategy': 'random',
         },
     ]
 

@@ -80,7 +80,7 @@ class PPOBuffer:
         turns_to_death = np.arange(len(augmented_data))[::-1] + 1
         
         states, actions, rewards, dones, other_rewards, observations = zip(*experiences)
-        is_occupied = np.zeros(len(states), dtype=np.bool)
+        is_occupied = np.zeros(len(states), dtype=bool)
         # size = len(states[0]['WANDERER_COUNT'])
         # sanity_diffs = np.diff(np.array([obs.obs.entities[0].param0 for obs in observations]))
         # is_occupied = [
@@ -384,7 +384,7 @@ class PPOAgent(ActorAgent):
         else:
             annealing_coef = None
         # End the current episode and get the episode data
-        states, actions, rewards, dones, old_log_probs, values, turns_to_death, is_occupied = self.episode_buffer.end_episode(annealing_coef)
+        states, actions, rewards, dones, old_log_probs, values, turns_to_death, is_occupied, hidden_states = self.episode_buffer.end_episode(annealing_coef)
         # Get bonus averages if available
         if self.episode_buffer.latest_bonus_averages is not None:
             self.latest_bonus_averages = self.episode_buffer.latest_bonus_averages

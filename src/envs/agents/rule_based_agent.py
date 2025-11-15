@@ -52,7 +52,7 @@ class EpsilonConstAgent(BaseAgent):
         return np.random.choice(np.arange(self.action_space_n), p=ps / ps.sum())
 
     def inference_step(self, player_id):
-        return self.generate_state_and_step(player_id, need_update=False)[1]
+        return self.generate_state_and_step(player_id, need_update=False)
 
     def generate_state_and_step(self, player_id, need_update=True):
         if need_update:
@@ -65,8 +65,13 @@ class EpsilonConstAgent(BaseAgent):
             player_mask = ~np.array(valid_actions)
             player_mask = player_mask[:self.action_space_n]
             action = self.generate_random_step(None, player_mask)
-        action = np.int64(action)
-        return None, action
+        action = int(action) if not isinstance(action, int) else action
+        return {
+            'state': None,
+            'action': action,
+            'model_output': None,
+            'valid_actions': self.get_valid_actions(player_id),
+        }
 
     def _update_eps(self):
         self.eps -= self.epsilon_start / self.epsilon_decay_last_frame

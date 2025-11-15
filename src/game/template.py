@@ -1143,10 +1143,12 @@ class QlearningSolver(Solver):
 
 
 class NNSolver(Solver):
-    def __init__(self, info, actions, weights, explicit_action_mask):
+    def __init__(self, info, actions, weights, explicit_action_mask=None):
         super(NNSolver, self).__init__(info, actions)
         self.weights = weights
         self._assert_weights(actions)
+        if explicit_action_mask is None:
+            explicit_action_mask = np.ones(len(actions), dtype=bool)
         self.explicit_action_mask = explicit_action_mask
 
     def _assert_weights(self, actions):
@@ -1306,20 +1308,22 @@ class ConvExtEncoder:
             features.append(state[k])
         data = np.array([features])
 
-        conv1 = weights['conv1.weight']
-        conv1_b = weights['conv1.bias']
-        conv2 = weights['conv2.weight']
-        conv2_b = weights['conv2.bias']
-        fc1 = weights['fc.weight']
-        fc1_b = weights['fc.bias']
-        bn1 = weights['bn1.weight']
-        bn1_b = weights['bn1.bias']
-        bn1_mean = weights['bn1.running_mean']
-        bn1_var = weights['bn1.running_var']
-        bn2 = weights['bn2.weight']
-        bn2_b = weights['bn2.bias']
-        bn2_mean = weights['bn2.running_mean']
-        bn2_var = weights['bn2.running_var']
+        # Support both encoder.* and non-prefixed weight keys
+        prefix = 'encoder.' if 'encoder.conv1.weight' in weights else ''
+        conv1 = weights[f'{prefix}conv1.weight']
+        conv1_b = weights[f'{prefix}conv1.bias']
+        conv2 = weights[f'{prefix}conv2.weight']
+        conv2_b = weights[f'{prefix}conv2.bias']
+        fc1 = weights[f'{prefix}fc.weight']
+        fc1_b = weights[f'{prefix}fc.bias']
+        bn1 = weights[f'{prefix}bn1.weight']
+        bn1_b = weights[f'{prefix}bn1.bias']
+        bn1_mean = weights[f'{prefix}bn1.running_mean']
+        bn1_var = weights[f'{prefix}bn1.running_var']
+        bn2 = weights[f'{prefix}bn2.weight']
+        bn2_b = weights[f'{prefix}bn2.bias']
+        bn2_mean = weights[f'{prefix}bn2.running_mean']
+        bn2_var = weights[f'{prefix}bn2.running_var']
 
         x = data
         x = self.inference_helper._conv2d(x, conv1, conv1_b)
@@ -1341,8 +1345,8 @@ class ConvExtEncoder:
 
 
 class DQNConvSolver(NNSolver):
-    def __init__(self, info, actions, weights, size=3):
-        super(DQNConvSolver, self).__init__(info, actions, weights)
+    def __init__(self, info, actions, weights, size=3, explicit_action_mask=None):
+        super(DQNConvSolver, self).__init__(info, actions, weights, explicit_action_mask)
         self.size = size
         self.conv_encoder = ConvEncoder()
 
@@ -1365,8 +1369,8 @@ class DQNConvSolver(NNSolver):
 
 
 class DQNByKindSolver(NNSolver):
-    def __init__(self, info, actions, weights):
-        super(DQNByKindSolver, self).__init__(info, actions, weights)
+    def __init__(self, info, actions, weights, explicit_action_mask=None):
+        super(DQNByKindSolver, self).__init__(info, actions, weights, explicit_action_mask)
         self.entity_kinds = set([key.split('.')[1] for key in weights.keys()])
         self.weights_dict = {
             kind: {
@@ -1410,8 +1414,8 @@ class DQNByKindSolver(NNSolver):
 
 
 class PPOConvSolver(NNSolver):
-    def __init__(self, info, actions, weights, size=3):
-        super(PPOConvSolver, self).__init__(info, actions, weights)
+    def __init__(self, info, actions, weights, size=3, explicit_action_mask=None):
+        super(PPOConvSolver, self).__init__(info, actions, weights, explicit_action_mask)
         self.size = size
         self.conv_encoder = ConvEncoder()
 
@@ -1434,7 +1438,7 @@ class PPOConvSolver(NNSolver):
 
 
 class PPOConvExtSolver(NNSolver):
-    def __init__(self, info, actions, weights, size, explicit_action_mask):
+    def __init__(self, info, actions, weights, size, explicit_action_mask=None):
         super(PPOConvExtSolver, self).__init__(info, actions, weights, explicit_action_mask)
         self.size = size
         self.conv_encoder = ConvExtEncoder()

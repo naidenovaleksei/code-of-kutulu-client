@@ -44,13 +44,16 @@ def test_ppo_buffer_append_and_end_episode():
     assert len(buffer.buffer) == 1
     
     # End episode and check returned data
-    states, actions, rewards, dones, log_probs, values = buffer.end_episode()
+    states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states = buffer.end_episode()
     
     assert len(states) == 1
     assert len(actions) == 1
     assert len(rewards) == 1
     assert len(log_probs) == 1
     assert len(values) == 1
+    assert len(turns_to_death) == 1
+    assert len(is_occupied) == 1
+    assert len(hidden_states) == 1
     
     assert actions[0] == 1
     assert rewards[0] == 1.0
@@ -212,8 +215,8 @@ def test_ppo_agent_state_type_assertion():
     )
     assert agent.state_type == 'conv'
     
-    # This should raise an assertion error
-    with pytest.raises(AssertionError):
+    # This should raise a ValueError (not AssertionError) for unsupported state types
+    with pytest.raises(ValueError):
         PPOAgent(
             state_type='closest',
             train=True,
@@ -241,7 +244,9 @@ def test_ppo_agent_model_compatibility():
     # Create dummy input (note: model applies MaxPool2d, so input size should be size*2)
     x = torch.rand(batch_size, in_channels, size*2, size*2)
     
-    policy, value = agent.model(x)
+    output = agent.model(x)
+    policy = output['policy']
+    value = output['value']
     
     # Check output shapes
     assert policy.shape == (batch_size, 5)
@@ -289,7 +294,7 @@ def test_ppo_buffer_with_augmentation():
     buffer.append(exp, -1.5, 0.8)
     
     # End episode with augmentation
-    states, actions, rewards, dones, log_probs, values = buffer.end_episode()
+    states, actions, rewards, dones, log_probs, values, turns_to_death, is_occupied, hidden_states = buffer.end_episode()
     
     # The action might be rotated (0->1, 1->2, 2->3, 3->0 for clockwise rotations)
     # But log_probs and values should remain the same

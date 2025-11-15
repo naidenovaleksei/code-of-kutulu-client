@@ -85,7 +85,9 @@ class TestDQNAgentExt:
             'lines': agent.observer.env.map,
         }
 
-        solver = DQNSolver(info, DEFAULT_KUTULU_ACTIONS, weights)
+        # Create explicit_action_mask (all True means all actions are allowed by default)
+        explicit_action_mask = np.ones(len(DEFAULT_KUTULU_ACTIONS), dtype=bool)
+        solver = DQNSolver(info, DEFAULT_KUTULU_ACTIONS, weights, explicit_action_mask=explicit_action_mask)
         entities = [e.to_dict() for e in agent.observer.env._get_entites(0)]
         np_output = solver._calculate_output(entities, player_pos)
 
@@ -126,7 +128,9 @@ class TestDQNAgentByKind:
             'lines': agent.observer.env.map,
         }
 
-        solver = DQNByKindSolver(info, DEFAULT_KUTULU_ACTIONS, weights)
+        # Create explicit_action_mask (all True means all actions are allowed by default)
+        explicit_action_mask = np.ones(len(DEFAULT_KUTULU_ACTIONS), dtype=bool)
+        solver = DQNByKindSolver(info, DEFAULT_KUTULU_ACTIONS, weights, explicit_action_mask=explicit_action_mask)
         entities = [e.to_dict() for e in agent.observer.env._get_entites(0)]
         np_output = solver._calculate_output(entities, player_pos)
 

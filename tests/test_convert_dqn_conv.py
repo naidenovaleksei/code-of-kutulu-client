@@ -82,7 +82,9 @@ class TestDQNAgentConv:
             'lines': agent.observer.env.map,
         }
 
-        solver = DQNConvSolver(info, DEFAULT_KUTULU_ACTIONS, weights, size=agent.size)
+        # Create explicit_action_mask (all True means all actions are allowed by default)
+        explicit_action_mask = np.ones(len(DEFAULT_KUTULU_ACTIONS), dtype=bool)
+        solver = DQNConvSolver(info, DEFAULT_KUTULU_ACTIONS, weights, size=agent.size, explicit_action_mask=explicit_action_mask)
         entities = [e.to_dict() for e in agent.observer.env._get_entites(0)]
         np_output = solver._calculate_output(entities, player_pos)
 
@@ -141,7 +143,8 @@ class TestDQNAgentConv:
             size=3,
             buffer_params={'capacity': 10},
             epsilon_params={},
-            dueling=False
+            dueling=False,
+            explicit_action_mask=None,
         )
         
         dueling_agent = DQNAgentConv(
