@@ -3,7 +3,7 @@
 defaults:
   - agent: ppo
   - trainer: default
-  - competitor: qdn_conv
+  - competitor: ppo
   - _self_
 
 # Base experiment configuration (inherits from existing config structure)
@@ -25,6 +25,7 @@ base_experiment:
   agent: ${agent}
   competitor: ${competitor}
   use_master_agent: false
+  use_challenge: true
 
 # Optimization-specific configuration
 optimization:

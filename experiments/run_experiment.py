@@ -144,6 +144,16 @@ def calculate_final_metrics(results, training_agent_id) -> dict:
         final_metrics['acc_weighted_full_avg100'] = np.mean([
             m['acc_weighted_full'][training_agent_id] for m in metrics_list[-10:]
         ])
+        final_metrics['winner_score_ppo'] = np.mean([
+            m['winner_score_ppo'][training_agent_id] for m in metrics_list[-5:]
+        ])
+        final_metrics['winner_score_qdn_conv'] = np.mean([
+            m['winner_score_qdn_conv'][training_agent_id] for m in metrics_list[-5:]
+        ])
+        final_metrics['acc_weighted_full_avg100_winner_score_qdn_conv'] = sum([
+            0.5 * final_metrics['acc_weighted_full_avg100'],
+            0.5 * final_metrics['winner_score_qdn_conv']
+        ])
 
     final_metrics['total_episodes'] = len(reward_list)
     final_metrics['total_model_saves'] = len(model_dir_list)
@@ -301,7 +311,7 @@ def run_experiment(cfg: DictConfig) -> None:
             mlflow.set_tag("experiment_name", cfg.experiment.name)
             mlflow.set_tag("experiment_description", cfg.experiment.get('description', ''))
             mlflow.set_tag("num_agents", len(trainer.agents))
-            mlflow.set_tag("training_agent_type", trainer.agents_info[0]['type'])
+            # mlflow.set_tag("training_agent_type", trainer.agents_info[0]['type'])
             
             # Log final metrics
             if final_metrics:

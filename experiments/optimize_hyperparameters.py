@@ -60,17 +60,17 @@ def suggest_hyperparameters(trial: optuna.Trial, base_config: DictConfig) -> Dic
     # competitor params
     # config.competitor.epsilon_params.start = trial.suggest_float("epsilon_start", 0, 1)
     config.competitor.wrapper_params.epsilon = trial.suggest_float("epsilon", 0.0, 1.0)
-    config.competitor.wrapper_params.explicit_change = trial.suggest_categorical("explicit_change", [True, False])
-    config.competitor.wrapper_params.mode = trial.suggest_categorical("mode", ["sample", "random", "top2"])
-    config.competitor.wrapper_params.actions_mask = trial.suggest_categorical(
-        "actions_mask",
-        [
-            None,
-            "default",
-            "no_yell",
-            "wait",
-        ]
-    )
+    # config.competitor.wrapper_params.explicit_change = trial.suggest_categorical("explicit_change", [True, False])
+    # config.competitor.wrapper_params.mode = trial.suggest_categorical("mode", ["sample", "random", "top2"])
+    # config.competitor.wrapper_params.actions_mask = trial.suggest_categorical(
+    #     "actions_mask",
+    #     [
+    #         None,
+    #         "default",
+    #         "no_yell",
+    #         "wait",
+    #     ]
+    # )
 
     # training params
     # config.agent.entropy_coef = trial.suggest_float("entropy_coef", 0, 1)
@@ -151,7 +151,7 @@ def objective(trial: optuna.Trial, base_config: DictConfig, optimization_config:
             
             # Log experiment metadata
             mlflow.set_tag("num_agents", len(trainer.agents))
-            mlflow.set_tag("training_agent_type", trainer.agents_info[0]['type'])
+            # mlflow.set_tag("training_agent_type", trainer.agents_info[0]['type'])
             
             # Log final metrics
             if final_metrics:

@@ -9,7 +9,7 @@ trainer:
   asc_difficulty: false
   num_envs: 4
   use_tqdm: true
-  metrics_int: 10
+  metrics_int: 20
   seed: 42
   env_kwargs:
     reward_params:

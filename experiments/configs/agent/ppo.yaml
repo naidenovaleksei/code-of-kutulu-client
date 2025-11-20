@@ -1,7 +1,7 @@
 train: true
 type: ppo
 state_type: conv_ext
-use_deep: false
+use_deep: true
 need_aug: true
 use_gru: false
 anneal_reward: 0
@@ -10,7 +10,7 @@ anneal_reward: 0
 model_params:
   fc_dim: 16
   conv_dim: 8
-  size: 3
+  size: 2
   include_occupation_head: true
 
 # Training parameters
