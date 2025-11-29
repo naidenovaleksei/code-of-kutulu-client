@@ -262,7 +262,7 @@ def log_model_artifacts(trainer: Trainer, run_id: str):
 
 def _get_hydra_agent_info(experiment, train=False):
     config_path = f'../../kutulu_artifacts/mlflow_artifacts/{experiment}/artifacts/hydra_config'
-    checkpoint_dir = f'/home/kutulu/projects/kutulu_artifacts/mlflow_artifacts/{experiment}/artifacts/models/agent_0/final'
+    checkpoint_dir = f'{os.getenv("HOME")}/projects/kutulu_artifacts/mlflow_artifacts/{experiment}/artifacts/models/agent_0/final'
     GlobalHydra.instance().clear()
     with hydra.initialize(version_base=None, config_path=config_path):
         cfg = hydra.compose(config_name="config")
@@ -273,7 +273,9 @@ def _get_hydra_agent_info(experiment, train=False):
     return info
 
 
-def get_agent_info(experiment, best_iter=1000, agent_id=0, new_experiment=True, output_dir='../../output'):
+def get_agent_info(experiment, best_iter=1000, agent_id=0, new_experiment=True, output_dir=None):
+    if output_dir is None:
+        output_dir = os.getenv('KUTULU_ARTIFACT_OUTPUT')
     if new_experiment:
         return _get_hydra_agent_info(experiment)
     else:

@@ -207,7 +207,9 @@ def get_agent_info(iter_data, agent_id=0):
     best_iter = iter_data['best_iter']
     return _get_agent_info(exp_name, best_iter, agent_id)
 
-def _get_agent_info(exp_name, best_iter, agent_id, train=False, output_dir='../../../output'):
+def _get_agent_info(exp_name, best_iter, agent_id, train=False, output_dir=None):
+    if output_dir is None:
+        output_dir = os.getenv('KUTULU_ARTIFACT_OUTPUT')
     exp_date = f'{exp_name[0:4]}-{exp_name[4:6]}-{exp_name[6:8]}'
     agents_dir = f'{output_dir}/{exp_date}/{exp_name}'
     checkpoint_dir = f'{agents_dir}/agent{agent_id}/{best_iter}'

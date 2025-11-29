@@ -1,7 +1,11 @@
 # venv
 source ~/.local/share/virtualenvs/kutulu-_n6nfavE/bin/activate
+conda deactivate
+
 source ~/kutulu-env/bin/activate
 conda deactivate
+
+export KUTULU_ARTIFACT_OUTPUT='../../output'
 
 jupyter notebook --port 9999
 
@@ -9,7 +13,7 @@ jupyter notebook --port 9999
 mlflow ui --backend-store-uri file:$HOME/projects/kutulu_artifacts/mlruns --port 5002
 
 # tensorboard
-tensorboard --logdir $HOME/projects/kutulu_artifacts/experiments/outputs --port 6007
+tensorboard --logdir $HOME/projects/kutulu_artifacts/experiments/outputs --port 6006
 tensorboard --logdir $HOME/projects/kutulu_artifacts/experiments/optimization --port 6007
 
 # server
@@ -59,3 +63,13 @@ python experiments/optimize_hyperparameters.py \
     agent.model_params.size=3 \
     agent.value_loss_coef=0.1 \
     competitor=qdn_conv
+
+python experiments/optimize_hyperparameters.py
+optimization.n_trials=100     optimization.objective_metric=acc_weighted_full_avg100     optimization.direction=maximize
+optimization.study_name=ppo_ext_study_3
+base_experiment.experiment.name=ppo_ext_3
+trainer.num_experiments=1000
+
+scp -i ~/.ssh/ssh-key-1748117354669   -r  \
+    kutulu@158.160.31.128:/home/kutulu/output/2025-06-22/20250622-045641/* \
+    /Users/aleksei/output/2025-06-22/20250622-045641

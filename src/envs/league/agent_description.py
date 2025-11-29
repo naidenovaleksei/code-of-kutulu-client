@@ -1,12 +1,15 @@
-
+import os
 from src.envs.experiments import _get_agent_info
 
 class AgentDescription:
-    def __init__(self, exp_name, best_iter, agent_id, output_dir='../../../output'):
+    def __init__(self, exp_name, best_iter, agent_id, output_dir=None):
         self.exp_name = exp_name
         self.best_iter = best_iter
         self.agent_id = agent_id
-        self.output_dir = output_dir
+        if output_dir is not None:
+            self.output_dir = output_dir
+        else:
+            self.output_dir = os.getenv('KUTULU_ARTIFACT_OUTPUT')
 
     def __eq__(self, other):
         if not isinstance(other, AgentDescription):

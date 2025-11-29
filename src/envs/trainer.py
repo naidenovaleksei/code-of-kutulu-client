@@ -61,7 +61,7 @@ class Trainer:
     def __init__(self, num_experiments, agents_info, league_level,
                  agents=None,
                  env_kwargs=None, shuffle=True,
-                 log_dir='../../../runs', output_dir='../../../output',
+                 log_dir='../../../runs', output_dir=None,
                  exp_name=None, use_master_agent=False, competitors=None,
                  verbose=False, silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True, metrics_int=10, seed=None):
@@ -84,7 +84,10 @@ class Trainer:
             if exp_name is None:
                 exp_name = datetime.now().strftime('%Y%m%d-%H%M%S')
             self.log_dir = os.path.join(log_dir, exp_name)
-            self.output_dir = output_dir
+            if output_dir is not None:
+                self.output_dir = output_dir
+            else:
+                self.output_dir = os.getenv('KUTULU_ARTIFACT_OUTPUT')
             
             date, time = str(datetime.now()).split()
             date_dir = f'{self.output_dir}/{date}'
