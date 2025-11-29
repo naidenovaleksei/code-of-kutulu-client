@@ -3,7 +3,9 @@
 defaults:
   - agent: ppo
   - trainer: default
-  - competitor: ppo
+  - competitor_1: ppo
+  - competitor_2: ppo
+  - competitor_3: ppo
   - _self_
 
 # Base experiment configuration (inherits from existing config structure)
@@ -23,9 +25,12 @@ base_experiment:
   # Include trainer config in base_experiment
   trainer: ${trainer}
   agent: ${agent}
-  competitor: ${competitor}
+  competitor_1: ${competitor_1}
+  competitor_2: ${competitor_2}
+  competitor_3: ${competitor_3}
   use_master_agent: false
   use_challenge: true
+  same_competitor: true
 
 # Optimization-specific configuration
 optimization:

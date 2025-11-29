@@ -1,0 +1,20 @@
+train: false
+type: ppo
+state_type: conv
+
+model_params:
+  fc_dim: 16
+  conv_dim: 8
+  size: 3
+
+explicit_action_mask: null
+legacy_encoder: true
+
+checkpoint_dir: ${oc.env:HOME}/projects/kutulu_artifacts/mlflow_artifacts/05abe073de06428e896fcd880c9f3eac/artifacts/models/agent_0/final
+wrapper_params:
+  mode: sample
+  actions_mask: no_yell
+  epsilon: 0.15
+  seed: 1001
+  softmax: false
+  explicit_change: true

@@ -65,6 +65,22 @@ def setup_mlflow(cfg: DictConfig) -> None:
     
     return experiment_id
 
+def _update_wrapper_params(competitor_agent):
+    if 'wrapper_params' in competitor_agent and \
+        'actions_mask' in competitor_agent['wrapper_params']:
+        actions_mask = competitor_agent['wrapper_params']['actions_mask']
+        if actions_mask is not None:
+            if actions_mask == 'default':
+                actions = DEFAULT_KUTULU_ACTIONS
+            elif actions_mask == 'no_yell':
+                actions = DEFAULT_KUTULU_ACTIONS + ["PLAN", "LIGHT"]
+            elif actions_mask == 'wait':
+                actions = ["WAIT"]
+            else:
+                raise ValueError()
+            competitor_agent['wrapper_params']['actions_mask'] = actions
+    return competitor_agent
+
 
 def create_agents_info(cfg: DictConfig) -> list:
     """Create agents_info list from configuration."""
@@ -73,30 +89,32 @@ def create_agents_info(cfg: DictConfig) -> list:
     # Create training agent
     training_agent = OmegaConf.to_container(cfg.agent, resolve=True)
     agents_info.append(training_agent)
-    
-    if cfg.use_master_agent:
-        random_agent_template = OmegaConf.to_container(cfg.agent, resolve=True)
-    else:
-        # Create random agents for remaining slots
-        random_agent_template = OmegaConf.to_container(cfg.competitor, resolve=True)
-        
-        if 'wrapper_params' in random_agent_template:
-            if 'actions_mask' in random_agent_template['wrapper_params']:
-                actions_mask = random_agent_template['wrapper_params']['actions_mask']
-                if actions_mask is not None:
-                    if actions_mask == 'default':
-                        actions = DEFAULT_KUTULU_ACTIONS
-                    elif actions_mask == 'no_yell':
-                        actions = DEFAULT_KUTULU_ACTIONS + ["PLAN", "LIGHT"]
-                    elif actions_mask == 'wait':
-                        actions = ["WAIT"]
-                    else:
-                        raise ValueError()
-                    random_agent_template['wrapper_params']['actions_mask'] = actions
+
     # Fill remaining agent slots
     num_agents = cfg.experiment.get('num_agents', 4)
-    for i in range(len(agents_info), num_agents):
-        agents_info.append(dict(random_agent_template))
+    
+    if cfg.use_master_agent:
+        competitor_agent = OmegaConf.to_container(cfg.agent, resolve=True)
+        for i in range(len(agents_info), num_agents):
+            agents_info.append(dict(competitor_agent))
+    elif cfg.same_competitor:
+        # Create random agents for remaining slots
+        competitor_agent = OmegaConf.to_container(cfg.competitor_1, resolve=True)
+        competitor_agent = _update_wrapper_params(competitor_agent)
+        for i in range(len(agents_info), num_agents):
+            agents_info.append(dict(competitor_agent))
+    else:
+        competitor_agent = OmegaConf.to_container(cfg.competitor_1, resolve=True)
+        competitor_agent = _update_wrapper_params(competitor_agent)
+        agents_info.append(dict(competitor_agent))
+        
+        competitor_agent = OmegaConf.to_container(cfg.competitor_2, resolve=True)
+        competitor_agent = _update_wrapper_params(competitor_agent)
+        agents_info.append(dict(competitor_agent))
+        
+        competitor_agent = OmegaConf.to_container(cfg.competitor_3, resolve=True)
+        competitor_agent = _update_wrapper_params(competitor_agent)
+        agents_info.append(dict(competitor_agent))
 
     return agents_info
 
@@ -213,6 +231,8 @@ def run_training(cfg: DictConfig, output_dir: str = None, exp_name: str = None,
         trainer_config['competitors'] = competitors
     
     logger.info(f"Creating trainer with {len(agents_info)} agents")
+    for i, agent_info in enumerate(agents_info):
+        logger.info(f"agent {i+1}: {agent_info['type']}")
     trainer = Trainer(**trainer_config)
     
     # Run training

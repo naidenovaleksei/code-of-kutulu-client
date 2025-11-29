@@ -1,7 +1,9 @@
 defaults:
   - agent: ppo
   - trainer: default
-  - competitor: ppo
+  - competitor_1: ppo
+  - competitor_2: qdn_conv
+  - competitor_3: dummy
   - _self_
 
 experiment:
@@ -12,6 +14,7 @@ experiment:
 
 use_master_agent: false
 use_challenge: true
+same_competitor: true
 
 # MLflow configuration
 mlflow:
