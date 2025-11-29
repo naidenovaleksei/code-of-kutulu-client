@@ -644,16 +644,22 @@ def get_state_conv_ext(player_id, entities, lines, size):
                 mp[dy + r][dx + r] = v if v < clip else clip
         return mp  # ints 0..clip
 
-    def norm01_map(int_map, denom, invert=False):
+    def norm01_map(int_map, denom, unbiased=False, invert=False, func=None):
         # return int_map
         S = len(int_map)
         out = [[0.0 for _ in range(S)] for __ in range(S)]
         d = float(max(1, denom))
+        bias = int_map[S // 2][S // 2] if unbiased else 0
+        if func is not None:
+            bias = func(bias)
         for y in range(S):
             for x in range(S):
-                v = int_map[y][x] / d
-                if v < 0.0: v = 0.0
-                if v > 1.0: v = 1.0
+                v = int_map[y][x]
+                if func is not None:
+                    v = func(v)
+                v = (v - bias) / d
+                if v < 0.0 and not unbiased: v = 0.0
+                if v > 1.0 and not unbiased: v = 1.0
                 out[y][x] = (1.0 - v) if invert else v
         return out
 
@@ -869,19 +875,23 @@ def get_state_conv_ext(player_id, entities, lines, size):
     # ally_md  = bfs_min_dist_in_window(lines, other_explorers,  size, agent_pos, max_d=max_d)
     # enemy_md = bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d)
     # slashers_md = bfs_min_dist_in_window(lines, slashers_xy, size, agent_pos, max_d=max_d)
+
+    def ff(x):
+        return np.sqrt(np.abs(x)) * np.sign(x)
+
     data['EXPLORER_MIN_DIST']  = norm01_map(
         crop_map(
             bfs_min_dist_in_window(lines, other_explorers,  7, agent_pos, max_d=max_d),
             (7, 7), size, pad_val=0,
         ),
-        denom=max_d, invert=False
+        denom=1, unbiased=True, func=ff,
     )
     data['WANDERER_MIN_DIST']  = norm01_map(
         crop_map(
             bfs_min_dist_in_window(lines, w_wanderers,  7, agent_pos, max_d=max_d),
             (7, 7), size, pad_val=1,
         ),
-        denom=max_d, invert=False
+        denom=1, unbiased=True, func=ff,
     )
     # data['WANDERER_MIN_DIST'] = norm01_map(
     #     bfs_min_dist_in_window(lines, w_wanderers, size, agent_pos, max_d=max_d),
