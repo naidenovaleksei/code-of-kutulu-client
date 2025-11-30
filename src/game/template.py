@@ -1287,6 +1287,176 @@ class ConvEncoder:
         
         return x
 
+class ConvExtDeepEncoder:
+    def __init__(self):
+        self.inference_helper = InferenceHelper()
+    
+    def _masked_conv2d(self, x, mask, weight, bias, kernel_size, stride, padding=0):
+        """
+        Numpy implementation of masked convolution
+        x: [N, C_in, H, W]
+        mask: [N, 1, H, W]
+        weight: [C_out, C_in, kH, kW]
+        bias: [C_out]
+        """
+        N, C_in, H, W = x.shape
+        C_out, _, kH, kW = weight.shape
+        
+        # Apply mask to input
+        x_masked = x * mask
+        
+        # Calculate output dimensions
+        out_H = (H + 2 * padding - kH) // stride + 1
+        out_W = (W + 2 * padding - kW) // stride + 1
+        
+        # Pad if needed
+        if padding > 0:
+            x_masked = np.pad(x_masked, ((0, 0), (0, 0), (padding, padding), (padding, padding)), mode='constant')
+            mask = np.pad(mask, ((0, 0), (0, 0), (padding, padding), (padding, padding)), mode='constant')
+        
+        # Perform convolution
+        output = np.zeros((N, C_out, out_H, out_W))
+        
+        for n in range(N):
+            for c_out in range(C_out):
+                for c_in in range(C_in):
+                    output[n, c_out] += correlate2d(
+                        x_masked[n, c_in], 
+                        weight[c_out, c_in], 
+                        mode='valid'
+                    )[::stride, ::stride]
+                output[n, c_out] += bias[c_out]
+        
+        # Count valid pixels in each window
+        ones_kernel = np.ones((1, 1, kH, kW))
+        cnt = np.zeros((N, 1, out_H, out_W))
+        
+        for n in range(N):
+            for h in range(out_H):
+                for w in range(out_W):
+                    h_start = h * stride
+                    w_start = w * stride
+                    cnt[n, 0, h, w] = mask[n, 0, h_start:h_start+kH, w_start:w_start+kW].sum()
+        
+        # Normalize by valid pixel count
+        kernel_area = kH * kW
+        eps = 1e-8
+        scale = kernel_area / np.maximum(cnt, eps)
+        output = output * scale[:, 0:1, :, :]
+        
+        # Zero out where no valid pixels
+        zero_mask = (cnt <= 0)
+        output = np.where(zero_mask, 0.0, output)
+        
+        # New mask for next layer
+        newmask = (cnt > 0).astype(np.float32)
+        
+        return output, newmask
+    
+    def _layer_norm(self, x, weight, bias, eps=1e-5):
+        """
+        Numpy implementation of LayerNorm
+        x: input array
+        weight: scale parameter
+        bias: shift parameter
+        """
+        # Calculate mean and variance
+        mean = np.mean(x, axis=-1, keepdims=True)
+        var = np.var(x, axis=-1, keepdims=True)
+        
+        # Normalize
+        x_norm = (x - mean) / np.sqrt(var + eps)
+        
+        # Apply affine transformation
+        return weight * x_norm + bias
+    
+    def _encode(self, state, weights):
+        features = []
+        for k in [
+            'map',
+            'EXPLORER_param0', 'EXPLORER_param1', 'EXPLORER_param2',
+            'WANDERER_param0',
+            'EFFECT_SHELTER_param0',
+            'EXPLORER_COUNT',
+            'EXPLORER_MIN_DIST',
+            'WANDERER_COUNT',
+            'WANDERER_MIN_DIST',
+            'WANDERER_SPAWNING',
+            'SLASHER_COUNT',
+            'SLASHER_STALKING',
+            'SLASHER_WANDERING',
+            'SLASHER_SPAWNING',
+            'SLASHER_STUNNED',
+            'EFFECT_LIGHT',
+            'EFFECT_PLAN',
+            'EXPLORER_param0_border',
+            'WANDERER_param0_border',
+            'SLASHER_param0_border',
+            'EFFECT_SHELTER_param0_border',
+        ]:
+            features.append(state[k])
+        data = np.array([features])
+        
+        # Determine max_size from the data shape
+        n = data.shape[-1]
+        max_size = n // 2
+        
+        # Support both encoder.* and non-prefixed weight keys
+        prefix = 'encoder.' if 'encoder.mconv_list.0.conv.weight' in weights else ''
+        
+        x_by_size = []
+        
+        for size_idx in range(max_size):
+            # Extract window
+            left = n // 2 - size_idx - 1
+            right = n // 2 + size_idx + 2
+            x = data[:, 1:, left:right, left:right]  # Skip first channel (map)
+            mask = data[:, :1, left:right, left:right]  # First channel is mask
+            
+            # Get weights for this size
+            mconv_weight = weights[f'{prefix}mconv_list.{size_idx}.conv.weight']
+            mconv_bias = weights[f'{prefix}mconv_list.{size_idx}.conv.bias']
+            ln_weight = weights[f'{prefix}ln_list.{size_idx}.weight']
+            ln_bias = weights[f'{prefix}ln_list.{size_idx}.bias']
+            fc_weight = weights[f'{prefix}fc_list.{size_idx}.weight']
+            fc_bias = weights[f'{prefix}fc_list.{size_idx}.bias']
+            
+            # Masked convolution
+            kernel_size = 2 * (size_idx + 1) + 1
+            stride = kernel_size
+            x, mask = self._masked_conv2d(x, mask, mconv_weight, mconv_bias, kernel_size, stride, padding=0)
+            
+            # LayerNorm (squeeze spatial dimensions first)
+            x = x.squeeze(-1).squeeze(-1)  # [batch, conv_dim]
+            x = self._layer_norm(x, ln_weight, ln_bias)
+            x = x[:, :, np.newaxis, np.newaxis]  # [batch, conv_dim, 1, 1]
+            
+            # ReLU
+            x = np.maximum(0, x)
+            
+            # Apply mask
+            x = x * mask
+            
+            # Flatten
+            x = x.reshape(x.shape[0], -1)  # [batch, conv_dim]
+            
+            # FC layer
+            x = np.dot(x, fc_weight.T) + fc_bias
+            
+            # Dropout is not applied during inference
+            
+            # Normalize by window area
+            x = x / ((2 * (size_idx + 1) - 1) ** 2)
+            
+            x_by_size.append(x[:, np.newaxis, :])  # [batch, 1, emb_dim]
+        
+        # Concatenate and sum
+        x = np.concatenate(x_by_size, axis=1)  # [batch, max_size, emb_dim]
+        x = x.sum(axis=1)  # [batch, emb_dim]
+        
+        return x
+
+
 class ConvExtEncoder:
     def __init__(self):
         self.inference_helper = InferenceHelper()
@@ -1471,6 +1641,30 @@ class PPOConvExtSolver(NNSolver):
         return x[0]
 
 
+class PPOConvExtDeepSolver(NNSolver):
+    def __init__(self, info, actions, weights, size, explicit_action_mask=None):
+        super(PPOConvExtDeepSolver, self).__init__(info, actions, weights, explicit_action_mask)
+        self.size = size
+        self.conv_encoder = ConvExtDeepEncoder()
+
+    def _assert_weights(self, actions):
+        assert self.weights['actor.weight'].shape[0] == len(actions)
+
+    def _calculate_output(self, entities, player_pos):
+        # player_pos is already provided as a parameter, so we don't need to extract it from entities
+        player_id = entities[0]['id']
+        state = get_state_conv_ext(player_id, entities, self.info['lines'], self.size)
+
+        a = self.weights['actor.weight']
+        a_b = self.weights['actor.bias']
+
+        x = self.conv_encoder._encode(state, self.weights)
+        x = self.conv_encoder.inference_helper._relu(x)
+        x = np.dot(x, a.T) + a_b
+        x = sp.softmax(x)
+        return x[0]
+
+
 def main():
     vals = pkl.loads(zlib.decompress(base64.b64decode(data1)))
     vals = [np.load(io.BytesIO(byte_data)) for byte_data in vals]
@@ -1489,6 +1683,8 @@ def main():
         solver = PPOConvSolver(info, USED_ACTIONS, checkpoint_data, SIZE)
     elif mode == 'ppo_conv_ext':
         solver = PPOConvExtSolver(info, USED_ACTIONS, checkpoint_data, SIZE, ACTION_MASK)
+    elif mode == 'ppo_conv_ext_deep':
+        solver = PPOConvExtDeepSolver(info, USED_ACTIONS, checkpoint_data, SIZE, ACTION_MASK)
     else:
         raise ValueError(f'unknown mode: "{mode}"')
     
