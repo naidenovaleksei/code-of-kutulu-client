@@ -83,6 +83,18 @@ class BaseKutuluClosestObserver:
         raise NotImplementedError
 
 
+class KutuluRawObserver(BaseKutuluClosestObserver):
+    def __init__(self, env: KutuluWorldEnv):
+        super(KutuluRawObserver, self).__init__(env)
+
+    def get_state(self, player_id: int):
+        entities = self.env.get_obs(player_id).entities
+        assert entities[0].id == player_id
+        entities = [e.to_dict() for e in entities]
+        state = entities
+        return state
+
+
 class KutuluClosestObserver(BaseKutuluClosestObserver):
     def __init__(self, env: KutuluWorldEnv):
         super(KutuluClosestObserver, self).__init__(env)

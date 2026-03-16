@@ -8,7 +8,8 @@ from src.envs.kutulu_observer import (
     KutuluClosestExtObserver,
     KutuluClosestExtv2Observer,
     KutuluConvObserver,
-    KutuluConvExtObserver
+    KutuluConvExtObserver,
+    KutuluRawObserver
 )
 from src.envs.kutulu_world import (
     KutuluObservation,
@@ -46,6 +47,8 @@ class BaseAgent:
             self.observer = KutuluConvExtObserver(env, self.size)
         elif self.state_type == 'conv_by_kind':
             self.observer = KutuluConvObserver(env, self.size)
+        elif self.state_type == 'raw':
+            self.observer = KutuluRawObserver(env)
         else:
             ValueError('unknown state_type: {self.state_type}')
 
