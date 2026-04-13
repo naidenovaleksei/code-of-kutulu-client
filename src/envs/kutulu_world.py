@@ -41,7 +41,7 @@ class KutuluEnvInfo:
 
 
 class KutuluWorldEnv(gym.Env):
-    def __init__(self, server_host, maze_name, league_level, actions, reward_params={}, players_count=4):
+    def __init__(self, server_host, maze_name, league_level, actions, reward_params={}, players_count=4, verbose=False):
         super(KutuluWorldEnv, self).__init__()
 
         self.host = f"http://{server_host}/game"
@@ -60,15 +60,22 @@ class KutuluWorldEnv(gym.Env):
         self.yelled = defaultdict(set)
         
         self.seed = None
+        self.verbose = verbose
         self.constants = {}
         self.reward_manager = None
         self.width = 0
         self.height = 0
 
     def reset(self, seed=None):
-        if seed is None:
-            seed = np.random.randint(999999)
+        # if seed is None:
+        #     seed = np.random.randint(999999)
         super(KutuluWorldEnv, self).reset(seed=seed)
+        if self.verbose:
+            print(f"Environment: "
+                  f"players_count: {self.players_count}; "
+                  f"maze_name: {self.maze_name}; "
+                  f"seed: {seed} "
+                  f"league_level: {self.league_level}")
         response = requests.post(
             f'{self.host}/create',
             json={

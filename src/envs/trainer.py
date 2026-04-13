@@ -1,10 +1,12 @@
 import os
 import json
+import random
 from copy import deepcopy
 from datetime import datetime
 from tqdm import tqdm
 
 import numpy as np
+import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from src.envs.kutulu_world import (
@@ -103,7 +105,7 @@ class Trainer:
         self.agent_validator = AgentValidator(self.actions)
         self.agent_validator_plan = AgentValidator(self.actions, player_params=(100, 1, 0))
         self.only_train = only_train
-        self.seed = seed
+        self.rng = np.random.RandomState(seed)
 
         if agents is not None:
             self.agents = agents
@@ -155,17 +157,8 @@ class Trainer:
         for agent in self.agents:
             agent.num_experiments = self.num_experiments
 
-    def reset_env(self, seed=None, maze_name=None, step=None, port=8080):
-        if maze_name is None:
-            if seed is not None:
-                maze_name = np.random.RandomState(seed).choice(self.mazes).item()
-            else:
-                maze_name = np.random.choice(self.mazes).item()
-        if self.asc_difficulty and step is not None:
-            league_level = self.league_level * (step - 1) // self.num_experiments + 1
-            if self.verbose:
-                print(f'current league_level: {league_level}')
-        else:
+    def _reset_env(self, maze_name, env_seed=None, league_level=None, port=8080):
+        if league_level is None:
             league_level = self.league_level
         env = KutuluWorldEnv(
             server_host=f'localhost:{port}',
@@ -173,35 +166,55 @@ class Trainer:
             league_level=league_level,
             players_count=self.players_count,
             actions=self.actions,
+            verbose=self.verbose,
             **self.env_kwargs
         )
-        observation, info = env.reset(seed=seed)
+        observation, info = env.reset(seed=env_seed)
 
         for agent in self.agents:
             agent.set_env(env)
 
         return env
     
-    def play_rollout(self, seed=None, step=None):
+    def play_rollout(self, rollout_seed=None, rollout_step=None, only_eval=False):
+        if rollout_seed is None:
+            rollout_seed = self.rng.randint(999999)
         if self.num_envs == 1:
-            return self.play_single_rollout(seed, step=step)
+            return self._play_single_rollout(rollout_seed, rollout_step=rollout_step, only_eval=only_eval)
         else:
-            return self.play_multi_rollout(seed, step=step)
+            assert not only_eval, "only single_env mode supports evaluation"
+            return self._play_multi_rollout(rollout_seed, rollout_step=rollout_step)
 
-    def play_single_rollout(self, seed=None, maze_name=None, env_idx=None, step=None, only_eval=False):
-        env = self.reset_env(seed, maze_name, step)
+    def _play_single_rollout(self, rollout_seed, maze_name=None, env_idx=None, rollout_step=None, only_eval=False):
+        rng = np.random.RandomState(rollout_seed)
+        if maze_name is None:
+            maze_name = rng.choice(self.mazes).item()
+        env_seed = rng.randint(999999)
+        league_level = None
+        if self.asc_difficulty and rollout_step is not None:
+            league_level = self.league_level * (rollout_step - 1) // self.num_experiments + 1
+        env = self._reset_env(maze_name, env_seed, league_level)
         if self.verbose:
             if env_idx is not None:
-                print(f"Environment {env_idx}: {maze_name} (seed: {seed})")
+                print(f"Trainer: "
+                      f"env_idx: {env_idx}; "
+                      f"maze_name: {maze_name}; "
+                      f"rollout_seed: {rollout_seed}; "
+                      f"env_seed: {env_seed}")
             else:
-                print(f"Environment: {maze_name} (seed: {seed})")
+                print(f"Trainer: "
+                      f"maze_name: {maze_name}; "
+                      f"rollout_seed: {rollout_seed}; "
+                      f"env_seed: {env_seed}")
             print(f"constants: {env.constants}")
         for agent in self.agents:
             agent.set_env(env)
         rollout_rewards = []
         game_over = False
         if self.shuffle:
-            np.random.shuffle(self.agent_map)
+            rng.shuffle(self.agent_map)
+        if self.verbose:
+            print(f"agent_map: {self.agent_map}")
         step = 0
         while not game_over:
             assert env.turn == step
@@ -225,11 +238,9 @@ class Trainer:
                 rewards_by_agent = [rewards[i] for i in np.argsort(self.agent_map)]
                 actions_by_agent = [self.actions[action[i]] for i in np.argsort(self.agent_map)]
                 if env_idx is not None:
-                    print(f"Env {env_idx}, step: {step}, actions: {actions_by_agent}")
-                    print(f"Env {env_idx}, step: {step}, rewards: {rewards_by_agent}")
+                    print(f"Env {env_idx}, step: {step}, actions: {actions_by_agent}, rewards: {rewards_by_agent}")
                 else:
-                    print(f"step: {step}, actions: {actions_by_agent}")
-                    print(f"step: {step}, rewards: {rewards_by_agent}")
+                    print(f"step: {step}, actions: {actions_by_agent}, rewards: {rewards_by_agent}")
                 # env.viz_map()
             
             if only_eval:
@@ -268,22 +279,22 @@ class Trainer:
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 
-    def play_multi_rollout(self, seed=None, step=None):
+    def _play_multi_rollout(self, rollout_seed, rollout_step=None):
         """Play rollout across multiple environments simultaneously"""
         # Track rewards for each environment
         env_rollout_rewards = [[] for _ in range(self.num_envs)]
         
         selected_mazes = list(self.mazes)
-
-        if self.seed:
-            np.random.RandomState(self.seed + step).shuffle(selected_mazes)
-        else:
-            np.random.shuffle(selected_mazes)
+        np.random.RandomState(rollout_seed).shuffle(selected_mazes)
 
         for env_idx in range(self.num_envs):
             maze_name = selected_mazes[env_idx]
-            env_seed = seed + env_idx if seed is not None else None
-            rollout_rewards = self.play_single_rollout(env_seed, maze_name, env_idx, step)
+            rollout_rewards = self._play_single_rollout(
+                rollout_seed + env_idx,
+                maze_name,
+                env_idx,
+                rollout_step
+            )
             env_rollout_rewards[env_idx] = rollout_rewards
 
 
@@ -324,7 +335,23 @@ class Trainer:
             agent.save_agent(checkpoint_dir_step)
         return self.checkpoints_dir
 
-    def train(self):
+    def _seed_everything(self, seed):
+        """Seed all global RNGs for reproducibility."""
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    def train(self, train_seed=None):
+        if train_seed is None:
+            train_seed = self.rng.randint(999999)
+        self._seed_everything(train_seed)
+        
+        train_rng = np.random.RandomState(train_seed)
+
         reward_list = []
         model_dir_list = []
         metrics_list = []
@@ -333,28 +360,25 @@ class Trainer:
         if not self.verbose and self.use_tqdm:
             exps = tqdm(exps)
         for i in exps:
-            step = i + 1
+            train_step = i + 1
             if self.verbose:
                 print()
-                print(f"rollout: {step}")
-            if self.seed:
-                seed = np.random.RandomState(self.seed + step).randint(999999)
-            else:
-                seed = None
-            rollout_rewards = self.play_rollout(step=step, seed=seed)
+                print(f"train_step: {train_step}")
+            rollout_seed = train_rng.randint(999999)
+            rollout_rewards = self.play_rollout(rollout_seed, train_step)
             reward_list.append(rollout_rewards)
 
             # # Save models periodically
-            # if not self.silent and step % save_models_int == 0:
-            #     model_dir = self.save_models(step)
+            # if not self.silent and train_step % save_models_int == 0:
+            #     model_dir = self.save_models(train_step)
             #     model_dir_list.append(model_dir)
 
             # Log metrics periodically
-            if step % self.metrics_int == 0:
+            if train_step % self.metrics_int == 0:
                 metrics = self._calculate_metrics(reward_list[-100:])
                 metrics_list.append(metrics)
                 if not self.silent:
-                    self._log_metrics(step, metrics)
+                    self._log_metrics(train_step, metrics)
 
         if not self.silent:
             for i, agent in enumerate(self.agents):
@@ -455,7 +479,7 @@ class Trainer:
             league_level=league_level, verbose=False, seed=17,
             silent=True, num_envs=num_envs, only_train=False, use_tqdm=False,
         )
-        result = trainer.play_single_rollout(only_eval=True)
+        result = trainer.play_rollout(only_eval=True)
         # return result
         scores = np.array([np.argwhere(~np.isnan(result[:,i])).max().item() for i in range(4)])
         return scores

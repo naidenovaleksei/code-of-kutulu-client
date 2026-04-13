@@ -85,7 +85,7 @@ class Metrics:
         else:
             self.competitors = None
 
-    def _play_round(self, agents, league_level=4, num_envs=1, seed=17):
+    def _play_round(self, agents, league_level, num_envs, seed, verbose=False):
         """
         Play a single round with the given agents.
         
@@ -106,14 +106,14 @@ class Metrics:
             agents=agents,
             shuffle=True,
             league_level=league_level,
-            verbose=False,
+            verbose=verbose,
             seed=seed,
             silent=True,
             num_envs=num_envs,
             only_train=False,
             use_tqdm=False,
         )
-        result = trainer.play_single_rollout(only_eval=True)
+        result = trainer.play_rollout(only_eval=True)
         
         # Calculate scores as the number of steps each agent survived
         scores = np.array([
@@ -122,7 +122,7 @@ class Metrics:
         ])
         return scores
 
-    def _calculate_metrics(self, agent, use_challenge=True):
+    def _calculate_metrics(self, agent, use_challenge=True, n_exps=20, rollouts_seed=17, verbose=False):
         """
         Calculate comprehensive metrics for an agent.
         
@@ -186,12 +186,13 @@ class Metrics:
         
         # Run challenge matches if competitors are available
         if use_challenge and self.competitors is not None:
+            rollouts_rng = np.random.RandomState(rollouts_seed)
             for competitor_type, competitor in self.competitors.items():
                 agents = [agent, competitor, competitor, competitor]
-                n_exps = 20
                 n_wins = 0
                 for _ in range(n_exps):
-                    scores = self._play_round(agents)
+                    rollout_seed = rollouts_rng.randint(999999)
+                    scores = self._play_round(agents, 4, 1, rollout_seed, verbose)
                     if scores[0] == np.max(scores):
                         n_wins += 1
                 metrics[f'winner_score_{competitor_type}'] = n_wins / n_exps

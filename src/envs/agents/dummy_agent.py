@@ -26,13 +26,14 @@ TEST_STATES = [
 
 class DummyAgent(BaseAgent):
     def __init__(self, state_type, action_space_n,
-                 train=False, verbose=False):
+                 train=False, verbose=False, seed=0):
         super(DummyAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
             train=train,
         )
         assert state_type == 'closest'
+        self.rng = np.random.RandomState(seed)
 
     def get_metric_names(self):
         return []
@@ -84,7 +85,7 @@ class DummyAgent(BaseAgent):
             # Choose random valid action
             valid_indices = np.where(~player_mask)[0]
             if len(valid_indices) > 0:
-                action = np.random.choice(valid_indices)
+                action = self.rng.choice(valid_indices)
             else:
                 action = 4  # WAIT as last resort
         
