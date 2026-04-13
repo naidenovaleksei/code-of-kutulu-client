@@ -1,9 +1,13 @@
+import logging
+
 import numpy as np
 import torch
 import torch.optim as optim
 
 from src.envs.agents import BaseAgent
 from src.envs.agent_metric_aggregator import AgentMetricsAggregator
+
+logger = logging.getLogger(__name__)
 
 GAMMA = 0.99
 LEARNING_RATE = 1e-4
@@ -29,7 +33,7 @@ class NNAgent(BaseAgent):
                  epsilon_start, epsilon_final, epsilon_decay_last_frame,
                  epsilon_reset, epsilon_reset_coef,
                  episode_buffer,
-                 train, verbose=False, checkpoint_dir=None, drop_layers=None,
+                 train, checkpoint_dir=None, drop_layers=None,
                  strict=True, legacy_encoder=False,
                  optimizer='adam', scheduler_params=None, explicit_random=False,
                  explicit_action_mask=DEFAULT_ACTION_MASK, use_gru=False, segment_length=20):
@@ -45,14 +49,13 @@ class NNAgent(BaseAgent):
         self.epsilon_reset = epsilon_reset
         self.epsilon_reset_coef = epsilon_reset_coef
         self.gamma = gamma
-        self.verbose = verbose
         self.episode_buffer = episode_buffer
         self.last_loss = np.inf
         self.frame_idx = 0
         self.model = model
         self.lr = lr
         self.explicit_random = explicit_random
-        self.metrics_aggregator = AgentMetricsAggregator(self.verbose)
+        self.metrics_aggregator = AgentMetricsAggregator()
         
         # GRU support - check if model has GRU capability
         self.use_gru = use_gru
@@ -201,8 +204,7 @@ class NNAgent(BaseAgent):
         torch.save(self.model.state_dict(), f"{checkpoint_dir}/model.pt")
 
     def load_agent(self, checkpoint_dir, drop_layers, strict, legacy_encoder):
-        if self.verbose:
-            print(f"Loading agent from '{checkpoint_dir}'")
+        logger.info("Loading agent from '%s'", checkpoint_dir)
         # Load to CPU first, then move to device if needed
         device = getattr(self, 'device', 'cpu')
         map_location = 'cpu' if device == 'cpu' else None
@@ -227,8 +229,7 @@ class NNAgent(BaseAgent):
                     if key.startswith('encoder.'):
                         legacy_key = key[len('encoder.'):]
                         weights[key] = weights[legacy_key]
-                        if self.verbose:
-                            print(f"{legacy_key} -> {key}")
+                        logger.info("%s -> %s", legacy_key, key)
                         del weights[legacy_key]
             self.model.load_state_dict(weights, strict=strict)
         

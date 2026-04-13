@@ -1,6 +1,9 @@
+import logging
 from typing import List, Tuple
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from src.envs.kutulu_entities import (
     EntityKind,
@@ -20,7 +23,7 @@ LIGHT_DISTANCE = 5
 YELL_DISTANCE = 1
 
 class PotentialRewardShaper:
-    def __init__(self, actions, verbose,
+    def __init__(self, actions, *,
                  gamma=0.99,
                  lights_left_coef=0.04,
                  light_potential_coef=1.0,
@@ -34,7 +37,6 @@ class PotentialRewardShaper:
                  no_move_reward_coef=0.5,
             ):
         self.actions = actions
-        self.verbose = verbose
         self.lights_left_coef = lights_left_coef
         self.light_gamma = gamma
         self.light_potential_coef = light_potential_coef
@@ -254,55 +256,55 @@ class PotentialRewardShaper:
             no_move_bonus = self.no_move_reward_coef * original_reward
             reward += no_move_bonus
             bonuses['no_move_bonus'] = no_move_bonus
-            if self.verbose and abs(no_move_bonus) > 1e-4:
-                print(f"no_move_bonus: {no_move_bonus}")
+            if abs(no_move_bonus) > 1e-4:
+                logger.debug("no_move_bonus: %s", no_move_bonus)
             return reward, bonuses
 
         wanderers_nearby_bonus = self._wanderers_nearby_bonus(observation, next_observations)
         reward += wanderers_nearby_bonus
         bonuses['wanderers_nearby_bonus'] = wanderers_nearby_bonus
-        if self.verbose and abs(wanderers_nearby_bonus) > 1e-4:
-            print(f"wanderers_nearby_bonus: {wanderers_nearby_bonus}")
+        if abs(wanderers_nearby_bonus) > 1e-4:
+            logger.debug("wanderers_nearby_bonus: %s", wanderers_nearby_bonus)
 
         explorers_nearby_bonus = self._explorers_nearby_bonus(observation, next_observations)
         reward += explorers_nearby_bonus
         bonuses['explorers_nearby_bonus'] = explorers_nearby_bonus
-        if self.verbose and abs(explorers_nearby_bonus) > 1e-4:
-            print(f"explorers_nearby_bonus: {explorers_nearby_bonus}")
+        if abs(explorers_nearby_bonus) > 1e-4:
+            logger.debug("explorers_nearby_bonus: %s", explorers_nearby_bonus)
 
         shelters_nearby_bonus = self._shelters_nearby_bonus(observation, next_observations)
         reward += shelters_nearby_bonus
         bonuses['shelters_nearby_bonus'] = shelters_nearby_bonus
-        if self.verbose and abs(shelters_nearby_bonus) > 1e-4:
-            print(f"shelters_nearby_bonus: {shelters_nearby_bonus}")
+        if abs(shelters_nearby_bonus) > 1e-4:
+            logger.debug("shelters_nearby_bonus: %s", shelters_nearby_bonus)
 
         others_sanity_loss_bonus = self._others_sanity_loss_bonus(observation, next_observations)
         reward += others_sanity_loss_bonus
         bonuses['others_sanity_loss_bonus'] = others_sanity_loss_bonus
-        if self.verbose and abs(others_sanity_loss_bonus) > 1e-4:
-            print(f"others_sanity_loss_bonus: {others_sanity_loss_bonus}")
+        if abs(others_sanity_loss_bonus) > 1e-4:
+            logger.debug("others_sanity_loss_bonus: %s", others_sanity_loss_bonus)
 
         if self.actions[action] == EffectType.PLAN.value:
             assert original_reward >= 0
             plan_bonus = self._plan_bonus(observation, next_observations)
             reward += plan_bonus
             bonuses['plan_bonus'] = plan_bonus
-            if self.verbose and abs(plan_bonus) > 1e-4:
-                print(f"plan_bonus: {plan_bonus}")
+            if abs(plan_bonus) > 1e-4:
+                logger.debug("plan_bonus: %s", plan_bonus)
         elif self.actions[action] == EffectType.LIGHT.value:
             assert original_reward >= 0
             light_bonus = self._light_bonus(observation, next_observations)
             reward += light_bonus
             bonuses['light_bonus'] = light_bonus
-            if self.verbose and abs(light_bonus) > 1e-4:
-                print(f"light_bonus: {light_bonus}")
+            if abs(light_bonus) > 1e-4:
+                logger.debug("light_bonus: %s", light_bonus)
         elif self.actions[action] == EffectType.YELL.value:
             assert original_reward >= 0
             yell_bonus = self._yell_bonus(observation, next_observations)
             reward += yell_bonus
             bonuses['yell_bonus'] = yell_bonus
-            if self.verbose and abs(yell_bonus) > 1e-4:
-                print(f"yell_bonus: {yell_bonus}")
+            if abs(yell_bonus) > 1e-4:
+                logger.debug("yell_bonus: %s", yell_bonus)
         return reward, bonuses
 
     def recalculate_rewards(self,
@@ -354,7 +356,7 @@ class PotentialRewardShaper:
 
 
 class RewardShaper:
-    def __init__(self, actions, verbose,
+    def __init__(self, actions, *,
             good_plan_bonus=0.3,
             bad_plan_bonus=-0.2,
             good_light_bonus=0.3,
@@ -369,7 +371,6 @@ class RewardShaper:
             bad_towards_enemy_bonus=-0.3,
             ):
         self.actions = actions
-        self.verbose = verbose
         self.good_plan_bonus = good_plan_bonus
         self.bad_plan_bonus = bad_plan_bonus
         self.good_light_bonus = good_light_bonus
@@ -466,8 +467,7 @@ class RewardShaper:
             else:
                 plan_bonus = self.bad_plan_bonus
             reward += plan_bonus
-            if self.verbose:
-                print(f"plan_bonus: {plan_bonus}")
+            logger.debug("plan_bonus: %s", plan_bonus)
         elif self.actions[action] == EffectType.LIGHT.value:
             player = observation.obs.entities[0]
             assert player.id == observation.player_id
@@ -494,8 +494,7 @@ class RewardShaper:
                 else:
                     light_bonus = self.bad_light_bonus
             reward += light_bonus
-            if self.verbose:
-                print(f"light_bonus: {light_bonus}")
+            logger.debug("light_bonus: %s", light_bonus)
         elif self.actions[action] == EffectType.YELL.value:
             yell_bonus = self.bad_yell_bonus
             other_rewards = [r for r in other_rewards if r is not None]
@@ -515,14 +514,12 @@ class RewardShaper:
                     if players_nearby_count > 0:
                         yell_bonus = - self.yell_bonus_coef * min_other_reward
             reward += yell_bonus
-            if self.verbose:
-                print(f"yell_bonus: {yell_bonus}")
+            logger.debug("yell_bonus: %s", yell_bonus)
         elif self.actions[action] == MoveType.WAIT.value:
             if original_reward < 0:
                 wait_bonus = self.wait_reward_coef * original_reward
                 reward += wait_bonus
-                if self.verbose:
-                    print(f"wait_bonus: {wait_bonus}")
+                logger.debug("wait_bonus: %s", wait_bonus)
         else:
             # MOVE
             assert self.actions[action] in (
@@ -538,8 +535,7 @@ class RewardShaper:
             if move_scores[action] > 0 and move_scores[action] == max(move_scores):
                 towards_enemy_bonus = self.bad_towards_enemy_bonus
                 reward += towards_enemy_bonus
-                if self.verbose:
-                    print(f"towards_enemy_bonus: {towards_enemy_bonus}")
+                logger.debug("towards_enemy_bonus: %s", towards_enemy_bonus)
         if self.other_reward_coef is not None:
             other_rewards = [r for r in other_rewards if r is not None]
             if len(other_rewards) != 0:
@@ -547,8 +543,7 @@ class RewardShaper:
                 min_other_reward = min(min_other_reward, 0)
                 other_reward_bouns = - self.other_reward_coef * min_other_reward
                 reward += other_reward_bouns
-                if self.verbose:
-                    print(f"other_reward_bouns: {other_reward_bouns}")
+                logger.debug("other_reward_bouns: %s", other_reward_bouns)
         if self.good_explorers_nearby_bonus != 0 or self.bad_explorers_nearby_bonus != 0:
             player = next_observations.obs.entities[0]
             assert player.id == next_observations.player_id
@@ -565,8 +560,7 @@ class RewardShaper:
             else:
                 nearby_bonus = self.bad_explorers_nearby_bonus
             reward += nearby_bonus
-            if self.verbose:
-                print(f"nearby_bonus: {nearby_bonus}")
+            logger.debug("nearby_bonus: %s", nearby_bonus)
         if self.shelter_bonus != 0:
             player = next_observations.obs.entities[0]
             assert player.id == next_observations.player_id
@@ -582,8 +576,7 @@ class RewardShaper:
             )
             if shelters_underfoot_count > 0:
                 reward += self.shelter_bonus
-                if self.verbose:
-                    print(f"shelter_bonus: {self.shelter_bonus}")
+                logger.debug("shelter_bonus: %s", self.shelter_bonus)
 
         return reward
 

@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -14,12 +16,14 @@ from src.envs.agents.dqn_agent_conv import (
 )
 from src.envs.models.conv_a2c_model import ConvA2CModel
 
+logger = logging.getLogger(__name__)
+
 
 class A2CAgent(ActorAgent):
     def __init__(self, state_type, action_space_n,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
-                 train=False, verbose=False, 
+                 train=False,
                  entropy_coef=0.01, value_loss_coef=0.5, n_step=10, batch_size=10):
         """
         A2C (Advantage Actor-Critic) Agent
@@ -32,7 +36,6 @@ class A2CAgent(ActorAgent):
             gamma: Discount factor
             model_params: Parameters for the model
             train: Whether the agent is in training mode
-            verbose: Whether to print training information
             entropy_coef: Coefficient for entropy regularization
             value_loss_coef: Coefficient for value loss
         """
@@ -51,7 +54,6 @@ class A2CAgent(ActorAgent):
             lr=lr,
             gamma=gamma,
             train=train,
-            verbose=verbose,
             model=model,
             state_encoder=DQNStateEncoderConv(),
         )
@@ -116,10 +118,10 @@ class A2CAgent(ActorAgent):
         else:
             self.last_loss = 0.05 * loss.item() + (1 - 0.05) * self.last_loss
 
-        if self.verbose:
-            print(f"Episode {self.episode_idx}, Loss: {loss.item():.4f}, "
-                  f"Policy Loss: {policy_loss.item():.4f}, Value Loss: {value_loss.item():.4f}, "
-                  f"Entropy: {entropy.item():.4f}, Return: {np.sum(rewards):.4f}")
+        logger.info("Episode %d, Loss: %.4f, Policy Loss: %.4f, Value Loss: %.4f, "
+                    "Entropy: %.4f, Return: %.4f",
+                    self.episode_idx, loss.item(), policy_loss.item(), value_loss.item(),
+                    entropy.item(), np.sum(rewards))
 
     def _calculate_returns_and_advantages(self, rewards, values):
         returns = []

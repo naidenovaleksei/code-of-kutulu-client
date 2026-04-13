@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 import random
@@ -8,6 +9,8 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
+
+logger = logging.getLogger(__name__)
 
 from src.envs.kutulu_world import (
     KutuluWorldEnv,
@@ -65,7 +68,7 @@ class Trainer:
                  env_kwargs=None, shuffle=True,
                  log_dir='../../../runs', output_dir=None,
                  exp_name=None, use_master_agent=False, competitors=None,
-                 verbose=False, silent=False, only_train=True, asc_difficulty=False,
+                 silent=False, only_train=True, asc_difficulty=False,
                  num_envs=1, use_tqdm=True, metrics_int=10, seed=None):
         self.num_experiments = num_experiments
         self.league_level = league_level
@@ -73,7 +76,6 @@ class Trainer:
         self.actions = get_actions_by_league(league_level)
         self.env_kwargs = env_kwargs or {}
         self.shuffle = shuffle
-        self.verbose = verbose
         self.silent = silent
         self.asc_difficulty = asc_difficulty
         self.use_tqdm = use_tqdm
@@ -118,7 +120,6 @@ class Trainer:
                     _name = agent_info.pop('name')
                 _type = agent_info['type']
                 agent_info = deepcopy(agent_info)
-                agent_info['verbose'] = self.verbose
                 agent = get_agent(agent_info)
                 self.agents.append(agent)
         
@@ -135,8 +136,7 @@ class Trainer:
                 agent_dir = f'agent{i}'
                 agent_log_dir = os.path.join(self.log_dir, agent_dir)
                 agent.writer = SummaryWriter(log_dir=agent_log_dir)
-                if self.verbose:
-                    print(f"agent {agent_dir}, type: {type(agent)}")
+                logger.info("agent %s, type: %s", agent_dir, type(agent))
 
         self.players_count = len(self.agents)
         self.agent_map = np.arange(len(self.agents))
@@ -166,7 +166,6 @@ class Trainer:
             league_level=league_level,
             players_count=self.players_count,
             actions=self.actions,
-            verbose=self.verbose,
             **self.env_kwargs
         )
         observation, info = env.reset(seed=env_seed)
@@ -194,27 +193,20 @@ class Trainer:
         if self.asc_difficulty and rollout_step is not None:
             league_level = self.league_level * (rollout_step - 1) // self.num_experiments + 1
         env = self._reset_env(maze_name, env_seed, league_level)
-        if self.verbose:
-            if env_idx is not None:
-                print(f"Trainer: "
-                      f"env_idx: {env_idx}; "
-                      f"maze_name: {maze_name}; "
-                      f"rollout_seed: {rollout_seed}; "
-                      f"env_seed: {env_seed}")
-            else:
-                print(f"Trainer: "
-                      f"maze_name: {maze_name}; "
-                      f"rollout_seed: {rollout_seed}; "
-                      f"env_seed: {env_seed}")
-            print(f"constants: {env.constants}")
+        if env_idx is not None:
+            logger.info("Trainer: env_idx: %s; maze_name: %s; rollout_seed: %s; env_seed: %s",
+                        env_idx, maze_name, rollout_seed, env_seed)
+        else:
+            logger.info("Trainer: maze_name: %s; rollout_seed: %s; env_seed: %s",
+                        maze_name, rollout_seed, env_seed)
+        logger.info("constants: %s", env.constants)
         for agent in self.agents:
             agent.set_env(env)
         rollout_rewards = []
         game_over = False
         if self.shuffle:
             rng.shuffle(self.agent_map)
-        if self.verbose:
-            print(f"agent_map: {self.agent_map}")
+        logger.debug("agent_map: %s", self.agent_map)
         step = 0
         while not game_over:
             assert env.turn == step
@@ -234,14 +226,15 @@ class Trainer:
             entities, rewards, game_over, info = env.step(action)
             rollout_rewards.append(rewards)
 
-            if self.verbose:
+            if logger.isEnabledFor(logging.DEBUG):
                 rewards_by_agent = [rewards[i] for i in np.argsort(self.agent_map)]
                 actions_by_agent = [self.actions[action[i]] for i in np.argsort(self.agent_map)]
                 if env_idx is not None:
-                    print(f"Env {env_idx}, step: {step}, actions: {actions_by_agent}, rewards: {rewards_by_agent}")
+                    logger.debug("Env %s, step: %d, actions: %s, rewards: %s",
+                                 env_idx, step, actions_by_agent, rewards_by_agent)
                 else:
-                    print(f"step: {step}, actions: {actions_by_agent}, rewards: {rewards_by_agent}")
-                # env.viz_map()
+                    logger.debug("step: %d, actions: %s, rewards: %s",
+                                 step, actions_by_agent, rewards_by_agent)
             
             if only_eval:
                 continue
@@ -264,18 +257,16 @@ class Trainer:
                     elif isinstance(agent, ActorAgent):
                         need_train_step = agent_game_over
                     if need_train_step:
-                        if self.verbose:
-                            print(f"step: {step}, agent_id: {agent_id}, type: {str(type(agent)).split('.')[-1][:-2]}, "
-                                f"train_step, reward: {reward}, game_over: {agent_game_over}")
+                        logger.debug("step: %d, agent_id: %s, type: %s, train_step, reward: %s, game_over: %s",
+                                     step, agent_id, str(type(agent)).split('.')[-1][:-2], reward, agent_game_over)
                         agent.train_step()
             if self.only_train:
                 game_over = train_agents_game_over
         
-        if self.verbose:
-            if env_idx is not None:
-                print(f"Environment {env_idx} finished after {step} steps")
-            else:
-                print(f"Environment finished after {step} steps")
+        if env_idx is not None:
+            logger.info("Environment %s finished after %d steps", env_idx, step)
+        else:
+            logger.info("Environment finished after %d steps", step)
         rollout_rewards = np.array(rollout_rewards, dtype=float)[:,np.argsort(self.agent_map)]
         return rollout_rewards
 
@@ -303,14 +294,12 @@ class Trainer:
             master_agent: PPOAgent = self.agents[0]
             for agent in self.agents[1:]:
                 master_agent.env_buffers += agent.env_buffers
-            if self.verbose:
-                print(f"Training master agent {self.agents.index(agent)} with multi-env data")
+            logger.info("Training master agent %d with multi-env data", self.agents.index(agent))
             master_agent.train_multi_env_step()
         else:
             for i, agent in enumerate(self.agents):
                 if agent.train and hasattr(agent, 'train_multi_env_step'):
-                    if self.verbose:
-                        print(f"Training agent {self.agents.index(agent)} with multi-env data")
+                    logger.info("Training agent %d with multi-env data", self.agents.index(agent))
                     agent.train_multi_env_step()
 
         # Combine rewards from all environments
@@ -357,13 +346,11 @@ class Trainer:
         metrics_list = []
 
         exps = range(self.num_experiments)
-        if not self.verbose and self.use_tqdm:
+        if self.use_tqdm:
             exps = tqdm(exps)
         for i in exps:
             train_step = i + 1
-            if self.verbose:
-                print()
-                print(f"train_step: {train_step}")
+            logger.info("train_step: %d", train_step)
             rollout_seed = train_rng.randint(999999)
             rollout_rewards = self.play_rollout(rollout_seed, train_step)
             reward_list.append(rollout_rewards)
@@ -476,7 +463,7 @@ class Trainer:
         assert len(agents) == 4
         trainer = Trainer(
             num_experiments=1, agents_info=None, agents=agents, shuffle=True,
-            league_level=league_level, verbose=False, seed=17,
+            league_level=league_level, seed=17,
             silent=True, num_envs=num_envs, only_train=False, use_tqdm=False,
         )
         result = trainer.play_rollout(only_eval=True)

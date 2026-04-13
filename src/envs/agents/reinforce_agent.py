@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 
@@ -21,12 +23,14 @@ from src.envs.models.ext_state_model import ExtStateModel
 from src.envs.models.conv_state_model import ConvStateModel
 from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel
 
+logger = logging.getLogger(__name__)
+
 
 class REINFORCEAgent(ActorAgent):
     def __init__(self, state_type, action_space_n,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params=None,
-                 train=False, verbose=False, entropy_coef=0, n_step=10, **kw):
+                 train=False, entropy_coef=0, n_step=10, **kw):
         if model_params is None:
             model_params = {}
         if state_type == 'closest_ext':
@@ -64,7 +68,6 @@ class REINFORCEAgent(ActorAgent):
             lr=lr,
             gamma=gamma,
             train=train,
-            verbose=verbose,
             model=model,
             state_encoder=state_encoder,
             **kw,
@@ -107,8 +110,8 @@ class REINFORCEAgent(ActorAgent):
         else:
             self.last_loss = 0.05 * loss.item() + (1 - 0.05) * self.last_loss
 
-        if self.verbose:
-            print(f"Episode {self.episode_idx}, Loss: {loss.item():.4f}, Return: {np.sum(rewards):.4f}")
+        logger.info("Episode %d, Loss: %.4f, Return: %.4f",
+                    self.episode_idx, loss.item(), np.sum(rewards))
 
     def _calculate_returns(self, rewards):
         """Calculate n-step discounted returns for all steps in an episode"""

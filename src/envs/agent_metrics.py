@@ -85,7 +85,7 @@ class Metrics:
         else:
             self.competitors = None
 
-    def _play_round(self, agents, league_level, num_envs, seed, verbose=False):
+    def _play_round(self, agents, league_level, num_envs, seed):
         """
         Play a single round with the given agents.
         
@@ -106,7 +106,6 @@ class Metrics:
             agents=agents,
             shuffle=True,
             league_level=league_level,
-            verbose=verbose,
             seed=seed,
             silent=True,
             num_envs=num_envs,
@@ -147,23 +146,28 @@ class Metrics:
         # Check behavior against different entity types
         metrics['check_exp'] = av.check_entity_nearby(
             agent, 'EXPLORER', n_min=2, n_max=3, 
-            env_types=('normal', 'coridor', 'corner')
+            env_types=('normal', 'coridor', 'corner'),
+            verbose=verbose,
         )
         metrics['check_wan'] = av.check_entity_nearby(
             agent, 'WANDERER', n_min=1, n_max=2, 
-            env_types=('normal', 'coridor', 'corner')
+            env_types=('normal', 'coridor', 'corner'),
+            verbose=verbose,
         )
         metrics['check_slsh'] = av.check_entity_nearby(
             agent, 'SLASHER', n_min=2, n_max=3, 
-            env_types=('normal',)
+            env_types=('normal',),
+            verbose=verbose,
         )
         
         # Check behavior with PLAN effect active
         metrics['check_exp_normal_plan1'] = av_plan.check_entity_nearby(
-            agent, 'EXPLORER', n_min=1, n_max=2
+            agent, 'EXPLORER', n_min=1, n_max=2,
+            verbose=verbose,
         )
         metrics['check_exp_normal_plan0'] = av_plan.check_entity_nearby(
-            agent, 'EXPLORER', n_min=3, n_max=3
+            agent, 'EXPLORER', n_min=3, n_max=3,
+            verbose=verbose,
         )
         
         # Calculate weighted accuracy scores
@@ -192,7 +196,7 @@ class Metrics:
                 n_wins = 0
                 for _ in range(n_exps):
                     rollout_seed = rollouts_rng.randint(999999)
-                    scores = self._play_round(agents, 4, 1, rollout_seed, verbose)
+                    scores = self._play_round(agents, 4, 1, rollout_seed)
                     if scores[0] == np.max(scores):
                         n_wins += 1
                 metrics[f'winner_score_{competitor_type}'] = n_wins / n_exps

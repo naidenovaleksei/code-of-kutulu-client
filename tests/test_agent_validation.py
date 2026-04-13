@@ -84,7 +84,7 @@ class TestPPOAgentValidation:
         - mean_output: 0.0
         """
         mean_acc, mean_std, top_action, max_output, mean_output = agent_validator.check_entity_nearby(
-            ppo_agent, 'WANDERER', n_min=2, n_max=3, verbose=False
+            ppo_agent, 'WANDERER', n_min=2, n_max=3
         )
         
         assert mean_acc == 1.0, f"Expected mean_acc=1.0, got {mean_acc}"
@@ -104,7 +104,7 @@ class TestPPOAgentValidation:
         - mean_output: 0.0
         """
         mean_acc, mean_std, top_action, max_output, mean_output = agent_validator.check_entity_nearby(
-            ppo_agent, 'SLASHER', n_min=2, n_max=3, verbose=False
+            ppo_agent, 'SLASHER', n_min=2, n_max=3
         )
         
         assert mean_acc == 0.0, f"Expected mean_acc=0.0, got {mean_acc}"
@@ -124,7 +124,7 @@ class TestPPOAgentValidation:
         - mean_output: 0.0
         """
         mean_acc, mean_std, top_action, max_output, mean_output = agent_validator.check_entity_nearby(
-            ppo_agent, 'EXPLORER', n_min=2, n_max=3, verbose=False
+            ppo_agent, 'EXPLORER', n_min=2, n_max=3
         )
         
         assert mean_acc == 1.0, f"Expected mean_acc=1.0, got {mean_acc}"
@@ -154,7 +154,7 @@ class TestQDNConvAgentValidation:
         - mean_output: 0.0
         """
         mean_acc, mean_std, top_action, max_output, mean_output = agent_validator.check_entity_nearby(
-            qdn_conv_agent, 'WANDERER', n_min=2, n_max=3, verbose=False
+            qdn_conv_agent, 'WANDERER', n_min=2, n_max=3
         )
         
         assert mean_acc == 1.0, f"Expected mean_acc=1.0, got {mean_acc}"
@@ -174,7 +174,7 @@ class TestQDNConvAgentValidation:
         - mean_output: 0.0
         """
         mean_acc, mean_std, top_action, max_output, mean_output = agent_validator.check_entity_nearby(
-            qdn_conv_agent, 'SLASHER', n_min=2, n_max=3, verbose=False
+            qdn_conv_agent, 'SLASHER', n_min=2, n_max=3
         )
         
         assert mean_acc == 0.875, f"Expected mean_acc=0.875, got {mean_acc}"
@@ -194,7 +194,7 @@ class TestQDNConvAgentValidation:
         - mean_output: 0.0
         """
         mean_acc, mean_std, top_action, max_output, mean_output = agent_validator.check_entity_nearby(
-            qdn_conv_agent, 'EXPLORER', n_min=2, n_max=3, verbose=False
+            qdn_conv_agent, 'EXPLORER', n_min=2, n_max=3
         )
         
         assert mean_acc == 1.0, f"Expected mean_acc=1.0, got {mean_acc}"
@@ -218,24 +218,24 @@ class TestComparativeValidation:
         """
         # Test PPO agent
         ppo_wanderer, _, _, _, _ = agent_validator.check_entity_nearby(
-            ppo_agent, 'WANDERER', n_min=2, n_max=3, verbose=False
+            ppo_agent, 'WANDERER', n_min=2, n_max=3
         )
         ppo_slasher, _, _, _, _ = agent_validator.check_entity_nearby(
-            ppo_agent, 'SLASHER', n_min=2, n_max=3, verbose=False
+            ppo_agent, 'SLASHER', n_min=2, n_max=3
         )
         ppo_explorer, _, _, _, _ = agent_validator.check_entity_nearby(
-            ppo_agent, 'EXPLORER', n_min=2, n_max=3, verbose=False
+            ppo_agent, 'EXPLORER', n_min=2, n_max=3
         )
         
         # Test QDN Conv agent
         qdn_wanderer, _, _, _, _ = agent_validator.check_entity_nearby(
-            qdn_conv_agent, 'WANDERER', n_min=2, n_max=3, verbose=False
+            qdn_conv_agent, 'WANDERER', n_min=2, n_max=3
         )
         qdn_slasher, _, _, _, _ = agent_validator.check_entity_nearby(
-            qdn_conv_agent, 'SLASHER', n_min=2, n_max=3, verbose=False
+            qdn_conv_agent, 'SLASHER', n_min=2, n_max=3
         )
         qdn_explorer, _, _, _, _ = agent_validator.check_entity_nearby(
-            qdn_conv_agent, 'EXPLORER', n_min=2, n_max=3, verbose=False
+            qdn_conv_agent, 'EXPLORER', n_min=2, n_max=3
         )
         
         # Verify expected values

@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,6 +20,8 @@ from src.envs.buffers import (
     PrioritizedExperienceBuffer,
     BaseStateEncoder,
 )
+
+logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 32
 REPLAY_SIZE = 10000
@@ -68,7 +72,7 @@ class DQNAgentBase(NNAgent):
                  batch_size=BATCH_SIZE,
                  sync_target_frames=SYNC_TARGET_FRAMES,
                  gamma=GAMMA,
-                 train=False, verbose=False,
+                 train=False,
                  prioritized_replay=False, loss='mse', 
                  device=None, **kw):
         if prioritized_replay:
@@ -93,7 +97,6 @@ class DQNAgentBase(NNAgent):
             epsilon_reset=epsilon_params.get('reset'),
             epsilon_reset_coef=epsilon_params.get('reset_coef'),
             train=train,
-            verbose=verbose,
             model=model,
             episode_buffer=episode_buffer,
             **kw,
@@ -127,8 +130,7 @@ class DQNAgentBase(NNAgent):
         else:
             raise ValueError(f'wrong loss: {loss}')
         
-        if self.verbose:
-            print(f"DQN Agent initialized on device: {self.device}")
+        logger.info("DQN Agent initialized on device: %s", self.device)
 
     def _move_states_to_device(self, states):
         """Move state dictionary tensors to the specified device"""
@@ -228,8 +230,7 @@ class DQNAgentBase(NNAgent):
             'eps': self.eps,
         })
 
-        if self.verbose:
-            print(f"Loss: {loss.item():.4f}")
+        logger.debug("Loss: %.4f", loss.item())
 
     def get_metric_names(self):
         return [
@@ -265,6 +266,5 @@ class DQNAgent(DQNAgentBase):
         )
         
         self.dueling = dueling
-        if self.verbose:
-            model_type = "Dueling DQN" if dueling else "Standard DQN"
-            print(f"Initialized {model_type} agent")
+        model_type = "Dueling DQN" if dueling else "Standard DQN"
+        logger.info("Initialized %s agent", model_type)

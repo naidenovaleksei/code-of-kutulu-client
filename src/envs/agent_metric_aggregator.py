@@ -1,16 +1,17 @@
+import logging
 from collections import defaultdict
 
 import numpy as np
 
+logger = logging.getLogger(__name__)
 
 METRICS_SMOOTH_COEF = 0.05
 
 
 class AgentMetricsAggregator:
-    def __init__(self, verbose=False):
+    def __init__(self):
         self.reset_metrics()
         self.last_metrics = dict()
-        self.verbose = verbose
 
     def reset_metrics(self):
         self.metrics = defaultdict(list)
@@ -30,10 +31,10 @@ class AgentMetricsAggregator:
     def save_metrics(self, episode_idx=None):
         for metric_name in self.metrics.keys():
             self._save_smooth_mean_metric(metric_name)
-        if self.verbose:
+        if logger.isEnabledFor(logging.INFO):
             lines = []
             if episode_idx is not None:
                 lines.append(f"Episode {episode_idx}")
             for k, v in self.last_metrics.items():
                  lines.append(f"{k}: {v}")
-            print(", ".join(lines))
+            logger.info(", ".join(lines))

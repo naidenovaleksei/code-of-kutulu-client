@@ -53,7 +53,7 @@ class ActorAgent(NNAgent):
                  model, state_encoder,
                  lr=LEARNING_RATE,
                  gamma=GAMMA,
-                 train=False, verbose=False, need_aug=False, **kw):
+                 train=False, need_aug=False, **kw):
         super(ActorAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,
@@ -65,7 +65,6 @@ class ActorAgent(NNAgent):
             epsilon_reset=None,
             epsilon_reset_coef=None,
             train=train,
-            verbose=verbose,
             model=model,
             episode_buffer=EpisodeBuffer(state_encoder, need_aug),
             **kw,

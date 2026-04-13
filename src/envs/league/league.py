@@ -212,7 +212,7 @@ class League:
         assert len(agents) == 4
         trainer = Trainer(
             num_experiments=1, agents_info=None, agents=agents, shuffle=True,
-            league_level=league_level, verbose=False,
+            league_level=league_level,
             silent=True, num_envs=num_envs, only_train=False, use_tqdm=False,
         )
         result = trainer.play_single_rollout(only_eval=True)

@@ -26,7 +26,7 @@ TEST_STATES = [
 
 class DummyAgent(BaseAgent):
     def __init__(self, state_type, action_space_n,
-                 train=False, verbose=False, seed=0):
+                 train=False, seed=0):
         super(DummyAgent, self).__init__(
             state_type=state_type,
             action_space_n=action_space_n,

@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 from src.envs.cross_entropy import CrossEntropyModel
 from src.envs.agents import BaseAgent
@@ -5,6 +7,8 @@ from src.envs.agents import BaseAgent
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+logger = logging.getLogger(__name__)
 
 
 def parse_dir(encoded_dir):
@@ -33,12 +37,11 @@ def encode_states(states):
 
 
 class CrossEntropyAgent(BaseAgent):
-    def __init__(self, state_type, action_space_n, train=False, verbose=False):
+    def __init__(self, state_type, action_space_n, train=False):
         # super(CrossEntropyAgent, self).__init__()
         self.state_type = state_type
         self.action_space_n = action_space_n
         self.train = train
-        self.verbose = verbose
         self.state_actions = []
         self.rewards = []
 
@@ -120,5 +123,4 @@ class CrossEntropyAgent(BaseAgent):
         
         # new_weight = self.model.output.weight.detach()
         # print("Weight changed:", not torch.allclose(old_weight, new_weight))
-        if self.verbose:
-            print(f"Loss: {loss.item():.4f}")
+        logger.info("Loss: %.4f", loss.item())

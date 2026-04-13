@@ -25,7 +25,6 @@ def test_calculate_output_np(explorers, wanderers, mock_env):
         actions=EXTENDED_KUTULU_ACTIONS,
         model_params={'size': 3},
         train=False,
-        verbose=False,
         use_deep=True,
     )
     player_pos = (3, 3)
@@ -67,7 +66,6 @@ class TestPPOAgentConvExtDeep:
             actions=EXTENDED_KUTULU_ACTIONS,
             model_params={'size': 3},
             train=False,
-            verbose=False,
             use_deep=True,
         )
         player_pos = (3, 3)
@@ -106,7 +104,6 @@ class TestPPOAgentConvExtDeep:
             actions=EXTENDED_KUTULU_ACTIONS,
             model_params={'size': 3},
             train=False,
-            verbose=False,
             use_deep=True,
         )
         
@@ -149,7 +146,6 @@ class TestPPOAgentConvExtDeep:
             actions=EXTENDED_KUTULU_ACTIONS,
             model_params={'size': 3},
             train=False,
-            verbose=False,
             use_deep=True,
         )
         
@@ -158,7 +154,6 @@ class TestPPOAgentConvExtDeep:
             actions=EXTENDED_KUTULU_ACTIONS,
             model_params={'size': 3},
             train=False,
-            verbose=False,
             use_deep=False,
         )
         
@@ -202,7 +197,6 @@ class TestPPOAgentConvExtDeep:
             actions=EXTENDED_KUTULU_ACTIONS,
             model_params={'size': 3},
             train=False,
-            verbose=False,
             use_deep=True,
         )
         
@@ -234,7 +228,6 @@ class TestPPOAgentConvExtDeep:
             actions=EXTENDED_KUTULU_ACTIONS,
             model_params={'size': 3},
             train=False,
-            verbose=False,
             use_deep=True,
         )
         

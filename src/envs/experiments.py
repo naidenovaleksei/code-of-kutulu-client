@@ -25,7 +25,7 @@ def get_trainer(
     target_kl, max_grad_norm,
     gae_lambda, num_envs,
     good_plan_bonus, bad_plan_bonus, good_light_bonus, bad_light_bonus,
-    verbose=False, silent=False, asc_difficulty=False, random_agent_info=None,
+    silent=False, asc_difficulty=False, random_agent_info=None,
 ):
     actions = get_actions_by_league(league_level)
     action_space_n = len(actions)
@@ -86,7 +86,7 @@ def get_trainer(
     assert len(agents_info) == 4
     trainer = Trainer(
         num_experiments=num_experiments, agents_info=agents_info, shuffle=True,
-        league_level=league_level, verbose=verbose,
+        league_level=league_level,
         env_kwargs=env_kwargs, silent=silent, num_envs=num_envs, asc_difficulty=asc_difficulty,
     )
     return trainer
@@ -186,7 +186,7 @@ def get_best_iter(datetime_start, model_type):
 def get_top_k(agents_info, num_experiments, league_level, mazes, actions, k=2):
     trainer = Trainer(
         num_experiments=num_experiments, agents_info=agents_info, shuffle=True,
-        league_level=league_level, verbose=False,
+        league_level=league_level,
         silent=True,
     )
     result = trainer.train()

@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,6 +12,8 @@ from src.envs.agents.dqn_agent import (
 )
 from src.envs.models.conv_state_model import ConvStateModel, DuelingConvStateModel
 from src.envs.models.conv_state_by_kind_model import ConvStateByKindModel, DuelingConvStateByKindModel
+
+logger = logging.getLogger(__name__)
 
 
 class DQNStateEncoderConv(BaseStateEncoder):
@@ -119,8 +123,6 @@ class DQNAgentConv(DQNAgentBase):
         self.size = size
         self.dueling = dueling
         
-        # Add verbose logging if enabled
-        if getattr(self, 'verbose', False):
-            model_type = "Dueling " if dueling else "Standard "
-            model_arch = "ConvStateByKindModel" if state_type == 'conv_by_kind' else "ConvStateModel"
-            print(f"Initialized {model_type}{model_arch} agent")
+        model_type = "Dueling " if dueling else "Standard "
+        model_arch = "ConvStateByKindModel" if state_type == 'conv_by_kind' else "ConvStateModel"
+        logger.info("Initialized %s%s agent", model_type, model_arch)

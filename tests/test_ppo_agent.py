@@ -310,7 +310,6 @@ def test_ppo_agent_training_components():
     agent = PPOAgent(
         state_type='conv',
         train=True,
-        verbose=True,
         actions=DEFAULT_KUTULU_ACTIONS,
     )
     

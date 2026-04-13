@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 import numpy as np
@@ -28,12 +29,14 @@ from src.envs.models.conv_a2c_model import ConvA2CModel
 from src.envs.models.ext_state_v2_model import ExtStatev2A2AModel
 from src.envs.reward_shaper import PotentialRewardShaper, RewardShaper
 
+logger = logging.getLogger(__name__)
+
 
 class PPOBuffer:
     """Enhanced buffer for PPO that stores additional information needed for clipped objective"""
     
     def __init__(self, state_encoder: BaseStateEncoder, actions,
-                 reward_params=None, need_aug=False, use_potential=True, verbose=False):
+                 reward_params=None, need_aug=False, use_potential=True):
         self.buffer = []
         self.state_encoder = state_encoder
         self.need_aug = need_aug
@@ -42,11 +45,11 @@ class PPOBuffer:
             reward_params = {}
         if use_potential:
             try:
-                self.reward_shaper = PotentialRewardShaper(actions, verbose, **reward_params)
+                self.reward_shaper = PotentialRewardShaper(actions, **reward_params)
             except Exception:
-                self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
+                self.reward_shaper = RewardShaper(actions, **reward_params)
         else:
-            self.reward_shaper = RewardShaper(actions, verbose, **reward_params)
+            self.reward_shaper = RewardShaper(actions, **reward_params)
         
     def start_episode(self):
         self.buffer = []
@@ -144,7 +147,7 @@ class PPOAgent(ActorAgent):
     def __init__(self, state_type, actions=EXTENDED_KUTULU_ACTIONS,
                  lr=LEARNING_RATE,
                  gamma=GAMMA, model_params={},
-                 train=False, verbose=False, 
+                 train=False,
                  entropy_coef=0.01, value_loss_coef=0.5,
                  terminate_loss_coef=0, occupation_loss_coef=0,
                  clip_ratio=0.2, ppo_epochs=4, mini_batch_size=64,
@@ -162,7 +165,6 @@ class PPOAgent(ActorAgent):
             gamma: Discount factor
             model_params: Parameters for the model
             train: Whether the agent is in training mode
-            verbose: Whether to print training information
             entropy_coef: Coefficient for entropy regularization
             value_loss_coef: Coefficient for value loss
             clip_ratio: Clipping parameter for PPO objective (epsilon)
@@ -202,7 +204,6 @@ class PPOAgent(ActorAgent):
             lr=lr,
             gamma=gamma,
             train=train,
-            verbose=verbose,
             model=model,
             state_encoder=self.state_encoder,
             use_gru=use_gru,
@@ -217,7 +218,7 @@ class PPOAgent(ActorAgent):
         self.need_aug = need_aug
         # Initialize with PPO-specific buffer
         ppo_buffer = PPOBuffer(self.state_encoder, self.actions, need_aug=self.need_aug,
-                               verbose=self.verbose, reward_params=self.reward_params)
+                               reward_params=self.reward_params)
         # Replace the episode buffer with PPO buffer
         self.episode_buffer = ppo_buffer
         self.episode_buffer.start_episode()
@@ -258,13 +259,12 @@ class PPOAgent(ActorAgent):
             # Create separate buffers for each environment
             self.env_buffers = [
                 PPOBuffer(self.state_encoder, self.actions, need_aug=self.need_aug,
-                          verbose=self.verbose, reward_params=self.reward_params)
+                          reward_params=self.reward_params)
                 for _ in range(num_envs)
             ]
             for buffer in self.env_buffers:
                 buffer.start_episode()
-            if self.verbose:
-                print(f"PPO Agent initialized with {num_envs} environments")
+            logger.info("PPO Agent initialized with %d environments", num_envs)
 
     # def set_env(self, env):
     #     assert self.state_type == 'conv'
@@ -537,8 +537,7 @@ class PPOAgent(ActorAgent):
 
         # Early stopping if KL divergence is too high
         if abs(kl_div) > self.target_kl:
-            if self.verbose:
-                print(f"Early stopping at epoch {epoch + 1} due to high KL divergence: {kl_div:.6f}")
+            logger.info("Early stopping at epoch %d due to high KL divergence: %.6f", epoch + 1, kl_div)
             return True
 
         return False
