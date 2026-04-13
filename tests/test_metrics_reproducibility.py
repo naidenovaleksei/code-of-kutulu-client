@@ -4,11 +4,19 @@ Test reproducibility of Metrics._calculate_metrics.
 This test verifies that the Metrics class produces consistent results
 when calculating metrics for the same agent with the same parameters.
 """
+import difflib
+import random
+
 import pytest
 import numpy as np
 
 from src.envs.agent_metrics import Metrics
 from src.envs.agents.dummy_agent import DummyAgent
+from src.envs.metrics_reproducibility import (
+    capture_src_envs_info_logs,
+    metrics_results_equal,
+    normalize_eval_log_lines,
+)
 from src.game.template import EXTENDED_KUTULU_ACTIONS
 
 
@@ -276,3 +284,39 @@ def test_metrics_with_custom_competitors():
             f"{challenge_key} should be a scalar number"
         assert 0 <= result[challenge_key] <= 1, \
             f"{challenge_key} should be between 0 and 1, got {result[challenge_key]}"
+
+
+def test_metrics_challenge_eval_reproducible_values_and_info_logs():
+    """
+    Full challenge evaluation (validator + league rollouts) must be repeatable:
+    same metric dict and same normalized INFO logs on two runs.
+
+    Uses dummy competitors so no checkpoint artifacts are required. ``n_exps`` is
+    small to keep the test fast; ``rollouts_seed`` stays at the default (17).
+    """
+    np.random.seed(0)
+    random.seed(0)
+    competitors = Metrics.load_default_competitors()
+    metrics = Metrics(use_challenge=True, competitors=competitors)
+
+    def run_once():
+        np.random.seed(42)
+        random.seed(42)
+        with capture_src_envs_info_logs() as raw_lines:
+            agent = DummyAgent("closest", len(EXTENDED_KUTULU_ACTIONS), train=True, seed=42)
+            result = metrics._calculate_metrics(
+                agent,
+                use_challenge=True,
+                n_exps=5,
+                verbose=False,
+            )
+        return result, normalize_eval_log_lines(raw_lines)
+
+    result1, log1 = run_once()
+    result2, log2 = run_once()
+
+    ok, msg = metrics_results_equal(result1, result2)
+    assert ok, msg
+    assert log1 == log2, "\n".join(
+        difflib.unified_diff(log1, log2, fromfile="run1", tofile="run2", lineterm="")
+    )
